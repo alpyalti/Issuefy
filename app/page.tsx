@@ -21,7 +21,6 @@ export default function LandingPage() {
             <a href="#cases">Use cases</a>
             <a href="#pricing">Pricing</a>
             <a href="#faq">FAQ</a>
-            <Link href="/dashboard">Live demo</Link>
           </div>
           <div className="nav-cta">
             <Link href="/sign-in" className="btn btn-quiet nav-signin">Sign in</Link>
@@ -42,7 +41,6 @@ export default function LandingPage() {
           <a href="#cases">Use cases</a>
           <a href="#pricing">Pricing</a>
           <a href="#faq">FAQ</a>
-          <Link href="/dashboard">Live demo</Link>
         </nav>
         <div className="mm-cta">
           <Link href="/sign-in" className="btn btn-ghost btn-lg">Sign in</Link>
@@ -379,7 +377,7 @@ export default function LandingPage() {
           <h2>Start every morning <em>ahead</em> of the market.</h2>
           <p>Set up your watchlist in minutes. Your first brief lands tomorrow at 7am.</p>
           <div className="acts">
-            <Link href="/dashboard" className="btn btn-accent btn-lg">Open the dashboard<Icon name="ArrowRight01Icon" size={18} stroke={2} /></Link>
+            <Link href="/sign-up" className="btn btn-accent btn-lg">Start free<Icon name="ArrowRight01Icon" size={18} stroke={2} /></Link>
             <a href="#product" className="btn btn-ghost btn-lg">See a sample brief</a>
           </div>
           <div className="cta-note">No credit card · 14-day trial · Cancel anytime</div>
@@ -401,8 +399,8 @@ export default function LandingPage() {
               <h4>Product</h4>
               <a href="#product">Overview</a>
               <a href="#how">How it works</a>
-              <Link href="/dashboard">Live demo</Link>
               <a href="#pricing">Pricing</a>
+              <Link href="/sign-up">Start free</Link>
             </div>
             <div className="foot-col">
               <h4>Use cases</h4>

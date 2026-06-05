@@ -70,6 +70,9 @@ export default function LandingChrome() {
         linkEls.forEach((a) => a.removeEventListener("click", closeMenu));
         window.removeEventListener("keydown", onEsc);
         mqUp.removeEventListener("change", onMq);
+        // Defensive cleanup: if the user navigates away with the mobile menu
+        // still open, the body would stay locked. Reset on unmount.
+        document.body.classList.remove("menu-open");
       });
     }
 

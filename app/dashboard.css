@@ -2,8 +2,12 @@
    Ported verbatim from the design prototype (Dashboard.html <style>).
    Loaded only on /dashboard routes via app/dashboard/layout.tsx.
    ================================================================== */
-html,body{ height:100%; }
-body{ background:var(--bg); overflow:hidden; }
+/* Scope to :has(.dash) so when the user navigates from /dashboard back to
+   the landing page (or any non-dashboard route) and the stylesheet is still
+   in <head> for a beat, the body doesn't stay overflow:hidden — which
+   manifested as "I can't scroll on the home page anymore". */
+html:has(.dash), body:has(.dash){ height:100%; }
+body:has(.dash){ background:var(--bg); overflow:hidden; }
 .dash{ display:grid; grid-template-columns:256px 1fr; height:100vh; }
 
 /* ---------- Sidebar ---------- */

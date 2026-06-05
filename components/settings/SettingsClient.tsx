@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { ErrorState, ERROR_MESSAGES } from "@/components/ui/ErrorState";
@@ -19,7 +19,14 @@ interface Project {
   is_active: boolean;
 }
 
-interface Competitor { id: string; name: string; website_url: string; description: string | null; is_active: boolean; }
+interface Competitor {
+  id: string;
+  name: string;
+  website_url: string;
+  description: string | null;
+  is_active: boolean;
+  socials?: Record<string, string> | null;
+}
 interface Keyword { id: string; keyword: string; is_active: boolean; last_discovered_at: string | null; }
 
 export default function SettingsClient({
@@ -102,6 +109,15 @@ export default function SettingsClient({
     setCompetitors((prev) => prev.filter((x) => x.id !== c.id));
     await fetch(`/api/competitors/${c.id}`, { method: "DELETE" });
     router.refresh();
+  }
+  async function saveCompetitorSocials(c: Competitor, socials: Record<string, string>) {
+    setCompetitors((prev) => prev.map((x) => (x.id === c.id ? { ...x, socials } : x)));
+    const res = await fetch(`/api/competitors/${c.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ socials }),
+    });
+    if (!res.ok) setErr("Couldn't save those social links.");
   }
 
   // ── Keyword add / toggle / remove ─────────────────────────────────────
@@ -205,19 +221,13 @@ export default function SettingsClient({
             <p style={{ fontSize: 13.5, color: "var(--ink-3)" }}>No competitors yet — add one below.</p>
           )}
           {competitors.map((c) => (
-            <div key={c.id} className="watch-item" style={{ padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, opacity: c.is_active ? 1 : 0.55 }}>
-              <span className={"watch-live " + (c.is_active ? "on" : "")} />
-              <span className="watch-label" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                <span>{c.name}</span>
-                <span className="mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>{c.website_url}</span>
-              </span>
-              <button className="icon-btn" title={c.is_active ? "Pause" : "Resume"} onClick={() => toggleCompetitor(c)}>
-                <Icon name={c.is_active ? "Tick02Icon" : "PlusSignIcon"} size={15} stroke={1.8} />
-              </button>
-              <button className="watch-del" style={{ opacity: 1 }} onClick={() => removeCompetitor(c)} title="Remove">
-                <Icon name="Delete02Icon" size={14} stroke={1.8} />
-              </button>
-            </div>
+            <CompetitorRow
+              key={c.id}
+              competitor={c}
+              onToggle={() => toggleCompetitor(c)}
+              onRemove={() => removeCompetitor(c)}
+              onSaveSocials={(socials) => saveCompetitorSocials(c, socials)}
+            />
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
@@ -317,3 +327,105 @@ const labelStyle: React.CSSProperties = {
   display: "block",
   marginBottom: 6,
 };
+
+/* ───────────── Competitor row with collapsible socials editor ───────────── */
+
+const SOCIAL_PLATFORMS: { key: string; label: string; icon: "Globe02Icon" | "Linkedin01Icon" | "NewTwitterIcon" | "InstagramIcon" | "Facebook01Icon" | "YoutubeIcon" | "TiktokIcon"; placeholder: string }[] = [
+  { key: "website", label: "Website", icon: "Globe02Icon", placeholder: "https://example.com" },
+  { key: "linkedin", label: "LinkedIn", icon: "Linkedin01Icon", placeholder: "linkedin.com/company/example" },
+  { key: "x", label: "X (Twitter)", icon: "NewTwitterIcon", placeholder: "x.com/example" },
+  { key: "instagram", label: "Instagram", icon: "InstagramIcon", placeholder: "instagram.com/example" },
+  { key: "facebook", label: "Facebook", icon: "Facebook01Icon", placeholder: "facebook.com/example" },
+  { key: "youtube", label: "YouTube", icon: "YoutubeIcon", placeholder: "youtube.com/@example" },
+  { key: "tiktok", label: "TikTok", icon: "TiktokIcon", placeholder: "tiktok.com/@example" },
+];
+
+function CompetitorRow({
+  competitor, onToggle, onRemove, onSaveSocials,
+}: {
+  competitor: Competitor;
+  onToggle: () => void;
+  onRemove: () => void;
+  onSaveSocials: (socials: Record<string, string>) => Promise<void> | void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({ ...(competitor.socials || {}) }));
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+
+  // Reset draft whenever the competitor's socials change from outside.
+  useEffect(() => { setDraft({ ...(competitor.socials || {}) }); }, [competitor.socials]);
+
+  async function save() {
+    setSaveStatus("saving");
+    // Strip empty strings — let the user clear a field by emptying it.
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(draft)) {
+      const trimmed = (v || "").trim();
+      if (trimmed) clean[k] = trimmed;
+    }
+    await onSaveSocials(clean);
+    setSaveStatus("saved");
+    setTimeout(() => setSaveStatus("idle"), 1_400);
+  }
+
+  const filledCount = Object.values(draft).filter((v) => v && v.trim()).length;
+
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 10, opacity: competitor.is_active ? 1 : 0.55, overflow: "hidden" }}>
+      <div className="watch-item" style={{ padding: "10px 12px", borderRadius: 0 }}>
+        <span className={"watch-live " + (competitor.is_active ? "on" : "")} />
+        <span className="watch-label" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <span>{competitor.name}</span>
+          <span className="mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>{competitor.website_url}</span>
+        </span>
+        <button
+          className="icon-btn"
+          title={open ? "Hide socials" : "Edit socials"}
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          <Icon name={open ? "ArrowUp01Icon" : "ArrowDown01Icon"} size={15} stroke={1.8} />
+          {filledCount > 0 && (
+            <span style={{ marginLeft: 4, fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-3)" }}>{filledCount}</span>
+          )}
+        </button>
+        <button className="icon-btn" title={competitor.is_active ? "Pause" : "Resume"} onClick={onToggle}>
+          <Icon name={competitor.is_active ? "Tick02Icon" : "PlusSignIcon"} size={15} stroke={1.8} />
+        </button>
+        <button className="watch-del" style={{ opacity: 1 }} onClick={onRemove} title="Remove">
+          <Icon name="Delete02Icon" size={14} stroke={1.8} />
+        </button>
+      </div>
+      {open && (
+        <div style={{ padding: "12px 14px 14px", background: "var(--surface-2)", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 8 }}>
+          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 4 }}>
+            These links are saved on the competitor for your reference. Issuefy doesn&apos;t scrape social posts at this time — only the main website.
+          </p>
+          {SOCIAL_PLATFORMS.map((p) => (
+            <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 26, height: 26, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--line)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", flex: "none" }}>
+                <Icon name={p.icon} size={13} stroke={1.6} />
+              </span>
+              <span style={{ width: 88, fontSize: 12, fontWeight: 600, color: "var(--ink-2)", flex: "none" }}>{p.label}</span>
+              <input
+                value={draft[p.key] || ""}
+                onChange={(e) => setDraft((d) => ({ ...d, [p.key]: e.target.value }))}
+                placeholder={p.placeholder}
+                style={{
+                  flex: 1, minWidth: 0, height: 32, padding: "0 10px",
+                  border: "1px solid var(--line-2)", borderRadius: 8, background: "var(--surface)",
+                  fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink)", outline: "none",
+                }}
+              />
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>
+            {saveStatus === "saved" && <span className="mono" style={{ fontSize: 12, color: "var(--pos)", alignSelf: "center" }}>✓ Saved</span>}
+            <button className="btn btn-quiet btn-sm" onClick={() => setDraft({ ...(competitor.socials || {}) })} disabled={saveStatus === "saving"}>Reset</button>
+            <button className="btn btn-accent btn-sm" onClick={save} disabled={saveStatus === "saving"}>{saveStatus === "saving" ? "Saving…" : "Save links"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

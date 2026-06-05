@@ -28,10 +28,14 @@ export const getProject = cache(async (projectId: string, userId: string) => {
 export const getCompetitors = cache(async (projectId: string) => {
   const sql = requireSql();
   const rows = await sql`
-    SELECT id, name, website_url, description, is_active
+    SELECT id, name, website_url, description, socials, is_active
     FROM competitors WHERE project_id = ${projectId} ORDER BY created_at ASC
   `;
-  return rows as unknown as Array<{ id: string; name: string; website_url: string; description: string | null; is_active: boolean }>;
+  return rows as unknown as Array<{
+    id: string; name: string; website_url: string;
+    description: string | null; socials: Record<string, string> | null;
+    is_active: boolean;
+  }>;
 });
 
 export const getKeywords = cache(async (projectId: string) => {
