@@ -78,6 +78,50 @@ export async function sendDailyBriefEmail(to: string, input: DailyBriefEmailInpu
   return send({ to, subject, html, text });
 }
 
+/** Stripe — payment failed (sent on invoice.payment_failed webhook). */
+export async function sendPaymentFailedEmail(to: string) {
+  const subject = "Issuefy: we couldn't process your payment";
+  const html = `
+    <div style="font-family:Newsreader,Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#15171A">
+      <h1 style="font-size:24px;font-weight:500;letter-spacing:-0.02em;margin:0 0 16px">Payment didn't go through.</h1>
+      <p style="font-family:Hanken Grotesk,sans-serif;font-size:16px;line-height:1.55;color:#565B62;margin:0 0 16px">
+        We tried to charge your card for your Issuefy subscription, but the charge failed.
+        Update your payment method below to keep your daily briefs coming.
+      </p>
+      <a href="${process.env.APP_URL || "https://issuefy.app"}/account" style="display:inline-block;background:#2D5BE3;color:#fff;text-decoration:none;font-family:Hanken Grotesk,sans-serif;font-weight:600;font-size:15px;padding:11px 18px;border-radius:10px">Update payment method</a>
+    </div>`;
+  return send({ to, subject, html });
+}
+
+/** Stripe — subscription canceled. */
+export async function sendSubscriptionCanceledEmail(to: string) {
+  const subject = "Your Issuefy subscription has been canceled";
+  const html = `
+    <div style="font-family:Newsreader,Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#15171A">
+      <h1 style="font-size:24px;font-weight:500;letter-spacing:-0.02em;margin:0 0 16px">Sorry to see you go.</h1>
+      <p style="font-family:Hanken Grotesk,sans-serif;font-size:16px;line-height:1.55;color:#565B62;margin:0 0 16px">
+        Your subscription is canceled and you won't be charged again. Your account stays open and you can come back any time.
+      </p>
+      <a href="${process.env.APP_URL || "https://issuefy.app"}/upgrade" style="display:inline-block;background:#15171A;color:#fff;text-decoration:none;font-family:Hanken Grotesk,sans-serif;font-weight:600;font-size:15px;padding:11px 18px;border-radius:10px">Restart Issuefy</a>
+    </div>`;
+  return send({ to, subject, html });
+}
+
+/** Stripe — plan changed (upgrade / downgrade) — sent from subscription.updated. */
+export async function sendPlanChangedEmail(to: string, plan: string) {
+  const subject = `You're now on the Issuefy ${plan} plan`;
+  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+  const html = `
+    <div style="font-family:Newsreader,Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#15171A">
+      <h1 style="font-size:24px;font-weight:500;letter-spacing:-0.02em;margin:0 0 16px">Welcome to ${planLabel}.</h1>
+      <p style="font-family:Hanken Grotesk,sans-serif;font-size:16px;line-height:1.55;color:#565B62;margin:0 0 16px">
+        Your Issuefy plan is now active. Your new limits and features take effect immediately.
+      </p>
+      <a href="${process.env.APP_URL || "https://issuefy.app"}/dashboard" style="display:inline-block;background:#2D5BE3;color:#fff;text-decoration:none;font-family:Hanken Grotesk,sans-serif;font-weight:600;font-size:15px;padding:11px 18px;border-radius:10px">Open dashboard</a>
+    </div>`;
+  return send({ to, subject, html });
+}
+
 export async function sendUsageNoticeEmail(to: string, kind: "sources" | "budget") {
   const subject = "Issuefy: you've reached this month's limit";
   const detail = kind === "sources"

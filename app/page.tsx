@@ -196,7 +196,7 @@ export default function LandingPage() {
               </div>
               <div className="tier-bill pa">billed annually · $288/yr</div>
               <div className="tier-bill pm">billed monthly</div>
-              <div className="tier-cta"><Link href="/sign-up" className="btn btn-accent">Start free trial</Link></div>
+              <div className="tier-cta"><Link href="/sign-up?plan=starter&billing=annual" className="btn btn-accent">Start free trial</Link></div>
               <div className="tier-trial">14-day free trial · no card</div>
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">1</span></li>
@@ -224,7 +224,7 @@ export default function LandingPage() {
               </div>
               <div className="tier-bill pa">billed annually · $780/yr</div>
               <div className="tier-bill pm">billed monthly</div>
-              <div className="tier-cta"><Link href="/sign-up" className="btn btn-accent">Get started</Link></div>
+              <div className="tier-cta"><Link href="/sign-up?plan=growth&billing=annual" className="btn btn-accent">Get started</Link></div>
               <div className="tier-trial" />
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">3</span></li>
@@ -251,7 +251,7 @@ export default function LandingPage() {
               </div>
               <div className="tier-bill pa">billed annually · $1,980/yr</div>
               <div className="tier-bill pm">billed monthly</div>
-              <div className="tier-cta"><Link href="/sign-up" className="btn btn-ghost">Get started</Link></div>
+              <div className="tier-cta"><Link href="/sign-up?plan=agency&billing=annual" className="btn btn-ghost">Get started</Link></div>
               <div className="tier-trial" />
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">10</span></li>

@@ -215,6 +215,24 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
       }));
       await Promise.allSettled([...compCalls, ...kwCalls]);
 
+      // If they came in via the pricing page (?plan & ?billing) and Stripe is
+      // wired, redirect to checkout. Otherwise straight to the dashboard.
+      const params = new URLSearchParams(window.location.search);
+      const plan = params.get("plan");
+      const billing = params.get("billing");
+      if (plan && billing) {
+        try {
+          const res = await fetch("/api/billing/checkout", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ plan, billing }),
+          });
+          if (res.ok) {
+            const { url } = await res.json();
+            if (url) { window.location.href = url; return; }
+          }
+        } catch { /* fall through to dashboard */ }
+      }
       router.push(`/dashboard/${project.id}`);
     } catch (e) {
       setSubmitting(false);
