@@ -6,7 +6,6 @@ import { fmtAgo, hoursAgo } from "@/lib/format";
 import { EMPTY_SUMMARY_MESSAGE } from "@/components/ui/EmptyState";
 import ProjectDashboard from "@/components/dashboard/ProjectDashboard";
 import type { SignalItem, SourceItem } from "@/lib/types";
-import "../../dashboard.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -170,12 +169,9 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
     url: s.url,
   }));
 
-  const initials = (user.name || user.email).split(/\s|@/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
-
   return (
     <ProjectDashboard
       project={project}
-      user={{ name: user.name, email: user.email, initials }}
       signals={signals}
       summary={{
         summary_date: sumRow?.summary_date ?? todayUtcDate(),
@@ -185,8 +181,7 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
         sources: summarySources,
       }}
       recentSources={recentSources}
-      competitors={competitors}
-      keywords={keywords}
+      competitorNames={competitors.map((c) => c.name)}
     />
   );
 }

@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useTransition } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { SignalCard } from "@/components/signals/SignalCard";
 import { Favicon } from "@/components/signals/Favicon";
 import { EmptyState, EMPTY_SUMMARY_MESSAGE } from "@/components/ui/EmptyState";
-import { ErrorState, ERROR_MESSAGES } from "@/components/ui/ErrorState";
 import type { IconName } from "@/components/icons/registry";
 import type { SignalItem, SourceItem } from "@/lib/types";
 
-/* Real-data dashboard for /dashboard/[projectId]. Reuses prototype styles
-   (dashboard.css) but is driven by server-fetched props rather than mock data. */
+/* Content-only project dashboard. The sidebar + topbar + ⌘K palette + refresh
+   live in components/dashboard/DashChrome.tsx (mounted by the parent layout).
+   This renders the feed + filter bar + right rail. */
 
 export interface ProjectDashboardProps {
   project: {
@@ -20,7 +20,6 @@ export interface ProjectDashboardProps {
     name: string;
     company_name: string | null;
   };
-  user: { name: string | null; email: string; initials: string };
   signals: SignalItem[];
   summary: {
     summary_date: string;
@@ -30,32 +29,8 @@ export interface ProjectDashboardProps {
     sources: SourceItem[];
   };
   recentSources: SourceItem[];
-  competitors: { id: string; name: string; website_url: string; is_active: boolean }[];
-  keywords: { id: string; keyword: string; is_active: boolean }[];
-  initialView?: ProjectDashboardView;
+  competitorNames: string[];
 }
-
-export type ProjectDashboardView = "today" | "signals" | "competitors" | "opportunities" | "risks" | "saved";
-
-const NAV: { id: string; label: string; icon: IconName; href?: string }[] = [
-  { id: "today", label: "Today", icon: "DashboardSquare01Icon" },
-  { id: "signals", label: "All signals", icon: "FlashIcon" },
-  { id: "competitors", label: "Competitors", icon: "Target01Icon" },
-  { id: "opportunities", label: "Opportunities", icon: "BulbIcon" },
-  { id: "risks", label: "Risks", icon: "Alert02Icon" },
-  { id: "saved", label: "Saved", icon: "Bookmark01Icon" },
-  { id: "sources", label: "Sources", icon: "News01Icon" },
-];
-
-const PAGE: Record<string, { title: string; sub: string }> = {
-  today: { title: "Today", sub: "Your latest market brief" },
-  signals: { title: "All signals", sub: "Everything Issuefy surfaced for your watchlist" },
-  competitors: { title: "Competitors", sub: "Moves from the companies you track" },
-  opportunities: { title: "Opportunities", sub: "Openings worth acting on this week" },
-  risks: { title: "Risks", sub: "Threats to defend against, flagged early" },
-  saved: { title: "Saved", sub: "Signals you bookmarked to track over time" },
-  sources: { title: "Sources", sub: "Every source behind your signals — click any to verify" },
-};
 
 const TABS = [
   { id: "all", label: "Latest signals" },
@@ -63,51 +38,64 @@ const TABS = [
   { id: "opportunity", label: "Opportunities" },
   { id: "threat", label: "Risks" },
 ];
+const DATE_RANGES: [string, string][] = [["7d", "7 days"], ["30d", "30 days"], ["90d", "90 days"]];
+const RANGE_HOURS: Record<string, number> = { "7d": 168, "30d": 720, "90d": 2160 };
 
 export default function ProjectDashboard({
-  project, user, signals: initialSignals, summary, recentSources, competitors, keywords, initialView = "today",
+  project, signals: initialSignals, summary, recentSources, competitorNames,
 }: ProjectDashboardProps) {
   const router = useRouter();
-  const [active, setActive] = useState(initialView);
-  const [tab, setTab] = useState("all");
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const view = (searchParams.get("view") || "today") as ViewKey;
+
   const [signals, setSignals] = useState<SignalItem[]>(initialSignals);
-  const [refreshErr, setRefreshErr] = useState<string | null>(null);
-  const [refreshing, startRefresh] = useTransition();
+  const [tab, setTab] = useState("all");
+  const [dateRange, setDateRange] = useState("7d");
+  const [company, setCompany] = useState<string | null>(null);
+  const [topic, setTopic] = useState<string | null>(null);
+  const [flagged, setFlagged] = useState(false);
 
-  // Synthesize the watchlist from real competitors + keywords (replaces mock).
-  const watchlist = useMemo(() => ([
-    ...competitors.map((c) => ({ label: c.name, type: "Competitor" as const, live: c.is_active })),
-    ...keywords.map((k) => ({ label: k.keyword, type: "Keyword" as const, live: k.is_active })),
-  ]), [competitors, keywords]);
+  // Reset feed-side state when the URL view changes.
+  useEffect(() => { setTab("all"); }, [view]);
 
-  const companySet = useMemo(() => new Set(competitors.map((c) => c.name)), [competitors]);
+  const companySet = useMemo(() => new Set(competitorNames), [competitorNames]);
+
+  const TOPICS = useMemo(() => {
+    const set = new Set<string>();
+    signals.forEach((s) => s.tags.forEach((t) => { if (!competitorNames.includes(t)) set.add(t); }));
+    return [...set].sort();
+  }, [signals, competitorNames]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: signals.length, competitor: 0, opportunity: 0, threat: 0, signal: 0 };
+    const c: Record<string, number> = { all: signals.length, competitor: 0, opportunity: 0, threat: 0 };
     for (const s of signals) c[s.category] = (c[s.category] || 0) + 1;
     return c;
   }, [signals]);
 
   const savedCount = useMemo(() => signals.filter((s) => s.saved).length, [signals]);
 
-  const list = useMemo(() => {
-    const navTab: Record<string, string> = { today: "all", signals: "all", competitors: "competitor", opportunities: "opportunity", risks: "threat" };
-    const effective = active === "today" || active === "signals" ? tab : (navTab[active] || "all");
-    const q = query.trim().toLowerCase();
-    return signals.filter((s) => {
-      if (active === "saved" && !s.saved) return false;
-      if (effective !== "all" && s.category !== effective) return false;
-      if (q) {
-        const hay = (s.title + " " + s.context + " " + s.tags.join(" ")).toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [signals, active, tab, query]);
+  const maxHours = view === "today" ? 24 : (RANGE_HOURS[dateRange] ?? 99999);
 
-  const meta = PAGE[active] || PAGE.today;
-  const isFeedTabbed = active === "today" || active === "signals";
+  const base = useMemo(() => signals.filter((s) => {
+    if (view === "saved" && !s.saved) return false;
+    if (s.hoursAgo > maxHours) return false;
+    if (view !== "today") {
+      if (flagged && s.severity !== "high") return false;
+      if (company && !(s.title + " " + s.context + " " + s.tags.join(" ")).toLowerCase().includes(company.toLowerCase())) return false;
+      if (topic && !s.tags.includes(topic)) return false;
+    }
+    return true;
+  }), [signals, view, maxHours, company, topic, flagged]);
+
+  // Feed-level tab restriction (Today + signals view).
+  const navView: Record<string, string> = { today: "all", signals: "all", competitor: "competitor", opportunity: "opportunity", threat: "threat" };
+  const isFeedTabbed = view === "today" || view === "signals";
+  const effectiveTab = isFeedTabbed ? tab : (navView[view] || "all");
+
+  const list = useMemo(() => base.filter((s) => {
+    if (effectiveTab !== "all" && s.category !== effectiveTab) return false;
+    return true;
+  }), [base, effectiveTab]);
 
   async function toggleSave(id: string) {
     const current = signals.find((s) => s.id === id);
@@ -120,7 +108,6 @@ export default function ProjectDashboard({
         body: JSON.stringify({ is_saved: !current.saved }),
       });
     } catch {
-      // Optimistic; revert on hard failure.
       setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, saved: current.saved } : s)));
     }
   }
@@ -135,215 +122,130 @@ export default function ProjectDashboard({
     } catch { /* optimistic */ }
   }
 
-  function runRefresh() {
-    setRefreshErr(null);
-    startRefresh(async () => {
-      try {
-        const res = await fetch(`/api/projects/${project.id}/refresh`, { method: "POST" });
-        if (res.status === 429) {
-          const { error } = await res.json().catch(() => ({ error: ERROR_MESSAGES.REFRESH_HOURLY }));
-          setRefreshErr(error || ERROR_MESSAGES.REFRESH_HOURLY);
-          return;
-        }
-        if (!res.ok) {
-          setRefreshErr(ERROR_MESSAGES.SCRAPE_FAILED);
-          return;
-        }
-        // Soft refresh the route — server component re-fetches everything.
-        router.refresh();
-      } catch {
-        setRefreshErr(ERROR_MESSAGES.SCRAPE_FAILED);
-      }
-    });
-  }
+  const viewLabel = view === "today" ? "Today"
+    : view === "signals" ? "All signals"
+    : view === "competitor" ? "Competitors"
+    : view === "opportunity" ? "Opportunities"
+    : view === "threat" ? "Risks"
+    : "Saved";
 
   return (
-    <div className="dash">
-      <aside className="sidebar">
-        <Link href="/" className="brand side-brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/logo-ink.svg" className="brand-logo" alt="Issuefy" />
-        </Link>
+    <div className="main-grid">
+      <div className="feed">
+        {view === "today" && <SummaryCard summary={summary} />}
 
-        <div className="side-section">
-          <div className="side-label">Workspace</div>
-          <nav className="side-nav">
-            {NAV.map((n) => {
-              const onClick = n.id === "sources" ? () => router.push(`/dashboard/${project.id}/sources`) : () => setActive(n.id as ProjectDashboardView);
-              const badge = n.id === "signals" ? counts.all : n.id === "saved" ? savedCount || null : null;
-              return (
-                <button key={n.id} className={"side-item " + (active === n.id ? "on" : "")} onClick={onClick}>
-                  <Icon name={n.icon} size={19} stroke={active === n.id ? 1.9 : 1.6} />
-                  <span>{n.label}</span>
-                  {badge ? <span className="side-badge">{badge}</span> : null}
+        {view !== "today" && (
+          <FilterBar
+            dateRange={dateRange} setDateRange={setDateRange}
+            company={company} setCompany={setCompany}
+            topic={topic} setTopic={setTopic}
+            flagged={flagged} setFlagged={setFlagged}
+            companies={competitorNames}
+            topics={TOPICS}
+          />
+        )}
+
+        <div className="feed-head">
+          {isFeedTabbed ? (
+            <div className="tabs">
+              {TABS.map((t) => (
+                <button key={t.id} className={"tab " + (tab === t.id ? "on" : "")} onClick={() => setTab(t.id)}>
+                  {t.label}<span className="tab-count">{(counts[t.id] ?? counts.all) || 0}</span>
                 </button>
-              );
-            })}
-          </nav>
+              ))}
+            </div>
+          ) : (
+            <h2 className="feed-title">{viewLabel}<span className="feed-title-count">{list.length}</span></h2>
+          )}
+          <div className="feed-sort"><Icon name="FilterHorizontalIcon" size={15} stroke={1.7} /> Sorted by relevance</div>
         </div>
 
-        <div className="side-section side-watch">
-          <div className="side-label">Watchlist</div>
-          <div className="watchlist">
-            {competitors.length > 0 && <div className="watch-group">Competitors</div>}
-            {competitors.map((c) => (
-              <div className="watch-item" key={"c-" + c.id}>
-                <span className={"watch-live " + (c.is_active ? "on" : "")} />
-                <span className="watch-label">{c.name}</span>
-              </div>
-            ))}
-            {keywords.length > 0 && <div className="watch-group">Keywords</div>}
-            {keywords.map((k) => (
-              <div className="watch-item" key={"k-" + k.id}>
-                <span className={"watch-live " + (k.is_active ? "on" : "")} />
-                <span className="watch-label">{k.keyword}</span>
-              </div>
-            ))}
-            <Link href={`/dashboard/${project.id}/settings`} className="watch-add">
-              <Icon name="PlusSignIcon" size={15} stroke={1.9} /> Manage watchlist
-            </Link>
+        <div className="signal-list">
+          {list.length === 0 ? (
+            <EmptyState
+              icon={view === "saved" ? "Bookmark01Icon" : "FlashIcon"}
+              message={
+                view === "saved"
+                  ? "No saved signals yet. Bookmark a signal to keep track of how it develops."
+                  : view === "today"
+                    ? EMPTY_SUMMARY_MESSAGE
+                    : "No signals match these filters yet."
+              }
+            />
+          ) : (
+            list.map((s) => (
+              <SignalCard
+                key={s.id} sig={s} saved={s.saved} leaving={false}
+                onSave={() => toggleSave(s.id)} onDismiss={() => dismiss(s.id)}
+                companySet={companySet}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="rail">
+        <section className="rail-card">
+          <div className="rail-head">
+            <h3>Recent sources</h3>
+            <span className="rail-sub">Newest, click to verify</span>
           </div>
-        </div>
-
-        <div className="side-foot">
-          <Link href={`/dashboard/${project.id}/settings`} className="profile">
-            <span className="avatar">{user.initials}</span>
-            <span className="profile-meta">
-              <span className="profile-name">{user.name || user.email}</span>
-              <span className="profile-role">{project.name}</span>
-            </span>
-            <Icon name="Settings01Icon" size={17} stroke={1.6} />
+          <div className="rail-sources">
+            {recentSources.length === 0 && (
+              <p style={{ fontSize: 13, color: "var(--ink-3)", padding: "8px 6px" }}>
+                No sources yet. The first scrape lands tomorrow morning.
+              </p>
+            )}
+            {recentSources.map((s, i) => (
+              <a className="rail-source" href={s.url} target="_blank" rel="noopener noreferrer" key={i}>
+                <Favicon s={s} size={26} />
+                <span className="rail-src-meta">
+                  <span className="rail-src-head">{s.headline}</span>
+                  <span className="rail-src-sub">{s.name} · {s.time}</span>
+                </span>
+                <Icon name="ArrowUpRight01Icon" size={15} stroke={1.7} />
+              </a>
+            ))}
+          </div>
+          <Link href={`/dashboard/${project.id}/sources`} className="rail-all">
+            View all sources <Icon name="ArrowRight01Icon" size={15} stroke={1.8} />
           </Link>
-        </div>
-      </aside>
+        </section>
 
-      <main className="main">
-        <header className="topbar">
-          <div className="topbar-title">
-            <h1>{meta.title}</h1>
-            <span className="topbar-date">
-              {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} · {meta.sub}
-            </span>
-          </div>
-          <div className="topbar-right">
-            <div className="search">
-              <Icon name="Search01Icon" size={17} stroke={1.7} />
-              <input placeholder="Search signals…" value={query} onChange={(e) => setQuery(e.target.value)} />
-              {query && (
-                <button className="search-clear" onClick={() => setQuery("")}>
-                  <Icon name="Cancel01Icon" size={14} stroke={1.8} />
-                </button>
-              )}
+        {/* Saved card — clickable to switch to the Saved view. */}
+        {view !== "saved" ? (
+          <button
+            className="rail-card mini saved-card"
+            onClick={() => router.push(`/dashboard/${project.id}?view=saved`)}
+          >
+            <div className="rail-head"><h3>Saved</h3><Icon name="ArrowRight01Icon" size={15} stroke={1.7} /></div>
+            <div className="saved-count">
+              <span className="saved-big">{savedCount}</span>
+              <span>signal{savedCount === 1 ? "" : "s"} saved for later</span>
             </div>
-            <button className="icon-btn lg" onClick={runRefresh} title="Refresh data" disabled={refreshing}>
-              <Icon name="RefreshIcon" size={18} stroke={1.6} className={refreshing ? "spin" : ""} />
-            </button>
-            <span className="avatar sm">{user.initials}</span>
-          </div>
-        </header>
-
-        <div className="main-scroll">
-          <div className="main-grid">
-            <div className="feed">
-              {refreshErr && <ErrorState message={refreshErr} onRetry={runRefresh} retryLabel="Try again" />}
-
-              {active === "today" && (
-                <SummaryCard summary={summary} onRegen={runRefresh} busy={refreshing} />
-              )}
-
-              <div className="feed-head">
-                {isFeedTabbed ? (
-                  <div className="tabs">
-                    {TABS.map((t) => (
-                      <button key={t.id} className={"tab " + (tab === t.id ? "on" : "")} onClick={() => setTab(t.id)}>
-                        {t.label}<span className="tab-count">{(counts[t.id] ?? counts.all) || 0}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <h2 className="feed-title">{meta.title}<span className="feed-title-count">{list.length}</span></h2>
-                )}
-                <div className="feed-sort"><Icon name="FilterHorizontalIcon" size={15} stroke={1.7} /> Sorted by relevance</div>
-              </div>
-
-              <div className="signal-list">
-                {list.length === 0 ? (
-                  <EmptyState
-                    icon="FlashIcon"
-                    message={
-                      active === "saved"
-                        ? "No saved signals yet. Bookmark a signal to keep track of how it develops."
-                        : EMPTY_SUMMARY_MESSAGE
-                    }
-                    ctaLabel={active === "saved" ? undefined : "Refresh data"}
-                    onCta={active === "saved" ? undefined : runRefresh}
-                  />
-                ) : (
-                  list.map((s) => (
-                    <SignalCard
-                      key={s.id} sig={s} saved={s.saved} leaving={false}
-                      onSave={() => toggleSave(s.id)} onDismiss={() => dismiss(s.id)}
-                      companySet={companySet}
-                    />
-                  ))
-                )}
-              </div>
+          </button>
+        ) : (
+          <section className="rail-card mini">
+            <div className="rail-head"><h3>How saving works</h3></div>
+            <div className="rail-tip">
+              <Icon name="Idea01Icon" size={15} stroke={1.7} color="#1E47C0" />
+              <span>Bookmarked signals stay here so you can watch a story develop across the week.</span>
             </div>
-
-            <div className="rail">
-              <section className="rail-card">
-                <div className="rail-head">
-                  <h3>Recent sources</h3>
-                  <span className="rail-sub">Newest, click to verify</span>
-                </div>
-                <div className="rail-sources">
-                  {recentSources.length === 0 && (
-                    <p style={{ fontSize: 13, color: "var(--ink-3)", padding: "8px 6px" }}>
-                      No sources yet. The first scrape lands tomorrow morning.
-                    </p>
-                  )}
-                  {recentSources.map((s, i) => (
-                    <a className="rail-source" href={s.url} target="_blank" rel="noopener noreferrer" key={i}>
-                      <Favicon s={s} size={26} />
-                      <span className="rail-src-meta">
-                        <span className="rail-src-head">{s.headline}</span>
-                        <span className="rail-src-sub">{s.name} · {s.time}</span>
-                      </span>
-                      <Icon name="ArrowUpRight01Icon" size={15} stroke={1.7} />
-                    </a>
-                  ))}
-                </div>
-                <Link href={`/dashboard/${project.id}/sources`} className="rail-all">
-                  View all sources <Icon name="ArrowRight01Icon" size={15} stroke={1.8} />
-                </Link>
-              </section>
-              <section className="rail-card mini">
-                <div className="rail-head"><h3>Plan usage</h3></div>
-                <div className="rail-tip">
-                  <Icon name="Idea01Icon" size={15} stroke={1.7} color="#1E47C0" />
-                  <span>Open settings to see this month&apos;s API budget and source cap.</span>
-                </div>
-              </section>
-            </div>
-          </div>
-        </div>
-      </main>
+          </section>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ───────────── Inline SummaryCard wired to real summary props ───────────── */
+type ViewKey = "today" | "signals" | "competitor" | "opportunity" | "threat" | "saved";
 
-function SummaryCard({
-  summary, onRegen, busy,
-}: {
-  summary: ProjectDashboardProps["summary"];
-  onRegen: () => void;
-  busy: boolean;
-}) {
+/* ───────────── Summary card ───────────── */
+
+function SummaryCard({ summary }: { summary: ProjectDashboardProps["summary"] }) {
   const body = summary.summary_text;
   return (
-    <section className={"brief-card " + (busy ? "busy" : "")}>
+    <section className="brief-card">
       <div className="brief-glow" />
       <div className="brief-head">
         <div className="brief-eyebrow">
@@ -351,12 +253,6 @@ function SummaryCard({
           <span>AI summary</span>
           <span className="brief-sep">·</span>
           <span>{summary.summary_date}</span>
-        </div>
-        <div className="brief-tools">
-          <button className="brief-btn" onClick={onRegen} disabled={busy}>
-            <Icon name="RefreshIcon" size={15} stroke={1.8} className={busy ? "spin" : ""} />
-            {busy ? "Refreshing…" : "Refresh"}
-          </button>
         </div>
       </div>
       {body ? (
@@ -380,7 +276,76 @@ function SummaryCard({
           <p className="brief-body">{summary.empty_message}</p>
         </>
       )}
-      {busy && <div className="brief-shimmer" />}
     </section>
+  );
+}
+
+/* ───────────── Filter bar (date / company / topic / flagged) ───────────── */
+
+interface DDOption { value: string; label: string; dot?: string; }
+
+function Dropdown({ icon, label, value, options, onChange }: { icon?: IconName; label: string; value: string | null; options: DDOption[]; onChange: (v: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  const cur = options.find((o) => o.value === (value || ""));
+  return (
+    <div className={"dd " + (open ? "open" : "")} ref={ref}>
+      <button className="dd-btn" onClick={() => setOpen((o) => !o)}>
+        {icon && <Icon name={icon} size={15} stroke={1.7} />}
+        {cur && cur.dot && <span className="dd-dot" style={{ background: cur.dot }} />}
+        <span className="dd-val">{cur ? cur.label : label}</span>
+        <Icon name="ArrowDown01Icon" size={14} stroke={2} className="dd-chev" />
+      </button>
+      {open && (
+        <div className="dd-menu">
+          {options.map((o) => (
+            <button key={o.value || "all"} className={"dd-item " + (o.value === (value || "") ? "sel" : "")} onClick={() => { onChange(o.value || null); setOpen(false); }}>
+              {o.dot ? <span className="dd-dot" style={{ background: o.dot }} /> : null}
+              <span className="dd-item-label">{o.label}</span>
+              {o.value === (value || "") && <Icon name="Tick02Icon" size={15} stroke={2} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilterBar({
+  dateRange, setDateRange, company, setCompany, topic, setTopic, flagged, setFlagged, companies, topics,
+}: {
+  dateRange: string;
+  setDateRange: (v: string) => void;
+  company: string | null;
+  setCompany: (v: string | null) => void;
+  topic: string | null;
+  setTopic: (v: string | null) => void;
+  flagged: boolean;
+  setFlagged: (fn: boolean) => void;
+  companies: string[];
+  topics: string[];
+}) {
+  const companyOpts: DDOption[] = [{ value: "", label: "All companies" }, ...companies.map((c) => ({ value: c, label: c, dot: "var(--accent)" }))];
+  const topicOpts: DDOption[] = [{ value: "", label: "All topics" }, ...topics.map((t) => ({ value: t, label: t }))];
+  return (
+    <div className="filterbar">
+      <div className="seg">
+        {DATE_RANGES.map(([v, l]) => (
+          <button key={v} className={"seg-btn " + (dateRange === v ? "on" : "")} onClick={() => setDateRange(v)}>{l}</button>
+        ))}
+      </div>
+      <div className="filter-selects">
+        <button className={"flag-toggle " + (flagged ? "on" : "")} onClick={() => setFlagged(!flagged)} title="Show flagged signals only">
+          <Icon name="Flag02Icon" size={15} stroke={1.8} /> Flagged
+        </button>
+        <Dropdown icon="Target01Icon" label="All companies" value={company} options={companyOpts} onChange={setCompany} />
+        <Dropdown icon="Tag01Icon" label="All topics" value={topic} options={topicOpts} onChange={setTopic} />
+      </div>
+    </div>
   );
 }

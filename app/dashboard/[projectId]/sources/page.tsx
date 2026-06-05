@@ -1,11 +1,9 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
 import { Icon } from "@/components/icons/Icon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { fmtAgo } from "@/lib/format";
-import "../../../dashboard.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,17 +51,9 @@ export default async function SourcesPage({ params }: Ctx) {
   if (sources.length === 0) {
     return (
       <div className="page-wrap">
-        <header style={{ marginBottom: 28, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <h1 style={{ fontFamily: "var(--serif)", fontSize: 30 }}>Sources</h1>
-          <Link href={`/dashboard/${projectId}`} className="btn btn-ghost">
-            <Icon name="ArrowLeft01Icon" size={15} stroke={1.8} /> Back to dashboard
-          </Link>
-        </header>
         <EmptyState
           icon="News01Icon"
           message="No sources yet. The first scrape lands tomorrow morning, or run a manual refresh from the dashboard."
-          ctaLabel="Back to dashboard"
-          ctaHref={`/dashboard/${projectId}`}
         />
       </div>
     );
@@ -81,13 +71,6 @@ export default async function SourcesPage({ params }: Ctx) {
 
   return (
     <div className="page-wrap">
-      <header style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <h1 style={{ fontFamily: "var(--serif)", fontSize: 30 }}>Sources</h1>
-        <Link href={`/dashboard/${projectId}`} className="btn btn-ghost">
-          <Icon name="ArrowLeft01Icon" size={15} stroke={1.8} /> Back to dashboard
-        </Link>
-      </header>
-
       <div className="sources-summary">
         <div className="ss-stat"><span className="ss-num">{pubs.length}</span><span className="ss-lab">sources tracked</span></div>
         <div className="ss-divider" />

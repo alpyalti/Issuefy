@@ -1,13 +1,10 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
 import { getLimits, currentPeriodStart, HARD_CAPS } from "@/lib/usage";
 import { getUsage } from "@/lib/usage-counters";
-import { Icon } from "@/components/icons/Icon";
 import { UsageMeter } from "@/components/ui/UsageMeter";
 import SettingsClient from "@/components/settings/SettingsClient";
-import "../../../dashboard.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,16 +47,6 @@ export default async function SettingsPage({ params }: Ctx) {
 
   return (
     <div className="page-wrap" style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontFamily: "var(--serif)", fontSize: 30 }}>{project.name}</h1>
-          <p className="muted" style={{ marginTop: 4 }}>{project.industry} · {project.business_type} · {project.target_market}</p>
-        </div>
-        <Link href={`/dashboard/${projectId}`} className="btn btn-ghost">
-          <Icon name="ArrowLeft01Icon" size={15} stroke={1.8} /> Back to dashboard
-        </Link>
-      </header>
-
       <UsageMeter rows={usageRows} />
 
       <SettingsClient
