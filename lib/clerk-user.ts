@@ -21,6 +21,8 @@ export interface UserRow {
   company_name: string | null;
   plan: string;
   trial_ends_at: string | null;
+  email_brief_enabled: boolean;
+  email_brief_unsubscribe_token: string;
   created_at: string;
   updated_at: string;
 }

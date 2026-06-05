@@ -1,13 +1,15 @@
 import { Resend } from "resend";
+import { buildDailyBriefEmail, type DailyBriefEmailInput } from "./daily-brief-email";
 
 /**
  * Product-email mailer (Resend).
  *
  * Clerk handles auth emails (verification, password reset, magic link), so
- * Resend covers only product emails (PRD §10.11):
- *   - sendWelcomeEmail   on first sign-up / first lazy upsert
- *   - sendTrialReminder  14-day trial ending soon
- *   - sendUsageNotice    monthly cap or call budget hit (send-once per cycle)
+ * Resend covers only product emails:
+ *   - sendWelcomeEmail       on first sign-up / first lazy upsert (PRD §10.11)
+ *   - sendTrialReminder      14-day trial ending soon (PRD §10.11)
+ *   - sendUsageNotice        monthly cap or call budget hit (PRD §21.4, send-once per cycle)
+ *   - sendDailyBriefEmail    the daily AI market brief (P0 sprint — beyond PRD MVP)
  *
  * When RESEND_API_KEY is unset, every send no-ops with a console log so local
  * dev doesn't crash.
@@ -62,6 +64,18 @@ export async function sendTrialReminderEmail(to: string, daysLeft: number) {
       <a href="${process.env.APP_URL || "https://issuefy.app"}/dashboard" style="display:inline-block;background:#15171A;color:#fff;text-decoration:none;font-family:Hanken Grotesk,sans-serif;font-weight:600;font-size:15px;padding:11px 18px;border-radius:10px">Choose a plan</a>
     </div>`;
   return send({ to, subject, html });
+}
+
+/**
+ * Daily AI market brief.
+ *
+ * Called by the worker after Stage 4 (summary generation) when the user is
+ * opted-in AND daily_summaries.email_sent_at is null. The send-once guard
+ * lives in the worker; this function just renders + sends.
+ */
+export async function sendDailyBriefEmail(to: string, input: DailyBriefEmailInput) {
+  const { subject, html, text } = buildDailyBriefEmail(input);
+  return send({ to, subject, html, text });
 }
 
 export async function sendUsageNoticeEmail(to: string, kind: "sources" | "budget") {

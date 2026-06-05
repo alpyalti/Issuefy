@@ -22,7 +22,7 @@ import { upsertSource, type SourceType } from "./sources";
 import { archiveRawHtml } from "./storage";
 import { reserveCalls, claimCapNotice } from "./usage-counters";
 import { getLimits } from "./usage";
-import { sendUsageNoticeEmail } from "./mailer";
+import { sendUsageNoticeEmail, sendDailyBriefEmail } from "./mailer";
 import { captureBreadcrumb, captureError } from "./sentry";
 import { generateSignalsForProject } from "./signals";
 import { generateDailySummaryForProject } from "./daily-summary";
@@ -30,8 +30,15 @@ import { generateDailySummaryForProject } from "./daily-summary";
 interface ProjectRow {
   id: string;
   user_id: string;
+  name: string;
 }
-interface UserRow { id: string; email: string; plan: string; }
+interface UserRow {
+  id: string;
+  email: string;
+  plan: string;
+  email_brief_enabled: boolean;
+  email_brief_unsubscribe_token: string;
+}
 interface CompetitorRow { id: string; website_url: string; is_active: boolean; }
 interface KeywordRow { id: string; keyword: string; is_active: boolean; last_discovered_at: string | null; }
 
@@ -68,13 +75,16 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
   let serpCallsUsed = 0;
   let scrapeCallsUsed = 0;
 
-  const projRows = (await sql`SELECT id, user_id FROM projects WHERE id = ${projectId} LIMIT 1`) as ProjectRow[];
+  const projRows = (await sql`SELECT id, user_id, name FROM projects WHERE id = ${projectId} LIMIT 1`) as ProjectRow[];
   const project = projRows[0];
   if (!project) {
     throw new Error(`processProject: project ${projectId} not found`);
   }
 
-  const userRows = (await sql`SELECT id, email, plan FROM users WHERE id = ${project.user_id} LIMIT 1`) as UserRow[];
+  const userRows = (await sql`
+    SELECT id, email, plan, email_brief_enabled, email_brief_unsubscribe_token
+    FROM users WHERE id = ${project.user_id} LIMIT 1
+  `) as UserRow[];
   const user = userRows[0];
   if (!user) throw new Error(`processProject: user ${project.user_id} not found`);
 
@@ -252,6 +262,53 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
       errors.push(`summary: ${e instanceof Error ? e.message : "failed"}`);
       captureError(e, { stage: "summary", projectId });
     }
+
+    // ── Stage 5: Send the daily brief email (P0 sprint) ───────────────────
+    // Sent ONCE per (project, day), guarded by daily_summaries.email_sent_at.
+    // Only fires when:
+    //   - the summary actually has text (status created/updated)
+    //   - the user is opted-in
+    //   - we haven't already sent for today's summary
+    // Failures are non-fatal — never roll back the summary because email failed.
+    let emailSent = false;
+    if (summaryStatus !== "skipped" && summaryStatus !== "error" && summaryDate && user.email_brief_enabled) {
+      try {
+        const sendRows = (await sql`
+          SELECT id, summary_text, email_sent_at,
+                 COALESCE(
+                   (SELECT jsonb_agg(jsonb_build_object('title', src.title, 'url', src.url, 'domain', src.domain)
+                                     ORDER BY src.scraped_at DESC)
+                    FROM daily_summary_sources dss
+                    JOIN sources src ON src.id = dss.source_id
+                    WHERE dss.daily_summary_id = ds.id),
+                   '[]'::jsonb
+                 ) AS sources
+          FROM daily_summaries ds
+          WHERE ds.project_id = ${projectId} AND ds.summary_date = ${summaryDate}
+          LIMIT 1
+        `) as Array<{ id: string; summary_text: string; email_sent_at: string | null; sources: Array<{ title: string; url: string; domain: string }> }>;
+        const summaryRow = sendRows[0];
+        if (summaryRow && !summaryRow.email_sent_at) {
+          const appUrl = (process.env.APP_URL || "https://issuefy.app").replace(/\/+$/, "");
+          await sendDailyBriefEmail(user.email, {
+            projectName: project.name || "your project",
+            summaryDate,
+            summaryText: summaryRow.summary_text,
+            sources: summaryRow.sources ?? [],
+            dashboardUrl: `${appUrl}/dashboard/${projectId}`,
+            unsubscribeUrl: `${appUrl}/unsubscribe?token=${encodeURIComponent(user.email_brief_unsubscribe_token)}`,
+          });
+          // Stamp BEFORE returning so a same-day manual refresh later doesn't re-send.
+          await sql`UPDATE daily_summaries SET email_sent_at = now() WHERE id = ${summaryRow.id}`;
+          emailSent = true;
+          captureBreadcrumb("daily brief sent", { userId: user.id, projectId, summaryDate });
+        }
+      } catch (e) {
+        errors.push(`email: ${e instanceof Error ? e.message : "failed"}`);
+        captureError(e, { stage: "email", projectId });
+      }
+    }
+    void emailSent;
 
     await withTx(async (client) => {
       await client.query(
