@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "//": "Daily scrape DISPATCHER — fans out per-project workers (PRD §10.3, §13.10). Hobby crons fire once per day at any point within the scheduled hour.",
+      "path": "/api/cron/daily-scrape",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "//": "Retention cleanup — plan-aware source window + signals 180d (PRD §23).",
+      "path": "/api/cron/cleanup",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}
