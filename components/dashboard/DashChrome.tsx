@@ -96,6 +96,27 @@ function DashChromeInner({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // When the user is on a real route (sources / settings), warm Next's router
+  // cache for the dashboard index. By the time they click a feed-view button,
+  // the data is ready and the back-navigation feels instant — same trick the
+  // sidebar <Link prefetch> uses, but for the buttons.
+  useEffect(() => {
+    if (realRoute) {
+      router.prefetch(`/dashboard/${project.id}`);
+    }
+  }, [realRoute, router, project.id]);
+
+  // Conversely: when on the dashboard index, warm the sources + settings
+  // pages too. The sidebar <Link prefetch> handles this on hover, but
+  // calling it explicitly here means even keyboard users (⌘K → Settings)
+  // get the prefetched data path.
+  useEffect(() => {
+    if (isDashboardIndex) {
+      router.prefetch(`/dashboard/${project.id}/sources`);
+      router.prefetch(`/dashboard/${project.id}/settings`);
+    }
+  }, [isDashboardIndex, router, project.id]);
+
   function runRefresh() {
     setRefreshErr(null);
     startRefresh(async () => {
