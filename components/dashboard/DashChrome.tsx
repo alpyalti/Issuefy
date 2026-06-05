@@ -255,7 +255,7 @@ function DashChromeInner({
         </div>
 
         <div className="side-foot">
-          <Link href={`/dashboard/${project.id}/settings`} prefetch className="profile">
+          <Link href="/account" prefetch className="profile">
             <span className="avatar">{user.initials}</span>
             <span className="profile-meta">
               <span className="profile-name">{user.name || user.email}</span>
