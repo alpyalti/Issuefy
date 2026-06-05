@@ -5,10 +5,10 @@ import { json } from "@/lib/api";
 import { captureError } from "@/lib/sentry";
 
 export const runtime = "nodejs";
-// PRD §13.10 / Vercel fluid compute: the worker handles exactly ONE project
-// per invocation, so it can take a high duration budget. 800s is the upper
-// bound on Pro plans; lower limit doesn't hurt on Hobby (clamped to ~60s).
-export const maxDuration = 800;
+// PRD §13.10: the worker handles ONE project per invocation, so it can take
+// a generous duration budget. 300 is the Hobby plan ceiling; bump to 800 on
+// Pro if your projects routinely exceed 5 minutes (large scrape batches).
+export const maxDuration = 300;
 
 /**
  * Per-project WORKER (PRD §13.10).

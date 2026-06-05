@@ -6,9 +6,9 @@ import { processProject } from "@/lib/process-project";
 import { captureError } from "@/lib/sentry";
 
 export const runtime = "nodejs";
-// Manual refresh re-runs the entire pipeline for one project — give it the
-// same generous duration budget as the worker.
-export const maxDuration = 800;
+// Manual refresh re-runs the entire pipeline for one project — match the
+// worker's duration budget. 300 = Hobby plan max; raise to 800 on Pro.
+export const maxDuration = 300;
 
 /**
  * POST /api/projects/:id/refresh    (Clerk-authed via middleware)
