@@ -21,7 +21,8 @@ export const maxDuration = 300;
  *
  * Stats counts are returned for visibility (the cron log surfaces them).
  */
-export async function POST(req: Request) {
+// Vercel Cron sends GET. Both methods accepted for local-curl convenience.
+async function handle(req: Request) {
   const unauthorized = checkCronSecret(req);
   if (unauthorized) return unauthorized;
 
@@ -83,3 +84,5 @@ export async function POST(req: Request) {
 
   return json({ sourcesDeleted, signalsDeleted, errors });
 }
+
+export { handle as GET, handle as POST };

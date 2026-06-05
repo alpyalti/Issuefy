@@ -78,7 +78,9 @@ async function kickoffWorker(projectId: string, secret: string, base: string): P
   }
 }
 
-export async function POST(req: Request) {
+// Vercel Cron sends GET requests. The shared handler accepts both methods
+// (GET for production cron, POST kept for local-curl convenience).
+async function handle(req: Request) {
   const unauthorized = checkCronSecret(req);
   if (unauthorized) return unauthorized;
 
@@ -110,3 +112,5 @@ export async function POST(req: Request) {
 
   return json({ dispatched: projects.length });
 }
+
+export { handle as GET, handle as POST };
