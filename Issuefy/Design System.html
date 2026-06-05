@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Issuefy — Design System</title>
+<link rel="icon" type="image/svg+xml" href="brand/favicon.svg">
+<link rel="stylesheet" href="tokens.css">
+<style>
+/* ============================ DESIGN SYSTEM ============================ */
+body{ }
+.ds-nav{ position:sticky; top:0; z-index:30; background:rgba(250,250,248,.9); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line); }
+.ds-nav-inner{ height:64px; display:flex; align-items:center; justify-content:space-between; }
+.ds-nav-links{ display:flex; gap:8px; }
+
+.ds-hero{ padding:72px 0 40px; border-bottom:1px solid var(--line); }
+.ds-hero .eyebrow{ margin-bottom:18px; }
+.ds-hero h1{ font-size:clamp(36px,5vw,56px); line-height:1.02; letter-spacing:-0.025em; max-width:14ch; }
+.ds-hero p{ font-size:19px; color:var(--ink-2); margin-top:22px; max-width:60ch; line-height:1.55; }
+
+.ds-sec{ padding:64px 0; border-bottom:1px solid var(--line); }
+.ds-sec-head{ display:flex; align-items:baseline; gap:16px; margin-bottom:36px; }
+.ds-sec-head .n{ font-family:var(--mono); font-size:13px; color:var(--ink-4); }
+.ds-sec-head h2{ font-size:30px; letter-spacing:-0.02em; }
+.ds-sec-head p{ color:var(--ink-2); font-size:15px; margin-left:auto; max-width:44ch; text-align:right; }
+@media(max-width:760px){ .ds-sec-head{ flex-wrap:wrap; } .ds-sec-head p{ text-align:left; margin-left:0; } }
+
+.ds-block{ margin-bottom:40px; }
+.ds-block:last-child{ margin-bottom:0; }
+.ds-block-label{ font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-3); margin-bottom:18px; display:flex; align-items:center; gap:10px; }
+.ds-block-label::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+/* logo block */
+.logo-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media(max-width:760px){ .logo-grid{ grid-template-columns:1fr; } }
+.logo-cell{ border:1px solid var(--line); border-radius:var(--r-lg); padding:36px; display:flex; align-items:center;
+  justify-content:center; min-height:140px; background:var(--surface); position:relative; }
+.logo-cell.dark{ background:var(--ink); }
+.logo-cell .cap{ position:absolute; bottom:12px; left:16px; font-family:var(--mono); font-size:10.5px; color:var(--ink-4); }
+.logo-cell.dark .cap{ color:#6b7280; }
+.mark-xl{ width:64px; height:64px; border-radius:18px; background:var(--ink); display:flex; align-items:center; justify-content:center; }
+.logo-cell.dark .mark-xl{ background:#22252b; }
+.wordmark.big .name{ font-size:34px; }
+.wordmark.big .mark{ width:40px; height:40px; border-radius:12px; }
+
+/* color */
+.swatches{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
+@media(max-width:880px){ .swatches{ grid-template-columns:repeat(3,1fr); } }
+@media(max-width:520px){ .swatches{ grid-template-columns:repeat(2,1fr); } }
+.swatch{ border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--surface); }
+.swatch .chip{ height:76px; }
+.swatch .meta{ padding:10px 12px; }
+.swatch .name{ font-size:13px; font-weight:600; }
+.swatch .hex{ font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-top:2px; }
+.swatch .tok{ font-family:var(--mono); font-size:10px; color:var(--ink-4); margin-top:1px; }
+.sem-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+@media(max-width:760px){ .sem-grid{ grid-template-columns:1fr 1fr; } }
+.sem{ border:1px solid var(--line); border-radius:var(--r); padding:16px; }
+.sem .row{ display:flex; align-items:center; gap:10px; }
+.sem .blob{ width:30px; height:30px; border-radius:9px; }
+.sem .lbl{ font-size:14px; font-weight:600; }
+.sem .use{ font-size:12.5px; color:var(--ink-2); margin-top:12px; line-height:1.45; }
+
+/* type */
+.type-logic{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:36px; }
+@media(max-width:760px){ .type-logic{ grid-template-columns:1fr; } }
+.tl{ border:1px solid var(--line); border-radius:var(--r-lg); padding:24px; background:var(--surface); }
+.tl .big{ font-size:40px; line-height:1; margin-bottom:16px; }
+.tl .fam{ font-family:var(--mono); font-size:11px; color:var(--accent-ink); letter-spacing:.04em; }
+.tl h4{ font-family:var(--sans); font-weight:600; font-size:15px; margin:6px 0 8px; }
+.tl p{ font-size:13.5px; color:var(--ink-2); line-height:1.5; }
+.specimen{ border-top:1px solid var(--line); padding:20px 0; display:grid; grid-template-columns:140px 1fr; gap:24px; align-items:baseline; }
+.specimen:last-child{ border-bottom:1px solid var(--line); }
+.specimen .tag{ font-family:var(--mono); font-size:11px; color:var(--ink-3); line-height:1.6; }
+.sp-display{ font-family:var(--serif); font-size:52px; line-height:1; letter-spacing:-0.025em; font-weight:500; }
+.sp-h2{ font-family:var(--serif); font-size:34px; letter-spacing:-0.02em; font-weight:500; }
+.sp-take{ font-family:var(--serif); font-size:20px; line-height:1.35; }
+.sp-body{ font-family:var(--sans); font-size:16px; color:var(--ink-2); line-height:1.55; }
+.sp-label{ font-family:var(--sans); font-size:13px; font-weight:600; }
+.sp-mono{ font-family:var(--mono); font-size:12px; letter-spacing:.04em; color:var(--ink-2); }
+
+/* tokens */
+.tok-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:32px; }
+@media(max-width:760px){ .tok-grid{ grid-template-columns:1fr; } }
+.radii{ display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; }
+.radii .r{ display:flex; flex-direction:column; gap:8px; align-items:center; }
+.radii .box{ width:62px; height:62px; background:var(--surface); border:1px solid var(--line-2); }
+.radii .cap{ font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
+.shadows{ display:flex; gap:18px; flex-wrap:wrap; }
+.shadows .s{ width:96px; height:72px; border-radius:var(--r); background:var(--surface); display:flex; align-items:flex-end;
+  justify-content:center; padding-bottom:8px; font-family:var(--mono); font-size:10px; color:var(--ink-3); }
+
+/* components */
+.comp-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media(max-width:880px){ .comp-grid{ grid-template-columns:1fr; } }
+.demo{ border:1px solid var(--line); border-radius:var(--r-lg); padding:24px; background:var(--surface); }
+.demo h4{ font-family:var(--sans); font-weight:600; font-size:14px; margin-bottom:18px; color:var(--ink); }
+.demo-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.demo-row + .demo-row{ margin-top:14px; }
+
+/* signal demo reuse */
+.sig-demo{ display:flex; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden; }
+.sig-demo .bar{ width:4px; background:var(--neg); }
+.sig-demo .bd{ padding:18px 20px; flex:1; }
+.sig-demo .take{ font-family:var(--serif); font-size:18px; line-height:1.32; letter-spacing:-0.01em; margin:12px 0 8px; }
+.sig-demo .ctx{ font-size:14px; color:var(--ink-2); line-height:1.5; }
+
+/* favicon (local copy of dash style for demo) */
+.favicon{ width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+  font-family:var(--mono); font-size:10px; font-weight:600; color:#fff; }
+.src-stack{ display:flex; }
+.src-stack .favicon{ margin-left:-7px; border:2px solid var(--surface); }
+.src-stack .favicon:first-child{ margin-left:0; }
+.sev-chip{ font-family:var(--mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--neg); }
+.new-dot{ font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase;
+  color:var(--accent-ink); background:var(--accent-bg); padding:2px 7px; border-radius:var(--r-pill); }
+
+/* icon grid */
+.icon-grid{ display:grid; grid-template-columns:repeat(8,1fr); gap:10px; }
+@media(max-width:760px){ .icon-grid{ grid-template-columns:repeat(4,1fr); } }
+.icon-cell{ border:1px solid var(--line); border-radius:var(--r); padding:16px 8px; display:flex; flex-direction:column;
+  align-items:center; gap:10px; background:var(--surface); color:var(--ink); }
+.icon-cell .nm{ font-family:var(--mono); font-size:9.5px; color:var(--ink-4); text-align:center; line-height:1.2; }
+
+/* spacing */
+.space-list{ display:flex; flex-direction:column; gap:11px; }
+.space-list .row{ display:flex; align-items:center; gap:16px; }
+.space-list .lab{ font-family:var(--mono); font-size:11px; color:var(--ink-3); width:96px; flex:none; }
+.space-list .bar{ height:16px; background:var(--accent-bg); border:1px solid var(--accent-bg-2); border-radius:5px; }
+.rhythm-note{ display:flex; align-items:center; gap:16px; border:1px solid var(--line); border-radius:var(--r-lg); background:var(--surface); padding:18px 20px; }
+.rhythm-note .big{ font-family:var(--serif); font-size:30px; color:var(--ink); line-height:1; flex:none; }
+.rhythm-note .txt{ font-size:13.5px; color:var(--ink-2); line-height:1.5; }
+
+/* surfaces */
+.surfaces{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media(max-width:760px){ .surfaces{ grid-template-columns:1fr; } }
+.surf{ border-radius:var(--r-lg); padding:20px; min-height:120px; display:flex; flex-direction:column; justify-content:flex-end; gap:5px; position:relative; overflow:hidden; }
+.surf .st{ font-family:var(--sans); font-weight:600; font-size:13px; }
+.surf .sd{ font-family:var(--mono); font-size:10px; letter-spacing:.03em; }
+.surf-light{ background:var(--surface); border:1px solid var(--line); }
+.surf-light .sd{ color:var(--ink-3); }
+.surf-dark{ background:var(--ink); color:#fff; }
+.surf-dark .sd{ color:#8a93a3; }
+.surf-dark .gl{ position:absolute; right:-30px; top:-34px; width:130px; height:130px; border-radius:50%; background:radial-gradient(circle,rgba(76,118,247,.4),transparent 70%); }
+.glass-wrap{ background:repeating-linear-gradient(115deg,#e3ebff 0 16px,#eef0ea 16px 32px); border-radius:var(--r-lg); padding:16px; }
+.surf-glass{ min-height:88px; background:rgba(252,252,250,.5); -webkit-backdrop-filter:blur(16px) saturate(180%); backdrop-filter:blur(16px) saturate(180%); border:1px solid rgba(21,23,26,.08); box-shadow:0 12px 30px -12px rgba(21,23,26,.3), inset 0 1px 0 rgba(255,255,255,.6); }
+.surf-glass .sd{ color:var(--ink-3); }
+
+/* live billing toggle */
+.bill-toggle{ display:inline-flex; align-items:center; gap:4px; background:var(--surface-2); border:1px solid var(--line); border-radius:999px; padding:4px; }
+.bill-toggle button{ display:flex; align-items:center; gap:8px; white-space:nowrap; border:none; background:none; cursor:pointer; font-family:var(--sans); font-size:13.5px; font-weight:600; color:var(--ink-2); padding:8px 16px; border-radius:999px; transition:.15s; }
+.bill-toggle button.on{ background:var(--surface); color:var(--ink); box-shadow:var(--shadow-xs); }
+.bill-save{ font-family:var(--mono); font-size:10px; color:var(--pos); background:var(--pos-bg); padding:2px 7px; border-radius:999px; }
+
+/* live faq accordion */
+.faqd{ border-top:1px solid var(--line); }
+.faqd:last-child{ border-bottom:1px solid var(--line); }
+.faqd-q{ width:100%; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:15px 2px; background:none; border:none; cursor:pointer; text-align:left; font-family:var(--serif); font-size:16px; color:var(--ink); }
+.faqd-ic{ flex:none; width:26px; height:26px; border:1px solid var(--line-2); border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--ink-2); transition:transform .3s, background .2s, color .2s, border-color .2s; }
+.faqd.open .faqd-ic{ background:var(--ink); color:#fff; border-color:var(--ink); transform:rotate(135deg); }
+.faqd-a{ overflow:hidden; max-height:0; transition:max-height .3s ease; }
+.faqd-a-in{ padding:0 30px 16px 2px; font-size:13.5px; color:var(--ink-2); line-height:1.6; }
+
+/* motion tiles */
+.motion-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media(max-width:880px){ .motion-grid{ grid-template-columns:1fr 1fr; } }
+@media(max-width:560px){ .motion-grid{ grid-template-columns:1fr; } }
+.motion{ border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden; background:var(--surface); }
+.motion .stage{ height:116px; position:relative; overflow:hidden; background:var(--bg); border-bottom:1px solid var(--line); }
+.motion .mt{ padding:15px 17px; }
+.motion .mt h4{ font-family:var(--sans); font-weight:600; font-size:13.5px; margin-bottom:5px; }
+.motion .mt p{ font-size:12px; color:var(--ink-2); line-height:1.5; }
+.m-beam{ position:absolute; top:50%; left:8%; right:8%; height:1px; background:var(--line-2); }
+.m-beam .dot{ position:absolute; top:-3px; left:0; width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 12px 3px rgba(45,91,227,.6); animation:dsbeam 3.2s linear infinite; }
+@keyframes dsbeam{ 0%{ left:-3%; } 100%{ left:103%; } }
+.m-stages{ position:absolute; top:50%; transform:translateY(-50%); display:flex; justify-content:space-between; left:8%; right:8%; }
+.m-stages i{ width:9px; height:9px; border-radius:50%; background:var(--surface); border:1.5px solid var(--accent); }
+.m-glow{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+.m-glow .card{ width:96px; height:58px; border-radius:11px; border:1px solid var(--line-2); background:var(--surface); animation:dsglow 2.8s ease-in-out infinite; }
+@keyframes dsglow{ 0%,100%{ box-shadow:0 0 0 0 rgba(45,91,227,0); border-color:var(--line-2);} 50%{ box-shadow:0 0 22px 2px rgba(45,91,227,.4); border-color:var(--accent);} }
+.m-tilt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; perspective:560px; }
+.m-tilt .scr{ width:104px; height:62px; border-radius:9px; border:1px solid var(--line-2); background:linear-gradient(160deg,var(--surface),var(--surface-2)); transform-origin:50% 100%; animation:dstilt 4.2s ease-in-out infinite; }
+@keyframes dstilt{ 0%,100%{ transform:rotateX(26deg);} 50%{ transform:rotateX(0);} }
+.m-glass{ position:absolute; inset:0; background:repeating-linear-gradient(116deg,#e4ebff 0 13px,#eef0ea 13px 26px); }
+.m-glass .isl{ position:absolute; left:14px; right:14px; top:16px; height:30px; border-radius:11px; background:rgba(252,252,250,.6); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(21,23,26,.1); box-shadow:0 8px 18px -8px rgba(21,23,26,.35); animation:dsisl 4.4s ease-in-out infinite; }
+@keyframes dsisl{ 0%,18%{ transform:translateY(-44px); opacity:0;} 38%,82%{ transform:translateY(0); opacity:1;} 100%{ transform:translateY(-44px); opacity:0;} }
+.m-blinds{ position:absolute; inset:0; background:repeating-linear-gradient(108deg,#eef3ff 0 11px,#cfddff 11px 22px); }
+.m-blinds .spot{ position:absolute; top:-20%; bottom:-20%; width:55%; background:radial-gradient(ellipse at center, rgba(45,91,227,.32), transparent 68%); animation:dsspot 5s ease-in-out infinite; }
+@keyframes dsspot{ 0%,100%{ left:-25%;} 50%{ left:65%;} }
+@media(prefers-reduced-motion: reduce){ .m-beam .dot,.m-glow .card,.m-tilt .scr,.m-glass .isl,.m-blinds .spot{ animation:none; } }
+
+.ds-foot{ padding:48px 0 64px; }
+.ds-foot p{ font-family:var(--mono); font-size:12px; color:var(--ink-3); }
+</style>
+</head>
+<body>
+
+<nav class="ds-nav">
+  <div class="wrap ds-nav-inner">
+    <a href="Landing Page.html" class="brand">
+      <img src="brand/logo-ink.svg" class="brand-logo" alt="Issuefy">
+    </a>
+    <div class="ds-nav-links">
+      <a href="Landing Page.html" class="btn btn-quiet">Landing</a>
+      <a href="Dashboard.html" class="btn btn-ghost btn-sm">Open dashboard</a>
+    </div>
+  </div>
+</nav>
+
+<header class="ds-hero">
+  <div class="wrap">
+    <div class="eyebrow">Issuefy · Design System v1.1</div>
+    <h1>The system behind a calm, credible brief.</h1>
+    <p>Issuefy turns a noisy market into one trustworthy read. The visual language is built to feel premium, editorial and quiet: black, white and warm grays, a single calm blue, and a clear division of labor between three typefaces. Motion is purposeful, every screen is responsive to the phone, and the components below make it all feel like one product.</p>
+  </div>
+</header>
+
+<!-- BRAND -->
+<section class="ds-sec">
+  <div class="wrap">
+    <div class="ds-sec-head">
+      <span class="n">01</span><h2>Brand</h2>
+      <p>The mark is a spark, a signal surfacing from the noise. Use the full lockup in product, or the mark alone as an app icon.</p>
+    </div>
+    <div class="ds-block">
+      <div class="ds-block-label">Logo</div>
+      <div class="logo-grid">
+        <div class="logo-cell">
+          <img src="brand/favicon.svg" alt="Issuefy app icon" style="width:72px;height:72px;display:block">
+          <span class="cap">Mark · app icon</span>
+        </div>
+        <div class="logo-cell">
+          <img src="brand/logo-ink.svg" alt="Issuefy" style="height:38px;display:block">
+          <span class="cap">Primary lockup</span>
+        </div>
+        <div class="logo-cell dark">
+          <img src="brand/logo-white.svg" alt="Issuefy" style="height:38px;display:block">
+          <span class="cap">On dark</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COLOR -->
+<section class="ds-sec">
+  <div class="wrap">
+    <div class="ds-sec-head">
+      <span class="n">02</span><h2>Color</h2>
+      <p>Mostly grayscale. Color is meaning, not decoration: one accent for action, three muted semantics for signal type.</p>
+    </div>
+
+    <div class="ds-block">
+      <div class="ds-block-label">Neutrals · ink &amp; surface</div>
+      <div class="swatches">
+        <div class="swatch"><div class="chip" style="background:#15171A"></div><div class="meta"><div class="name">Ink</div><div class="hex">#15171A</div><div class="tok">--ink</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#565B62"></div><div class="meta"><div class="name">Ink 2</div><div class="hex">#565B62</div><div class="tok">--ink-2</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#898E96"></div><div class="meta"><div class="name">Ink 3</div><div class="hex">#898E96</div><div class="tok">--ink-3</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#E8E7E2"></div><div class="meta"><div class="name">Line</div><div class="hex">#E8E7E2</div><div class="tok">--line</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#F4F4F1"></div><div class="meta"><div class="name">Surface 2</div><div class="hex">#F4F4F1</div><div class="tok">--surface-2</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#FAFAF8;box-shadow:inset 0 0 0 1px #E8E7E2"></div><div class="meta"><div class="name">Background</div><div class="hex">#FAFAF8</div><div class="tok">--bg</div></div></div>
+      </div>
+    </div>
+
+    <div class="ds-block">
+      <div class="ds-block-label">Accent · blue</div>
+      <div class="swatches">
+        <div class="swatch"><div class="chip" style="background:#2D5BE3"></div><div class="meta"><div class="name">Accent</div><div class="hex">#2D5BE3</div><div class="tok">--accent</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#1E47C0"></div><div class="meta"><div class="name">Accent ink</div><div class="hex">#1E47C0</div><div class="tok">--accent-ink</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#1A3CA3"></div><div class="meta"><div class="name">Accent 700</div><div class="hex">#1A3CA3</div><div class="tok">--accent-700</div></div></div>
+        <div class="swatch"><div class="chip" style="background:#EEF2FE"></div><div class="meta"><div class="name">Accent bg</div><div class="hex">#EEF2FE</div><div class="tok">--accent-bg</div></div></div>
+      </div>
+    </div>
+
+    <div class="ds-block">
+      <div class="ds-block-label">Semantic · signal type</div>
+      <div class="sem-grid">
+        <div class="sem">
+          <div class="row"><span class="blob" style="background:#EEF2FE"></span><span class="lbl" style="color:#1E47C0">Competitor</span></div>
+          <p class="use">Blue. A move worth tracking. Neutral, watchful, not alarming.</p>
+        </div>
+        <div class="sem">
+          <div class="row"><span class="blob" style="background:#E8F4EE"></span><span class="lbl" style="color:#1A8A5C">Opportunity</span></div>
+          <p class="use">Green. An opening to act on. Positive and growth-leaning.</p>
+        </div>
+        <div class="sem">
+          <div class="row"><span class="blob" style="background:#FAEBE9"></span><span class="lbl" style="color:#C24338">Risk / Threat</span></div>
+          <p class="use">Red. Something to defend against, used sparingly so it keeps its weight.</p>
+        </div>
+        <div class="sem">
+          <div class="row"><span class="blob" style="background:#F4F4F1"></span><span class="lbl" style="color:#565B62">Market</span></div>
+          <p class="use">Neutral. Context and trends. Present, never shouting.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TYPE -->
+<section class="ds-sec">
+  <div class="wrap">
+    <div class="ds-sec-head">
+      <span class="n">03</span><h2>Typography</h2>
+      <p>Three families, one rule: serif is the intelligence, sans is the interface, mono is the data.</p>
+    </div>
+
+    <div class="type-logic">
+      <div class="tl">
+        <div class="big serif">Aa</div>
+        <div class="fam">NEWSREADER · SERIF</div>
+        <h4>The intelligence</h4>
+        <p>Headlines, the AI summary, every signal takeaway. Editorial and considered. It reads like something written for you.</p>
+      </div>
+      <div class="tl">
+        <div class="big" style="font-family:var(--sans);font-weight:600">Aa</div>
+        <div class="fam">HANKEN GROTESK · SANS</div>
+        <h4>The interface</h4>
+        <p>Buttons, navigation, labels, body context. Clean and quiet so it never competes with the content.</p>
+      </div>
+      <div class="tl">
+        <div class="big" style="font-family:var(--mono)">Aa</div>
+        <div class="fam">IBM PLEX MONO · MONO</div>
+        <h4>The data</h4>
+        <p>Timestamps, source names, categories, metrics. Signals “this is a fact, captured” at a glance.</p>
+      </div>
+    </div>
+
+    <div class="ds-block">
+      <div class="ds-block-label">Scale</div>
+      <div class="specimen"><div class="tag">Display<br>52 / Serif</div><div class="sp-display">Ahead of the market</div></div>
+      <div class="specimen"><div class="tag">Heading<br>34 / Serif</div><div class="sp-h2">A two-minute morning brief</div></div>
+      <div class="specimen"><div class="tag">Takeaway<br>20 / Serif</div><div class="sp-take">Northwind quietly shipped usage-based pricing overnight.</div></div>
+      <div class="specimen"><div class="tag">Body<br>16 / Sans</div><div class="sp-body">Each morning, Issuefy distills the noise into a short brief and a handful of categorized signal cards.</div></div>
+      <div class="specimen"><div class="tag">Label<br>13 / Sans 600</div><div class="sp-label">View all sources</div></div>
+      <div class="specimen"><div class="tag">Data<br>12 / Mono</div><div class="sp-mono">TUE · JUN 04 · 7:02 AM · 3 SOURCES</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SPACING -->
+<section class="ds-sec">
+  <div class="wrap">
+    <div class="ds-sec-head">
+      <span class="n">04</span><h2>Spacing &amp; layout</h2>
+      <p>A 4px base scale, and a steady 144px rhythm between sections so the whole page breathes evenly.</p>
+    </div>
+    <div class="tok-grid">
+      <div class="ds-block" style="margin:0">
+        <div class="ds-block-label">Scale · 4px base</div>
+        <div class="space-list">
+          <div class="row"><span class="lab">4 · --s1</span><span class="bar" style="width:4px"></span></div>
+          <div class="row"><span class="lab">8 · --s2</span><span class="bar" style="width:8px"></span></div>
+          <div class="row"><span class="lab">12 · --s3</span><span class="bar" style="width:12px"></span></div>
+          <div class="row"><span class="lab">16 · --s4</span><span class="bar" style="width:16px"></span></div>
+          <div class="row"><span class="lab">24 · --s6</span><span class="bar" style="width:24px"></span></div>
+          <div class="row"><span class="lab">32 · --s8</span><span class="bar" style="width:32px"></span></div>
+          <div class="row"><span class="lab">48 · --s12</span><span class="bar" style="width:48px"></span></div>
+          <div class="row"><span class="lab">64 · --s16</span><span class="bar" style="width:64px"></span></div>
+        </div>
+      </div>
+      <div class="ds-block" style="margin:0">
+        <div class="ds-block-label">Rhythm &amp; container</div>
+        <div class="rhythm-note">
+          <span class="big">144<span style="font-size:14px;color:var(--ink-3)">px</span></span>
+          <span class="txt">A consistent 144px of vertical space separates every section, giving the page an even, professional cadence.</span>
+        </div>
+        <div class="rhythm-note" style="margin-top:12px">
+          <span class="big">1200<span style="font-size:14px;color:var(--ink-3)">px</span></span>
+          <span class="txt">Max content width, with 28px gutters (20px on mobile). Grids collapse 4 → 2 → 1 columns as the viewport narrows — nothing is hidden or clipped.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TOKENS -->
+<section class="ds-sec">
+  <div class="wrap">
+    <div class="ds-sec-head">
+      <span class="n">05</span><h2>Radius &amp; elevation</h2>
+      <p>Soft, even corners and quiet shadows. Depth is suggested, never heavy.</p>
+    </div>
+    <div class="tok-grid">
+      <div class="ds-block" style="margin:0">
+        <div class="ds-block-label">Radius</div>
+        <div class="radii">
+          <div class="r"><div class="box" style="border-radius:7px"></div><span class="cap">7 · xs</span></div>
+          <div class="r"><div class="box" style="border-radius:10px"></div><span class="cap">10 · sm</span></div>
+          <div class="r"><div class="box" style="border-radius:14px"></div><span class="cap">14 · base</span></div>
+          <div class="r"><div class="box" style="border-radius:18px"></div><span class="cap">18 · lg</span></div>
+          <div class="r"><div class="box" style="border-radius:26px"></div><span class="cap">26 · xl</span></div>
+        </div>
+      </div>
+      <div class="ds-block" style="margin:0">
+        <div class="ds-block-label">Shadow</div>
+        <div class="shadows">
+          <div class="s" style="box-shadow:var(--shadow-xs)">xs</div>
+          <div class="s" style="box-shadow:var(--shadow-sm)">sm</div>
+          <div class="s" style="box-shadow:var(--shadow)">base</div>
+          <div class="s" style="box-shadow:var(--shadow-lg)">lg</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPONENTS -->
+<section class="ds-sec">
+  <div class="wrap">
+    <div class="ds-sec-head">
+      <span class="n">06</span><h2>Components</h2>
+      <p>The repeating units of the product, assembled from the foundations above.</p>
+    </div>
+
+    <div class="comp-grid">
+      <div class="demo">
+        <h4>Buttons</h4>
+        <div class="demo-row">
+          <button class="btn btn-accent">Start free <span data-icon="ArrowRight01Icon" data-size="16" data-stroke="2"></span></button>
+          <button class="btn btn-primary">Open dashboard</button>
+        </div>
+        <div class="demo-row">
+          <button class="btn btn-ghost">See sample</button>
+          <button class="btn btn-quiet">Sign in</button>
+        </div>
+      </div>
+
+      <div class="demo">
+        <h4>Category &amp; severity</h4>
+        <div class="demo-row">
+          <span class="pill pill-info"><span class="dot"></span>Competitor</span>
+          <span class="pill pill-pos"><span class="dot"></span>Opportunity</span>
+          <span class="pill pill-neg"><span class="dot"></span>Risk</span>
+        </div>
+        <div class="demo-row">
+          <span class="sev-chip">High signal</span>
+          <span class="sev-chip" style="color:var(--warn)">Worth a look</span>
+          <span class="sev-chip" style="color:var(--ink-3)">FYI</span>
+          <span class="new-dot">New</span>
+        </div>
+      </div>
+
+      <div class="demo">
+        <h4>Source button · clickable verification</h4>
+        <div class="demo-row">
+          <a class="source" href="#" onclick="return false">
+            <span class="favicon" style="background:#168F6B">TC</span>
+            <span class="src-meta"><span class="src-name">TechCrunch</span><span class="src-time">News · 2h ago</span></span>
+            <span class="ext" data-icon="ArrowUpRight01Icon" data-size="15"></span>
+          </a>
+          <a class="source" href="#" onclick="return false">
+            <span class="favicon" style="background:#FF4500">R</span>
+            <span class="src-meta"><span class="src-name">r/SaaS</span><span class="src-time">Forum · 3h ago</span></span>
+            <span class="ext" data-icon="ArrowUpRight01Icon" data-size="15"></span>
+          </a>
+        </div>
+        <div class="demo-row" style="margin-top:16px">
+          <span class="src-stack">
+            <span class="favicon" style="background:#168F6B">TC</span>
+            <span class="favicon" style="background:#FF4500">R</span>
+            <span class="favicon" style="background:#0A66C2">in</span>
+          </span>
+          <span class="mono" style="font-size:12px;color:var(--ink-3)">stacked · 3 sources</span>
+        </div>
+      </div>
+
+      <div class="demo">
+        <h4>Stat</h4>
+        <div class="demo-row">
+          <div style="display:grid;grid-template-columns:auto auto;gap:2px 11px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:14px 15px;background:var(--surface)">
+            <span style="grid-row:1/3;width:38px;height:38px;border-radius:10px;background:var(--accent-bg);color:var(--accent-ink);display:flex;align-items:center;justify-content:center" data-icon="FlashIcon" data-size="18"></span>
+            <span style="font-family:var(--serif);font-size:26px;font-weight:500;line-height:1">12</span>
+            <span style="font-size:12px;color:var(--ink-3)">New signals</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo">
+        <h4>Billing toggle</h4>
+        <div class="demo-row">
+          <div class="bill-toggle" id="dsToggle">
+            <button type="button" data-mode="monthly">Monthly</button>
+            <button type="button" data-mode="annual" class="on">Annual <span class="bill-save">Save ~2 months</span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo">
+        <h4>FAQ accordion</h4>
+        <div class="faqd">
+          <button class="faqd-q">Can I trust the AI?<span class="faqd-ic" data-icon="Add01Icon" data-size="15" data-stroke="1.8"></span></button>
+          <div class="faqd-a"><div class="faqd-a-in">Every signal links to its original public sources, so any claim is one click from verification.</div></div>
+        </div>
+        <div class="faqd">
+          <button class="faqd-q">Is there a free trial?<span class="faqd-ic" data-icon="Add01Icon" data-size="15" data-stroke="1.8"></span></button>
+          <div class="faqd-a"><div class="faqd-a-in">Starter includes a 14-day free trial, no credit card needed.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-block" style="margin-top:20px">
+      <div class="ds-block-label">Surfaces</div>
+      <div class="surfaces">
+        <div class="surf surf-light"><span class="st">Light card</span><span class="sd">--surface · 1px --line</span></div>
+        <div class="surf surf-dark"><span class="gl"></span><span class="st">Dark band</span><span class="sd">--ink · blue glow</span></div>
+        <div class="glass-wrap"><div class="surf surf-glass"><span class="st">Glass island</span><span class="sd">blur 18 · saturate 180</span></div></div>
+      </div>
+    </div>
+
+    <div class="ds-block" style="margin-top:20px">
+      <div class="ds-block-label">Signal card · the core unit</div>
+      <div class="sig-demo">
+        <div class="bar"></div>
+        <div class="bd">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="pill pill-info"><span class="dot"></span>Competitor</span>
+            <span class="sev-chip">High signal</span>
+            <span class="new-dot">New</span>
+          </div>
+          <p class="take">Northwind launched usage-based pricing tiers aimed squarely at mid-market.</p>
+          <p class="ctx">Announced at 11pm ET with no migration tooling. Reddit sentiment is split, a credible window to reinforce your flat-rate positioning.</p>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:15px;border-top:1px solid var(--line)">
+            <span style="display:flex;align-items:center;gap:11px">
+              <span class="src-stack"><span class="favicon" style="background:#2D5BE3">N</span><span class="favicon" style="background:#FF4500">R</span><span class="favicon" style="background:#168F6B">TC</span></span>
+              <span style="font-size:13.5px;font-weight:600">3 sources</span>
+            </span>
+            <span style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--pos)"><span data-icon="CheckmarkBadge01Icon" data-size="15"></span>Cross-verified</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MOTION -->
+<section class="ds-sec">
+  <div class="wrap">
+    <div class="ds-sec-head">
+      <span class="n">07</span><h2>Motion &amp; interaction</h2>
+      <p>Motion is calm and purposeful, never decorative. It signals state and guides attention, and always yields to reduced-motion.</p>
+    </div>
+    <div class="motion-grid">
+      <div class="motion">
+        <div class="stage"><div class="m-glass"><div class="isl"></div></div></div>
+        <div class="mt"><h4>Glass island header</h4><p>Flat and full-width at the top; on scroll it lifts into a floating, frosted island.</p></div>
+      </div>
+      <div class="motion">
+        <div class="stage"><div class="m-blinds"><div class="spot"></div></div></div>
+        <div class="mt"><h4>Ambient hero</h4><p>A soft field of blue blinds with a spotlight that follows the cursor on the hero.</p></div>
+      </div>
+      <div class="motion">
+        <div class="stage"><div class="m-stages"><i></i><i></i><i></i></div><div class="m-beam"><span class="dot"></span></div></div>
+        <div class="mt"><h4>Signal flow</h4><p>One light travels monitor → summarize → verify, then loops seamlessly.</p></div>
+      </div>
+      <div class="motion">
+        <div class="stage"><div class="m-glow"><div class="card"></div></div></div>
+        <div class="mt"><h4>Edge glow</h4><p>Cards bloom a subtle blue border toward the cursor on hover — never on touch.</p></div>
+      </div>
+      <div class="motion">
+        <div class="stage"><div class="m-tilt"><div class="scr"></div></div></div>
+        <div class="mt"><h4>Scroll tilt</h4><p>The product preview tilts back in 3D and rotates flat as it scrolls into view.</p></div>
+      </div>
+      <div class="motion">
+        <div class="stage" style="display:flex;align-items:center;justify-content:center"><div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:center;line-height:1.7">cubic-bezier(.2,.7,.3,1)<br>150–420ms<br>reduced-motion safe</div></div>
+        <div class="mt"><h4>Principles</h4><p>One easing curve, short durations, and a static fallback whenever reduced-motion is set.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ICONS -->
+<section class="ds-sec">
+  <div class="wrap">
+    <div class="ds-sec-head">
+      <span class="n">08</span><h2>Iconography</h2>
+      <p>HugeIcons, stroke style at 1.6px. Consistent weight keeps the UI quiet and legible.</p>
+    </div>
+    <div class="icon-grid" id="iconGrid"></div>
+  </div>
+</section>
+
+<footer class="ds-foot">
+  <div class="wrap">
+    <p>Issuefy Design System · v1.1 · © 2026 Issuefy, Inc.</p>
+  </div>
+</footer>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#15171A"/>
+    <circle cx="50" cy="50" r="6" fill="#4C76F7"/>
+    <path d="M50 32a18 18 0 0 1 18 18" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+    <path d="M50 24a26 26 0 0 1 26 26" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".4"/>
+  </svg>
+</template>
+
+<script type="module" src="icons.js"></script>
+<script>
+  const ICON_SET = ["SparklesIcon","AiMagicIcon","Target01Icon","BulbIcon","Idea01Icon","Alert02Icon","ChartIncreaseIcon","FlashIcon",
+    "CheckmarkBadge01Icon","Notification03Icon","Search01Icon","Bookmark01Icon","News01Icon","LinkSquare02Icon","Megaphone01Icon","ShieldUserIcon",
+    "FilterHorizontalIcon","RefreshIcon","DashboardSquare01Icon","Settings01Icon","Mail01Icon","Menu01Icon","Tick02Icon","RadarIcon",
+    "ArrowUpRight01Icon","ArrowRight01Icon","ArrowDown01Icon","Add01Icon","Cancel01Icon","Globe02Icon","RedditIcon","GoogleIcon"];
+  function buildIcons(){
+    const grid = document.getElementById('iconGrid');
+    grid.innerHTML = ICON_SET.map(n=>`<div class="icon-cell"><span data-icon="${n}" data-size="24"></span><span class="nm">${n.replace(/Icon$/,'')}</span></div>`).join('');
+    if(window.Issuefy && window.Issuefy.hydrate) window.Issuefy.hydrate(grid);
+  }
+  if(window.Issuefy && window.Issuefy.ready) buildIcons();
+  else document.addEventListener('issuefy:icons-ready', buildIcons, { once:true });
+
+  /* live billing toggle demo */
+  const dsToggle = document.getElementById('dsToggle');
+  if (dsToggle) {
+    dsToggle.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      dsToggle.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    }));
+  }
+
+  /* live FAQ accordion demo */
+  document.querySelectorAll('.faqd').forEach(item => {
+    const q = item.querySelector('.faqd-q');
+    const a = item.querySelector('.faqd-a');
+    q.addEventListener('click', () => {
+      const open = item.classList.contains('open');
+      document.querySelectorAll('.faqd.open').forEach(o => { if (o !== item){ o.classList.remove('open'); o.querySelector('.faqd-a').style.maxHeight = null; } });
+      if (open){ item.classList.remove('open'); a.style.maxHeight = null; }
+      else { item.classList.add('open'); a.style.maxHeight = a.scrollHeight + 'px'; }
+    });
+  });
+</script>
+</body>
+</html>

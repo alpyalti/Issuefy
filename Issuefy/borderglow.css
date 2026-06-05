@@ -1,0 +1,123 @@
+/* Issuefy — BorderGlow (vanilla port of the React Bits component),
+   tuned for a light theme with a premium blue edge glow. */
+
+.bg-card{
+  --edge-proximity:0;
+  --cursor-angle:45deg;
+  --edge-sensitivity:46;
+  --color-sensitivity:calc(var(--edge-sensitivity) + 14);
+  --border-radius:18px;
+  --glow-padding:22px;
+  --cone-spread:26;
+  --card-bg:var(--surface);
+
+  /* blue glow */
+  --glow-color:hsl(222 84% 60% / 62%);
+  --glow-color-60:hsl(222 84% 60% / 34%);
+  --glow-color-50:hsl(222 84% 60% / 26%);
+  --glow-color-40:hsl(222 84% 60% / 20%);
+  --glow-color-30:hsl(222 84% 60% / 14%);
+  --glow-color-20:hsl(222 84% 60% / 9%);
+  --glow-color-10:hsl(222 84% 60% / 5%);
+
+  /* blue mesh-gradient border */
+  --gradient-one:   radial-gradient(at 80% 55%, #2D5BE3 0px, transparent 50%);
+  --gradient-two:   radial-gradient(at 69% 34%, #5B82FF 0px, transparent 50%);
+  --gradient-three: radial-gradient(at 8% 6%,   #93A9FF 0px, transparent 50%);
+  --gradient-four:  radial-gradient(at 41% 38%, #2D5BE3 0px, transparent 50%);
+  --gradient-five:  radial-gradient(at 86% 85%, #5B82FF 0px, transparent 50%);
+  --gradient-six:   radial-gradient(at 82% 18%, #93A9FF 0px, transparent 50%);
+  --gradient-seven: radial-gradient(at 51% 4%,  #5B82FF 0px, transparent 50%);
+
+  position:relative;
+  border-radius:var(--border-radius);
+  isolation:isolate;
+  transform:translate3d(0,0,0.01px);
+  display:grid;
+  border:1px solid var(--line);
+  background:var(--card-bg);
+  overflow:visible;
+  box-shadow:var(--shadow-xs);
+  transition:box-shadow .25s ease, transform .2s ease, border-color .25s ease;
+}
+.bg-card:hover{ transform:translateY(-2px); box-shadow:var(--shadow); border-color:var(--line-2); }
+
+.bg-card::before,
+.bg-card > .bg-edge{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  transition:opacity .25s ease-out;
+  z-index:-1;
+}
+.bg-card:not(:hover)::before,
+.bg-card:not(:hover) > .bg-edge{
+  opacity:0;
+  transition:opacity .7s ease-in-out;
+}
+
+/* colored mesh-gradient border arc (masked toward the cursor) */
+.bg-card::before{
+  border:1px solid transparent;
+  background:
+    linear-gradient(var(--card-bg) 0 100%) padding-box,
+    linear-gradient(rgb(255 255 255 / 0%) 0 100%) border-box,
+    var(--gradient-one) border-box,
+    var(--gradient-two) border-box,
+    var(--gradient-three) border-box,
+    var(--gradient-four) border-box,
+    var(--gradient-five) border-box,
+    var(--gradient-six) border-box,
+    var(--gradient-seven) border-box;
+  opacity:calc((var(--edge-proximity) - var(--color-sensitivity)) / (100 - var(--color-sensitivity)));
+  -webkit-mask-image:conic-gradient(from var(--cursor-angle) at center,
+    black calc(var(--cone-spread) * 1%),
+    transparent calc((var(--cone-spread) + 15) * 1%),
+    transparent calc((100 - var(--cone-spread) - 15) * 1%),
+    black calc((100 - var(--cone-spread)) * 1%));
+  mask-image:conic-gradient(from var(--cursor-angle) at center,
+    black calc(var(--cone-spread) * 1%),
+    transparent calc((var(--cone-spread) + 15) * 1%),
+    transparent calc((100 - var(--cone-spread) - 15) * 1%),
+    black calc((100 - var(--cone-spread)) * 1%));
+}
+
+/* outer + inner blue glow (masked toward the cursor) */
+.bg-card > .bg-edge{
+  inset:calc(var(--glow-padding) * -1);
+  pointer-events:none;
+  z-index:1;
+  -webkit-mask-image:conic-gradient(from var(--cursor-angle) at center, black 2.5%, transparent 10%, transparent 90%, black 97.5%);
+  mask-image:conic-gradient(from var(--cursor-angle) at center, black 2.5%, transparent 10%, transparent 90%, black 97.5%);
+  opacity:calc((var(--edge-proximity) - var(--edge-sensitivity)) / (100 - var(--edge-sensitivity)));
+}
+.bg-card > .bg-edge::before{
+  content:"";
+  position:absolute;
+  inset:var(--glow-padding);
+  border-radius:inherit;
+  box-shadow:
+    inset 0 0 0 1px var(--glow-color),
+    inset 0 0 2px 0 var(--glow-color-60),
+    inset 0 0 6px 0 var(--glow-color-40),
+    inset 0 0 15px 0 var(--glow-color-30),
+    inset 0 0 28px 2px var(--glow-color-20),
+    inset 0 0 50px 2px var(--glow-color-10),
+    0 0 2px 0 var(--glow-color-60),
+    0 0 6px 0 var(--glow-color-40),
+    0 0 16px 0 var(--glow-color-30),
+    0 0 30px 2px var(--glow-color-20),
+    0 0 55px 4px var(--glow-color-10);
+}
+
+.bg-inner{ display:flex; flex-direction:column; position:relative; z-index:1; border-radius:inherit; }
+
+/* ---- use-case card content (clean, minimal) ---- */
+.usecase{ padding:30px 28px; }
+.uc-ic{ width:34px; height:34px; border-radius:0; background:none; border:none;
+  display:flex; align-items:center; justify-content:center; color:#1E47C0; margin-bottom:18px; }
+.uc-ic span{ display:flex; }
+.uc-ic svg{ width:30px; height:30px; display:block; }
+.usecase h3{ font-family:var(--serif); font-weight:500; font-size:19px; letter-spacing:-0.01em; margin-bottom:9px; }
+.usecase p{ color:var(--ink-2); font-size:14px; line-height:1.55; text-wrap:pretty; }
