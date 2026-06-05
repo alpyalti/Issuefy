@@ -25,6 +25,7 @@ import { getLimits } from "./usage";
 import { sendUsageNoticeEmail } from "./mailer";
 import { captureBreadcrumb, captureError } from "./sentry";
 import { generateSignalsForProject } from "./signals";
+import { generateDailySummaryForProject } from "./daily-summary";
 
 interface ProjectRow {
   id: string;
@@ -49,6 +50,8 @@ export interface ProcessProjectResult {
   signalsInserted: number;
   signalsRejected: number;
   modelUsed: string | null;
+  summaryStatus: "created" | "updated" | "skipped" | "error";
+  summaryDate: string | null;
   errors: string[];
 }
 
@@ -233,6 +236,23 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
       captureError(e, { stage: "signals", projectId });
     }
 
+    // ── Stage 4: Daily summary (PRD §13.6 / §16.2) ────────────────────────
+    // Upsert on (project_id, summary_date) so manual refresh later today
+    // updates the row in place. The unique constraint enforces this.
+    let summaryStatus: "created" | "updated" | "skipped" | "error" = "skipped";
+    let summaryDate: string | null = null;
+    try {
+      const result = await generateDailySummaryForProject(projectId);
+      summaryStatus = result.status;
+      summaryDate = result.summaryDate;
+      if (result.modelUsed && !modelUsed) modelUsed = result.modelUsed;
+      if (result.errors.length) errors.push(...result.errors.map((e) => `summary: ${e}`));
+    } catch (e) {
+      summaryStatus = "error";
+      errors.push(`summary: ${e instanceof Error ? e.message : "failed"}`);
+      captureError(e, { stage: "summary", projectId });
+    }
+
     await withTx(async (client) => {
       await client.query(
         `UPDATE projects SET last_scraped_at = now() WHERE id = $1`,
@@ -248,6 +268,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
       jobId, status: "completed",
       sourcesNew, sourcesRefreshed, serpCallsUsed, scrapeCallsUsed,
       signalsInserted, signalsRejected, modelUsed,
+      summaryStatus, summaryDate,
       errors,
     };
   } catch (e) {
@@ -264,6 +285,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
       jobId, status: "failed",
       sourcesNew, sourcesRefreshed, serpCallsUsed, scrapeCallsUsed,
       signalsInserted: 0, signalsRejected: 0, modelUsed: null,
+      summaryStatus: "error", summaryDate: null,
       errors: [...errors, msg],
     };
   }
