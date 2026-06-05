@@ -5,6 +5,7 @@ import { getProject } from "@/lib/project-data";
 import { Icon } from "@/components/icons/Icon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { fmtAgo } from "@/lib/format";
+import { colorFor, initialsOf } from "@/lib/avatar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,18 +22,6 @@ interface SourceRow {
   content_snippet: string | null;
 }
 
-function colorFor(domain: string): string {
-  let h = 0;
-  for (let i = 0; i < domain.length; i++) h = (h * 31 + domain.charCodeAt(i)) | 0;
-  const palette = ["#2D5BE3", "#168F6B", "#FF6600", "#FF4500", "#E1523D", "#0A66C2", "#146AFF", "#7C3AED", "#DA552F", "#0CAA41"];
-  return palette[Math.abs(h) % palette.length];
-}
-function initialsOf(s: string): string {
-  if (!s) return "?";
-  const parts = s.replace(/\.[a-z]+$/, "").split(/[\s.-]/).filter(Boolean);
-  return (parts.slice(0, 2).map((p) => p[0]).join("") || s[0]).toUpperCase();
-}
-
 export default async function SourcesPage({ params }: Ctx) {
   const { projectId } = await params;
   const user = await getOrCreateUser();
@@ -42,10 +31,12 @@ export default async function SourcesPage({ params }: Ctx) {
   const project = await getProject(projectId, user.id);
   if (!project) notFound();
 
+  // 200 most recent sources is plenty for the MVP — typically ~30 with a
+  // small watchlist, well under the per-project/day safety rail (50/day).
   const sources = (await sql`
     SELECT id, title, url, domain, source_type, scraped_at, content_snippet
     FROM sources WHERE project_id = ${projectId}
-    ORDER BY scraped_at DESC LIMIT 500
+    ORDER BY scraped_at DESC LIMIT 200
   `) as SourceRow[];
 
   if (sources.length === 0) {

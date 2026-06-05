@@ -201,6 +201,7 @@ p{ margin:0; }
 /* selection + scrollbar polish */
 ::selection{ background:var(--accent-bg-2); }
 
-/* shared animation utilities used across pages */
+/* shared animation utilities used across pages (loading skeletons, refresh icon) */
 .spin{ animation:spin .9s linear infinite; transform-origin:center; }
 @keyframes spin{ to{ transform:rotate(360deg); } }
+@keyframes shimmer{ from{ background-position:200% 0; } to{ background-position:-200% 0; } }

@@ -4,6 +4,7 @@ import { getOrCreateUser } from "@/lib/clerk-user";
 import { getProject, getCompetitors } from "@/lib/project-data";
 import { todayUtcDate } from "@/lib/daily-summary";
 import { fmtAgo, hoursAgo } from "@/lib/format";
+import { colorFor, initialsOf } from "@/lib/avatar";
 import { EMPTY_SUMMARY_MESSAGE } from "@/components/ui/EmptyState";
 import ProjectDashboard from "@/components/dashboard/ProjectDashboard";
 import type { SignalItem, SourceItem } from "@/lib/types";
@@ -13,12 +14,8 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ projectId: string }> };
 
-interface ProjectRow {
-  id: string;
-  name: string;
-  company_name: string | null;
-}
-interface SignalRow {
+// A single row from the bundled signals-with-sources query.
+interface BundledSignalRow {
   id: string;
   title: string;
   category: string;
@@ -28,130 +25,30 @@ interface SignalRow {
   suggested_action: string | null;
   is_saved: boolean;
   created_at: string;
+  // jsonb_agg yields an array of objects (or [null] when empty before filter).
+  sources: Array<{ title: string; url: string; domain: string; scraped_at: string }> | null;
 }
 
-// Map a domain to a tasteful brand color for the favicon chip. Stable hash
-// over the domain so the same publication always looks the same.
-function colorFor(domain: string): string {
-  let h = 0;
-  for (let i = 0; i < domain.length; i++) h = (h * 31 + domain.charCodeAt(i)) | 0;
-  const palette = ["#2D5BE3", "#168F6B", "#FF6600", "#FF4500", "#E1523D", "#0A66C2", "#146AFF", "#7C3AED", "#DA552F", "#0CAA41"];
-  return palette[Math.abs(h) % palette.length];
+// A bundled daily-summary + cited sources row.
+interface BundledSummaryRow {
+  id: string;
+  summary_date: string;
+  summary_text: string;
+  updated_at: string;
+  sources: Array<{ title: string; url: string; domain: string; scraped_at: string }> | null;
 }
-function initialsOf(s: string): string {
-  if (!s) return "?";
-  const parts = s.replace(/\.[a-z]+$/, "").split(/[\s.-]/).filter(Boolean);
-  return (parts.slice(0, 2).map((p) => p[0]).join("") || s[0]).toUpperCase();
-}
+
 function dbCategoryToUi(c: string): SignalItem["category"] {
   if (c === "Competitor Move" || c === "Pricing / Offer Change" || c === "Service Demand Signal") return "competitor";
   if (c === "Market Opportunity") return "opportunity";
   if (c === "Threat / Risk" || c === "Regulation / Policy") return "threat";
-  return "signal"; // Customer Pain Point + Trend Signal → "market"
+  return "signal";
 }
 function importanceToSeverity(i: "Low" | "Medium" | "High"): SignalItem["severity"] {
   return i === "High" ? "high" : i === "Medium" ? "med" : "low";
 }
-
-export default async function ProjectDashboardPage({ params }: Ctx) {
-  const { projectId } = await params;
-  const user = await getOrCreateUser();
-  const sql = requireSql();
-
-  // Project ownership check (cached — also fetched by layout, single round trip)
-  const project = await getProject(projectId, user.id);
-  if (!project) {
-    const anyRows = await sql`SELECT id FROM projects WHERE user_id = ${user.id} LIMIT 1`;
-    if (!anyRows[0]) redirect("/onboarding");
-    notFound();
-  }
-
-  // Parallel page-specific reads. Competitors come from the cached helper, so
-  // layout + page share one query.
-  const [signalRowsRaw, summaryRowsRaw, recentRowsRaw, competitorsCached] = await Promise.all([
-    sql`SELECT id, title, category, description, importance, confidence_score, suggested_action, is_saved, created_at
-        FROM signals WHERE project_id = ${projectId} AND dismissed_at IS NULL
-        ORDER BY created_at DESC LIMIT 60`,
-    sql`SELECT id, summary_date::text AS summary_date, summary_text, updated_at
-        FROM daily_summaries WHERE project_id = ${projectId} AND summary_date = ${todayUtcDate()} LIMIT 1`,
-    sql`SELECT title, url, domain, scraped_at
-        FROM sources WHERE project_id = ${projectId} ORDER BY scraped_at DESC LIMIT 8`,
-    getCompetitors(projectId),
-  ]);
-  const signalRows = signalRowsRaw as unknown as SignalRow[];
-  const summaryRows = summaryRowsRaw as unknown as { id: string; summary_date: string; summary_text: string; updated_at: string }[];
-  const recentRows = recentRowsRaw as unknown as { title: string; url: string; domain: string; scraped_at: string }[];
-  const competitors = competitorsCached;
-
-  // Fetch tags per signal — we surface a single category-derived tag for now.
-  // (Phase 8 could derive tags from competitor matches in the signal text.)
-  const signals: SignalItem[] = signalRows.map((r) => {
-    const cat = dbCategoryToUi(r.category);
-    // Pull cited source titles to use as the visual source stack.
-    return {
-      id: r.id,
-      title: r.title,
-      context: r.description,
-      category: cat,
-      severity: importanceToSeverity(r.importance),
-      isNew: hoursAgo(r.created_at) <= 24,
-      saved: r.is_saved,
-      hoursAgo: hoursAgo(r.created_at),
-      tags: [r.category],
-      sources: [],
-    };
-  });
-
-  // Hydrate signal_sources for each signal in one round trip.
-  const signalIds = signals.map((s) => s.id);
-  if (signalIds.length > 0) {
-    const sigSrcRows = (await sql`
-      SELECT ss.signal_id, s.title, s.url, s.domain, s.scraped_at, s.content_snippet
-      FROM signal_sources ss
-      JOIN sources s ON s.id = ss.source_id
-      WHERE ss.signal_id = ANY(${signalIds}::uuid[])
-      ORDER BY s.scraped_at DESC
-    `) as { signal_id: string; title: string; url: string; domain: string; scraped_at: string; content_snippet: string | null }[];
-    const bySig = new Map<string, SourceItem[]>();
-    for (const r of sigSrcRows) {
-      const list = bySig.get(r.signal_id) || [];
-      list.push({
-        name: r.domain,
-        kind: "Source",
-        color: colorFor(r.domain),
-        initials: initialsOf(r.domain),
-        headline: r.title,
-        time: fmtAgo(r.scraped_at),
-        url: r.url,
-      });
-      bySig.set(r.signal_id, list);
-    }
-    for (const sig of signals) sig.sources = bySig.get(sig.id) || [];
-  }
-
-  // Summary block (with cited sources for the View Sources buttons)
-  const sumRow = summaryRows[0];
-  let summarySources: SourceItem[] = [];
-  if (sumRow) {
-    const cited = (await sql`
-      SELECT s.title, s.url, s.domain, s.scraped_at, s.content_snippet
-      FROM daily_summary_sources dss
-      JOIN sources s ON s.id = dss.source_id
-      WHERE dss.daily_summary_id = ${sumRow.id}
-      ORDER BY s.scraped_at DESC
-    `) as { title: string; url: string; domain: string; scraped_at: string; content_snippet: string | null }[];
-    summarySources = cited.map((s) => ({
-      name: s.domain,
-      kind: "Source",
-      color: colorFor(s.domain),
-      initials: initialsOf(s.domain),
-      headline: s.title,
-      time: fmtAgo(s.scraped_at),
-      url: s.url,
-    }));
-  }
-
-  const recentSources: SourceItem[] = recentRows.map((s) => ({
+function toSourceItem(s: { title: string; url: string; domain: string; scraped_at: string }): SourceItem {
+  return {
     name: s.domain,
     kind: "Source",
     color: colorFor(s.domain),
@@ -159,21 +56,115 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
     headline: s.title,
     time: fmtAgo(s.scraped_at),
     url: s.url,
+  };
+}
+
+export default async function ProjectDashboardPage({ params }: Ctx) {
+  const { projectId } = await params;
+  const user = await getOrCreateUser();
+  const sql = requireSql();
+
+  // Project ownership check (cached — also fetched by layout, single round trip).
+  const project = await getProject(projectId, user.id);
+  if (!project) {
+    const anyRows = await sql`SELECT id FROM projects WHERE user_id = ${user.id} LIMIT 1`;
+    if (!anyRows[0]) redirect("/onboarding");
+    notFound();
+  }
+
+  // Three parallel queries, each self-contained:
+  //   1. signals WITH their cited sources (jsonb_agg, no second round-trip)
+  //   2. today's daily summary WITH its cited sources (same trick)
+  //   3. recent sources for the right rail
+  // getCompetitors() comes from the React cache() helper so it dedupes with
+  // the layout's call.
+  const today = todayUtcDate();
+  const [signalRowsRaw, summaryRowsRaw, recentRowsRaw, competitorsCached] = await Promise.all([
+    sql`
+      SELECT
+        s.id, s.title, s.category, s.description, s.importance, s.confidence_score,
+        s.suggested_action, s.is_saved, s.created_at,
+        COALESCE(
+          jsonb_agg(jsonb_build_object(
+            'title',      src.title,
+            'url',        src.url,
+            'domain',     src.domain,
+            'scraped_at', src.scraped_at
+          ) ORDER BY src.scraped_at DESC) FILTER (WHERE src.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS sources
+      FROM signals s
+      LEFT JOIN signal_sources ss ON ss.signal_id = s.id
+      LEFT JOIN sources src       ON src.id = ss.source_id
+      WHERE s.project_id = ${projectId} AND s.dismissed_at IS NULL
+      GROUP BY s.id
+      ORDER BY s.created_at DESC
+      LIMIT 60
+    `,
+    sql`
+      SELECT
+        ds.id,
+        ds.summary_date::text AS summary_date,
+        ds.summary_text,
+        ds.updated_at,
+        COALESCE(
+          jsonb_agg(jsonb_build_object(
+            'title',      src.title,
+            'url',        src.url,
+            'domain',     src.domain,
+            'scraped_at', src.scraped_at
+          ) ORDER BY src.scraped_at DESC) FILTER (WHERE src.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS sources
+      FROM daily_summaries ds
+      LEFT JOIN daily_summary_sources dss ON dss.daily_summary_id = ds.id
+      LEFT JOIN sources src               ON src.id = dss.source_id
+      WHERE ds.project_id = ${projectId} AND ds.summary_date = ${today}
+      GROUP BY ds.id
+      LIMIT 1
+    `,
+    sql`
+      SELECT title, url, domain, scraped_at
+      FROM sources WHERE project_id = ${projectId}
+      ORDER BY scraped_at DESC LIMIT 8
+    `,
+    getCompetitors(projectId),
+  ]);
+
+  const signalRows = signalRowsRaw as unknown as BundledSignalRow[];
+  const summaryRows = summaryRowsRaw as unknown as BundledSummaryRow[];
+  const recentRows = recentRowsRaw as unknown as Array<{ title: string; url: string; domain: string; scraped_at: string }>;
+
+  const signals: SignalItem[] = signalRows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    context: r.description,
+    category: dbCategoryToUi(r.category),
+    severity: importanceToSeverity(r.importance),
+    isNew: hoursAgo(r.created_at) <= 24,
+    saved: r.is_saved,
+    hoursAgo: hoursAgo(r.created_at),
+    tags: [r.category],
+    sources: (r.sources ?? []).map(toSourceItem),
   }));
+
+  const sumRow = summaryRows[0];
+  const summarySources: SourceItem[] = (sumRow?.sources ?? []).map(toSourceItem);
+  const recentSources: SourceItem[] = recentRows.map(toSourceItem);
 
   return (
     <ProjectDashboard
       project={project}
       signals={signals}
       summary={{
-        summary_date: sumRow?.summary_date ?? todayUtcDate(),
+        summary_date: sumRow?.summary_date ?? today,
         summary_text: sumRow?.summary_text ?? null,
         generated_at: sumRow?.updated_at ?? null,
         empty_message: EMPTY_SUMMARY_MESSAGE,
         sources: summarySources,
       }}
       recentSources={recentSources}
-      competitorNames={competitors.map((c) => c.name)}
+      competitorNames={competitorsCached.map((c) => c.name)}
     />
   );
 }
