@@ -8,13 +8,19 @@ export const runtime = "nodejs";
 type Ctx = { params: Promise<{ id: string }> };
 
 /**
- * GET /api/projects/:id/daily-summary
+ * GET /api/projects/:id/daily-summary[?date=YYYY-MM-DD]
  *
- * Returns today's summary (UTC date) for one project + the sources cited.
- * When no row exists for today, returns an empty payload so the dashboard
- * can render the PRD §13.6 empty state without a 404 round trip.
+ * Without `date`, returns today's (UTC) summary. With `date`, returns the
+ * summary for that specific day — used by the archive calendar to browse
+ * past briefs.
+ *
+ * Returns the PRD §13.6 empty-state payload (summary:null + empty_message)
+ * when no row exists, so the dashboard can render without a 404 round trip.
  */
-export async function GET(_req: Request, { params }: Ctx) {
+export async function GET(req: Request, { params }: Ctx) {
+  const url = new URL(req.url);
+  const dateParam = url.searchParams.get("date");
+  void dateParam; // referenced below via local `summaryDate`
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id: projectId } = await params;
@@ -22,7 +28,8 @@ export async function GET(_req: Request, { params }: Ctx) {
   if (!proj) return notFound();
 
   const sql = requireSql();
-  const summaryDate = todayUtcDate();
+  // Reject garbage date params — must look like YYYY-MM-DD.
+  const summaryDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayUtcDate();
 
   const rows = (await sql`
     SELECT id, project_id, summary_date, summary_text, created_at, updated_at

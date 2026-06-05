@@ -48,6 +48,7 @@ const VIEW_TITLES: Record<string, { title: string; sub: string }> = {
   saved: { title: "Saved", sub: "Signals you bookmarked to track over time" },
   sources: { title: "Sources", sub: "Every source behind your signals — click any to verify" },
   settings: { title: "Settings", sub: "Project, watchlist and plan usage" },
+  archive: { title: "Archive", sub: "Past daily briefs" },
 };
 
 export default function DashChrome(props: {
@@ -92,6 +93,7 @@ function DashChromeInner({
   const realRoute =
     pathname?.endsWith("/sources") ? "sources" :
     pathname?.endsWith("/settings") ? "settings" :
+    pathname?.includes("/archive") ? "archive" :
     null;
   const isDashboardIndex = !realRoute; // true on /dashboard/[id]
   const activeView: string = realRoute ?? view;
@@ -217,6 +219,14 @@ function DashChromeInner({
             >
               <Icon name="News01Icon" size={19} stroke={activeView === "sources" ? 1.9 : 1.6} />
               <span>Sources</span>
+            </Link>
+            <Link
+              href={`/dashboard/${project.id}/archive`}
+              prefetch
+              className={"side-item " + (activeView === "archive" ? "on" : "")}
+            >
+              <Icon name="LinkSquare02Icon" size={19} stroke={activeView === "archive" ? 1.9 : 1.6} />
+              <span>Archive</span>
             </Link>
           </nav>
         </div>
