@@ -63,23 +63,25 @@ Track competitor campaigns, product trends, customer complaints, market opportun
 
 1. User authentication
 2. Project creation
-3. Competitor tracking (URL scraping)
-4. Keyword tracking (two-stage: search discovery + scraping)
-5. Public web scraping using ScraperAPI (standard endpoint)
-6. Keyword discovery using ScraperAPI Google Search Structured Data Endpoint (SERP)
-7. Source storage with deduplication
-8. Clickable source links
-9. AI signal extraction using OpenRouter
-10. Daily short AI summary
-11. Simple dashboard
-12. Manual refresh
-13. Daily scheduled scraping (dispatcher + per-project fan-out)
-14. Transactional emails (welcome, trial, usage notices) via Resend
-15. Frontend implementation using the provided custom design system and component zip file
+3. Optional company profile, captured by company website with auto-enrichment (basic info + social account discovery)
+4. Competitor tracking added by website URL, with auto-enrichment (basic info + social account discovery)
+5. Editing and removing competitors and keywords after onboarding
+6. Keyword tracking (two-stage: search discovery + scraping)
+7. Public web scraping using ScraperAPI (standard endpoint)
+8. Keyword discovery using ScraperAPI Google Search Structured Data Endpoint (SERP)
+9. Source storage with deduplication
+10. Clickable source links
+11. AI signal extraction using OpenRouter
+12. Daily short AI summary
+13. Simple dashboard
+14. Manual refresh
+15. Daily scheduled scraping (dispatcher + per-project fan-out)
+16. Transactional emails (welcome, trial, usage notices) via Resend
+17. Frontend implementation using the provided custom design system and component zip file
 
 ### Not Included in MVP
 
-Payments/billing, team accounts, advanced roles/permissions, full social media scraping, advanced forecasting, inventory planning, CRM integrations, Slack integration, email digest/reports, PDF reports, white-label reports, complex analytics, advanced charts, browser extension, mobile app, multi-language support, real-time alerts, shadcn/ui.
+Payments/billing, team accounts, advanced roles/permissions, full social media scraping (scraping the posts/content of social accounts; note that detecting and storing social account links plus basic site metadata during onboarding enrichment **is** in scope — see section 13.11), advanced forecasting, inventory planning, CRM integrations, Slack integration, email digest/reports, PDF reports, white-label reports, complex analytics, advanced charts, browser extension, mobile app, multi-language support, real-time alerts, shadcn/ui.
 
 Note on pricing: the plan structure is defined in section 21 so the product is built with the right limits and metering. Stripe/billing wiring itself is post-MVP; during beta, apply Starter-equivalent limits to all accounts.
 
@@ -230,13 +232,19 @@ Four main parts: Onboarding, Dashboard, Sources, Project Settings.
 
 ### 12.1 Sign Up
 
-User signs up with Clerk. Captured: name, email. Company name is captured at the project level (section 12.2), not here. A welcome email is sent via Resend (section 10.11).
+User signs up with Clerk. Captured: name, email. The company profile (name and, optionally, website + social accounts) is captured during onboarding at the project level (section 12.2), not here. A welcome email is sent via Resend (section 10.11).
 
-### 12.2 Create Project
+### 12.2 Create Project and Company Profile
 
-After signing up, the user creates a project.
+After signing up, the user creates a project. The flow is website-first: the user provides a website and Issuefy auto-discovers the rest (section 13.11), which the user then confirms or edits.
 
-Required fields: project name, company name, industry, business type, target market or region.
+**Step A — Your company (optional).** The user enters their **company website** only. They can also press "Skip — track competitors and keywords only." The company profile is optional; skipping it is fully supported.
+
+**Step B — Confirm your company.** If a website was entered, Issuefy auto-enriches it (section 13.11) and shows the discovered company name, short description/basic info, logo, and **social media accounts**. Every field is editable, and the user can add, change, or remove any social link before continuing. On this same step the user confirms the remaining project details — project name, industry, business type, target market/region — some of which may be pre-filled from enrichment. If Step A was skipped, Step B is a plain business-details form (project name, optional company name, industry, business type, target market).
+
+Tracking the company lets Issuefy assess opportunities and risks relative to the user's own business (sections 13.11, 16). When skipped, Issuefy runs on competitors and keywords only.
+
+Required fields (always): project name, industry, business type, target market or region. Company website and company social accounts are optional.
 
 Business type options: Logistics / Transportation, B2B Services, Agency, SaaS, Consumer Brand, E-commerce, Other.
 
@@ -244,15 +252,21 @@ On submit, the server performs the lazy user upsert (section 10.4) before insert
 
 ### 12.3 Add Competitors
 
-User adds competitor websites. Minimum 1, maximum per plan (section 21).
+The user adds each competitor by entering **only the competitor's website URL**. Minimum 1, maximum per plan (section 21).
 
-Fields: competitor name, website URL, optional notes.
+**Step A — Enter competitor website.** The user types the competitor's website.
+
+**Step B — Confirm competitor.** On the next screen Issuefy shows what it auto-discovered about that competitor (section 13.11): name, short description/basic info, logo, and **social media accounts**. The user can modify any of this — edit the name, fix the description, and add/change/remove social links — before saving. The user then adds another competitor (repeat) or continues.
+
+Manual fallback: the user can edit any field by hand, and if enrichment finds nothing they get an editable empty form so onboarding is never blocked.
 
 ### 12.4 Add Keywords
 
 User adds keywords to monitor. Minimum 3, maximum per plan (section 21).
 
 Example logistics keywords: road freight Europe, customs clearance UAE, Türkiye Romania logistics, warehousing solutions, cold chain logistics, groupage transport, freight delays, logistics regulation.
+
+Competitors, keywords, and the company profile can all be changed, edited, or deleted later from project settings (sections 13.1, 17.5).
 
 ### 12.5 View Dashboard
 
@@ -266,16 +280,20 @@ The user can click source links from the Daily AI Summary, signal cards, and the
 
 ### 13.1 Project Setup
 
-Users can create and manage a project: create, edit details, delete, add/remove competitors, add/remove keywords.
+Users can create and manage a project: create, edit details, delete, capture an optional company profile, and add, edit, and remove competitors and keywords.
 
 Acceptance criteria:
 
 * A logged-in user can create a project (lazy user upsert runs first).
 * A project can be created in under 2 minutes.
-* A project must have at least one competitor or at least three keywords before monitoring starts.
-* User can see competitors and keywords in project settings.
+* A project must have at least one competitor or at least three keywords before monitoring starts. The company profile is optional and does not count toward this requirement.
+* A competitor can be added by entering only its website URL, with auto-discovered details shown for confirmation (section 13.11).
+* The company profile can be skipped; the product works with competitors and keywords only.
+* User can see, edit, and remove competitors and keywords in project settings, and edit or remove the company profile.
 
 ### 13.2 Competitor Tracking
+
+Competitors are added by website URL. On add, Issuefy enriches the entry with basic info and social account links (section 13.11), which the user confirms or edits before it is saved.
 
 Issuefy scrapes competitor websites daily via the ScraperAPI standard endpoint. For each competitor URL: fetch the page, extract title, meta description (if available), headings, and main page text; store the source URL, scrape timestamp, content snippet, and cleaned text in Neon; optionally archive raw HTML to R2.
 
@@ -312,7 +330,7 @@ Every AI signal and daily summary must connect to original sources.
 
 Source fields: id, project_id, competitor_id, keyword_id, title, url, domain, source_type, scraped_at, content_snippet, cleaned_text, r2_raw_html_key, created_at.
 
-Source types: Competitor Website, News, Article, Review, Public Discussion, Industry Page, Other.
+Source types: Competitor Website, Company Website (optional, used only if the user opts to monitor their own site, section 13.11), News, Article, Review, Public Discussion, Industry Page, Other.
 
 Deduplication: enforce a unique constraint on `(project_id, url)`. On re-scrape of an existing URL, **update** the existing row (refresh `scraped_at`, snippet, cleaned text) rather than inserting a duplicate. This prevents the table from filling with copies across daily cron + manual refresh.
 
@@ -428,6 +446,39 @@ Acceptance criteria:
 * Scrape and AI failures are logged to `scrape_jobs` and Sentry.
 * Daily summaries are generated for projects with enough data.
 
+### 13.11 Website Auto-Enrichment (Company and Competitors)
+
+Onboarding is website-first: for both the user's company and each competitor, the user enters **only a website URL**, and Issuefy fills in the rest for confirmation. This applies during onboarding (sections 12.2, 12.3) and later in project settings (section 17.5).
+
+**Mechanism.** Given a website URL, Issuefy fetches the homepage with the **same ScraperAPI standard endpoint** already used for scraping (section 10.7), then extracts a lightweight profile from the returned HTML:
+
+* **Name** — from `og:site_name`, the `<title>`, or the domain.
+* **Basic info / description** — from the meta description or `og:description`.
+* **Logo** — from `og:image`, an apple-touch-icon, or the favicon.
+* **Social accounts** — by scanning anchor `href`s and known URL patterns for Instagram, Facebook, X/Twitter, LinkedIn (company), YouTube, TikTok, and similar. Store the discovered handle/URL per platform.
+
+This is **link/handle and basic-metadata discovery only**, not social media content scraping (which stays out of scope, section 7). An optional OpenRouter call may normalize or de-duplicate the extracted fields, but a deterministic DOM/regex parse is sufficient and preferred to keep cost near zero.
+
+**Confirmation and editing.** The discovered profile is always shown to the user for review before it is saved. Every field is editable: the user can correct the name and description and can add, change, or remove any social link. Nothing is saved silently.
+
+**Failure handling.** If the fetch fails or nothing is found, Issuefy presents an **editable empty form** so the user can fill the details in by hand. Enrichment never blocks onboarding, and a competitor/company can be created with manual data only. `enrichment_status` on the competitor records `enriched`, `failed`, or `manual`.
+
+**Cost.** Each enrichment is a single standard-endpoint fetch and counts as **one scrape call** against the account's budget (section 21.3). Cache the result briefly so re-rendering the confirm screen or going back a step does not re-fetch.
+
+**How the company profile is used.** When present, the company profile (name, website, description, social accounts) is added to the AI context (sections 16.1, 16.2) so opportunities and risks are assessed relative to the user's own business. When the company step is skipped (`track_company = false`), the AI runs on competitors and keywords only. Competitor profiles likewise enrich competitor context and give the user verified links to each competitor's site and socials.
+
+**Optional company monitoring.** If the user opts in, the company website can also be added to the daily monitored URL set and scraped like a competitor source (`source_type = Company Website`, with `competitor_id` and `keyword_id` both null). This reuses the existing scraping path and is off by default; the required behavior is feeding the company profile to the AI context, not scraping the company's own pages.
+
+Acceptance criteria:
+
+* A competitor can be created by entering only its website URL.
+* On the next screen the user sees auto-discovered basic info and social accounts for that website, and can edit any of it before saving.
+* The user can optionally enter their company website and see the same auto-discovered profile, editable, before saving.
+* The company step can be skipped, and the product still works with competitors and keywords only.
+* Enrichment reuses the ScraperAPI standard endpoint and counts as one scrape call against the budget.
+* If enrichment finds nothing or fails, the user gets an editable form and onboarding still completes.
+* Discovered and edited company/competitor details persist and are available to edit later in settings.
+
 ## 14. Database Schema
 
 Created via `/migrations/*.sql`. Add the indexes in 14.11.
@@ -437,10 +488,12 @@ id, clerk_user_id (unique), email, name, company_name, plan, created_at, updated
 (`plan` defaults to a beta/Starter value until billing is wired; see section 21.)
 
 ### 14.2 projects
-id, user_id, name, company_name, industry, business_type, target_market, description, last_scraped_at, last_manual_refresh_at, created_at, updated_at.
+id, user_id, name, company_name, company_website (nullable), company_description (nullable), company_logo_url (nullable), company_socials (jsonb, nullable), track_company (boolean, default false), industry, business_type, target_market, description, last_scraped_at, last_manual_refresh_at, created_at, updated_at.
+(The `company_*` fields are populated by website enrichment (section 13.11) and are optional. `track_company` is true when a company profile is in use and false when the user skipped the company step. `company_socials` stores discovered/edited social accounts, e.g. `{"instagram": "...", "linkedin": "...", "x": "..."}`.)
 
 ### 14.3 competitors
-id, project_id, name, website_url, notes, is_active, created_at, updated_at.
+id, project_id, name, website_url, description (nullable), logo_url (nullable), socials (jsonb, nullable), notes, enrichment_status (nullable: enriched, failed, manual), is_active, created_at, updated_at.
+(`name`, `description`, `logo_url`, and `socials` may be auto-filled by website enrichment (section 13.11) and are user-editable. `socials` mirrors the company shape, e.g. `{"instagram": "...", "linkedin": "..."}`.)
 
 ### 14.4 keywords
 id, project_id, keyword, is_active, last_discovered_at, created_at, updated_at.
@@ -488,15 +541,17 @@ All foreign keys to `projects` use `ON DELETE CASCADE` so deleting a project rem
 * `POST /api/projects` — create a project (runs lazy user upsert first; enforces plan project limit).
 * `GET /api/projects` — get user projects.
 * `GET /api/projects/:id` — get project details.
-* `PATCH /api/projects/:id` — update project.
+* `PATCH /api/projects/:id` — update project, including the company profile fields (`company_website`, `company_description`, `company_logo_url`, `company_socials`, `track_company`).
 * `DELETE /api/projects/:id` — delete project (cascades to all project data, section 23).
 
 ### 15.2 Competitors
-* `POST /api/projects/:id/competitors` — add competitor (enforces per-project plan limit).
+* `POST /api/projects/:id/competitors` — add competitor (enforces per-project plan limit). Accepts a minimum body of `{ website_url }`; the confirmed enriched fields (`name`, `description`, `logo_url`, `socials`) may also be sent from the confirm screen (section 13.11).
+* `PATCH /api/competitors/:id` — update competitor (`name`, `website_url`, `notes`, `description`, `logo_url`, `socials`, `is_active`).
 * `DELETE /api/competitors/:id` — remove competitor.
 
 ### 15.3 Keywords
 * `POST /api/projects/:id/keywords` — add keyword (enforces per-project plan limit).
+* `PATCH /api/keywords/:id` — update keyword (`keyword` text, `is_active`).
 * `DELETE /api/keywords/:id` — remove keyword.
 
 ### 15.4 Scraping
@@ -515,11 +570,14 @@ All foreign keys to `projects` use `ON DELETE CASCADE` so deleting a project rem
 ### 15.7 Sources
 * `GET /api/projects/:id/sources` — get project sources (supports filters: source type, competitor, keyword, date).
 
+### 15.8 Enrichment
+* `POST /api/enrich` — body `{ url }`. Fetches the URL via the ScraperAPI standard endpoint and returns a discovered profile as JSON: `{ name, description, logo_url, socials, source_url }`. Used by the onboarding company and competitor confirm screens (sections 12.2, 12.3) and the settings "re-fetch info" action (section 17.5). Validates the URL with Zod, consumes one scrape call from the budget (section 21.3), caches the result briefly, and on failure returns an empty/partial profile so the UI can fall back to manual entry. Ownership is enforced for the authenticated user.
+
 ## 16. AI Prompt Requirements
 
 ### 16.1 Signal Extraction Prompt
 
-Input: project name, company name, industry, business type, target market, competitors, keywords, and one or more sources (each with source_id, title, URL, and truncated cleaned text).
+Input: project name; the company profile when present (company name, website, description, social accounts); industry; business type; target market; the competitor list (names, websites, and social accounts where known); keywords; and one or more sources (each with source_id, title, URL, and truncated cleaned text).
 
 Expected JSON output (strict, no prose, no markdown fences):
 
@@ -539,11 +597,11 @@ Expected JSON output (strict, no prose, no markdown fences):
 }
 ```
 
-Rules: valid JSON only; do not invent information; use only provided source text; keep descriptions short; include `source_id` so each signal maps to a source row; if no useful signal exists, return an empty `signals` array; suggested action should be practical and simple.
+Rules: valid JSON only; do not invent information; use only provided source text; keep descriptions short; include `source_id` so each signal maps to a source row; if no useful signal exists, return an empty `signals` array; suggested action should be practical and simple. When a company profile is provided, assess opportunities and risks relative to that company; when it is absent, base everything on competitors and keywords only.
 
 ### 16.2 Daily Summary Prompt
 
-Input: project context, latest signals, source titles, source snippets, source IDs, source URLs.
+Input: project context (including the company profile when present), latest signals, source titles, source snippets, source IDs, source URLs.
 
 Expected JSON output (strict):
 
@@ -567,7 +625,15 @@ Pricing block: render the plans from section 21 with a Monthly/Annual toggle def
 Must follow the provided landing page design from the zip file.
 
 ### 17.2 Onboarding Page — `/onboarding`
-Steps: Business details, Competitors, Keywords, Finish. Must visually match the provided design system.
+Steps:
+1. **Your company (optional)** — enter the company website, or skip with "Track competitors and keywords only."
+2. **Confirm company** — review and edit the auto-discovered basic info and social accounts; confirm project details (project name, industry, business type, target market). If step 1 was skipped, this is a plain business-details form.
+3. **Add competitors** — enter a competitor website URL.
+4. **Confirm competitor** — review and edit the auto-discovered basic info and social accounts; add another competitor or continue.
+5. **Keywords** — add at least three keywords.
+6. **Finish.**
+
+Steps 2 and 4 are powered by the enrichment endpoint (sections 13.11, 15.8) and are fully editable, with a manual-entry fallback if nothing is found. Must visually match the provided design system.
 
 ### 17.3 Dashboard Page — `/dashboard/:projectId`
 Sections: Daily AI Summary, Latest Signals, Competitor Updates, Opportunities, Threats, Recent Sources. Must follow the provided dashboard interface design from the zip file.
@@ -576,11 +642,11 @@ Sections: Daily AI Summary, Latest Signals, Competitor Updates, Opportunities, T
 Shows all project sources. Filters: source type, competitor, keyword, date. Use provided table, card, filter, button, badge, and navigation styles if available; otherwise create matching components.
 
 ### 17.5 Project Settings Page — `/dashboard/:projectId/settings`
-Edit project details, competitors, keywords. Use provided form, input, button, card, and layout styles. Show current plan usage against limits (section 21).
+Edit project details and the company profile (website, basic info, social accounts; re-fetch from the website via section 15.8; or remove the company to run on competitors and keywords only). Add, edit (including re-fetching info from the website), and remove competitors and keywords. Use provided form, input, button, card, and layout styles. Show current plan usage against limits (section 21).
 
 ## 18. UI Components
 
-Required: ProjectSwitcher, DailySummaryCard, SignalCard, SourceCard, CompetitorList, KeywordList, RefreshButton, EmptyState, LoadingState, ErrorState, PricingTable, UsageMeter.
+Required: ProjectSwitcher, DailySummaryCard, SignalCard, SourceCard, CompetitorList, KeywordList, RefreshButton, EmptyState, LoadingState, ErrorState, PricingTable, UsageMeter, WebsiteEnrichmentForm (URL input plus the editable discovered profile used on onboarding steps 2 and 4), SocialLinksEditor (add/edit/remove social accounts per platform), CompanyProfileCard. CompetitorList and KeywordList must support inline edit and remove (section 17.5).
 
 Rule: use provided components from the zip package first. If a required component does not exist, build a new one matching the existing design system. All icons come from Hugeicons. Do not import shadcn/ui. Do not introduce a separate UI library or a second icon set.
 
@@ -683,7 +749,7 @@ All failures are also recorded in `scrape_jobs` and reported to Sentry.
 
 ## 25. Success Metrics
 
-Track: project created, competitor added, keyword added, daily summary viewed, source clicked, manual refresh used, trial started, trial converted, user returned within 7 days.
+Track: project created, company profile added, competitor added, competitor auto-enriched, keyword added, daily summary viewed, source clicked, manual refresh used, trial started, trial converted, user returned within 7 days.
 
 Targets: 60% of users create a project; 40% click at least one source; 30% return within one week; at least 5 pilot users say the daily summary is useful.
 
@@ -693,13 +759,13 @@ Targets: 60% of users create a project; 40% click at least one source; 30% retur
 Build the Next.js app (App Router). Import and inspect the provided zip; identify reusable design system components; set up Tailwind per the provided design; install and wire Hugeicons; implement the landing page (including the pricing block, section 21), dashboard layout, and onboarding layout using the provided design. Do not start from shadcn/ui.
 
 ### Phase 2: App Foundation
-Clerk auth; Neon connection; `/migrations` folder + migration runner; create the schema (section 14) via migrations; lazy user upsert; welcome email via Resend; project creation; competitor input; keyword input; protected dashboard routes; plan-limit checks on create routes.
+Clerk auth; Neon connection; `/migrations` folder + migration runner; create the schema (section 14, including the company profile fields on `projects` and the enrichment fields on `competitors`) via migrations; lazy user upsert; welcome email via Resend; project creation with the optional company profile; URL-based competitor input; keyword input; `PATCH`/`DELETE` for competitors and keywords (edit and remove); protected dashboard routes; plan-limit checks on create routes.
 
 ### Phase 3: Sources
-ScraperAPI standard endpoint (URL scraping); ScraperAPI Google Search SDE (keyword discovery); the two-stage keyword pipeline with weekly discovery cadence; competitor scraping; content cleaner with the empty-page gate; source upsert with `(project_id, url)` dedup; usage-counter increments; optional R2 raw-HTML archival behind `R2_ENABLED`; show sources in dashboard; clickable links.
+ScraperAPI standard endpoint (URL scraping); ScraperAPI Google Search SDE (keyword discovery); the `/api/enrich` endpoint (section 15.8) reusing the standard endpoint, wired to the onboarding company and competitor confirm screens with editable fields and a manual fallback; the two-stage keyword pipeline with weekly discovery cadence; competitor scraping; content cleaner with the empty-page gate; source upsert with `(project_id, url)` dedup; usage-counter increments; optional R2 raw-HTML archival behind `R2_ENABLED`; show sources in dashboard; clickable links.
 
 ### Phase 4: AI Signals
-Clean scraped content; truncate; send to OpenRouter (primary + fallback model); validate response with Zod; store signals; connect signals to sources via `source_id`; show signal cards.
+Clean scraped content; truncate; include the company profile (when present) in the AI context so opportunities and risks are assessed relative to the user's company; send to OpenRouter (primary + fallback model); validate response with Zod; store signals; connect signals to sources via `source_id`; show signal cards.
 
 ### Phase 5: Daily Summary
 Generate the summary with OpenRouter; upsert on `(project_id, summary_date)`; connect to sources; show DailySummaryCard; add View Sources action.
@@ -753,6 +819,9 @@ The MVP is complete when:
 
 * User can sign up and log in; a user row is lazily created on first project creation; a welcome email is sent via Resend.
 * User can create a project and add competitors and keywords, within plan limits.
+* During onboarding, the user can add a competitor by entering only its website; Issuefy auto-discovers basic info and social accounts, shown for confirmation and fully editable before saving, with a manual fallback if nothing is found.
+* The user can optionally provide their company website; Issuefy auto-discovers the company's basic info and social accounts (editable), stores them on the project, and feeds the profile into the AI context. The company step is skippable, and the product runs on competitors and keywords only when it is skipped.
+* Competitors and keywords can be edited and removed after onboarding from project settings; the company profile can be edited, re-fetched, or removed.
 * The schema is created via migration files.
 * Issuefy discovers keyword sources via the ScraperAPI SERP endpoint (weekly cadence) and scrapes them, plus scrapes competitor URLs daily, via the standard endpoint.
 * Empty/blocked pages are filtered out.
@@ -797,5 +866,6 @@ Pay particular attention to these architecture decisions:
 8. Cleaned text lives in **Neon**; R2 is optional and only for raw HTML.
 9. Enforce **plan limits and per-cycle API-call budgets** (section 21) with the limit-reached behavior, even before billing is wired — this is the cost control. Track usage in `usage_counters`.
 10. Auth emails are handled by **Clerk**; **Resend** sends only product emails (welcome, trial reminder, usage notices).
+11. Onboarding is **website-first**: the company and each competitor are added by **URL only** and auto-enriched (basic info + social links) via the standard ScraperAPI endpoint behind `POST /api/enrich`; the discovered profile is always shown for confirmation and is editable, with a manual fallback. The company profile is **optional** (skippable) and, when present, feeds the AI context. Competitors and keywords are editable and removable after onboarding (sections 13.11, 15.8, 17.2, 17.5).
 
 Keep the MVP simple, stable, and focused on project setup, competitor and keyword tracking, public source discovery and scraping, clickable sources, AI signal extraction, one short daily AI summary, and a clean dashboard.
