@@ -152,6 +152,11 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
   const summarySources: SourceItem[] = (sumRow?.sources ?? []).map(toSourceItem);
   const recentSources: SourceItem[] = recentRows.map(toSourceItem);
 
+  // First-run: project has never been scraped AND no signals yet.
+  // (signals.length is checked too so a paused/all-dismissed project doesn't
+  // re-show the activation card.)
+  const firstRun = !project.last_scraped_at && signals.length === 0;
+
   return (
     <ProjectDashboard
       project={project}
@@ -165,6 +170,7 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
       }}
       recentSources={recentSources}
       competitorNames={competitorsCached.map((c) => c.name)}
+      firstRun={firstRun}
     />
   );
 }

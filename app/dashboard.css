@@ -223,11 +223,130 @@ body{ background:var(--bg); overflow:hidden; }
   .main-grid{ grid-template-columns:1fr; }
   .rail{ position:static; }
 }
+
+/* Hamburger button only shows on mobile; hidden by default. */
+.topbar-burger{
+  display:none; width:38px; height:38px; align-items:center; justify-content:center;
+  border-radius:var(--r-sm); border:1px solid var(--line-2); background:var(--surface);
+  color:var(--ink-2); cursor:pointer; flex:none; padding:0; margin-right:8px;
+  transition:background .14s, border-color .14s;
+}
+.topbar-burger:active{ transform:scale(.96); }
+.topbar-burger:hover{ background:var(--surface-2); border-color:var(--line-strong); color:var(--ink); }
+
+/* Mobile-only search icon (the inline search field is wide on desktop). */
+.topbar-search-mobile{ display:none; }
+
+/* Mobile bottom tab bar — hidden until <760px. */
+.mobile-tabs{
+  display:none;
+  position:fixed; bottom:0; left:0; right:0; z-index:60;
+  background:rgba(255,255,255,.96);
+  -webkit-backdrop-filter:blur(14px) saturate(180%);
+  backdrop-filter:blur(14px) saturate(180%);
+  border-top:1px solid var(--line);
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+  grid-template-columns:repeat(4,1fr);
+}
+.mobile-tab{
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding:6px 0; border:none; background:none; cursor:pointer;
+  color:var(--ink-3); font-family:var(--sans); font-size:11px; font-weight:600;
+  border-radius:10px; transition:color .14s, background .14s;
+}
+.mobile-tab.on{ color:var(--accent); background:var(--accent-bg); }
+.mobile-tab:active{ transform:scale(.97); }
+
+/* Mobile slide-in drawer (right side). */
+.mobile-drawer-overlay{
+  position:fixed; inset:0; z-index:200; background:rgba(21,23,26,.42);
+  -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
+  display:flex; justify-content:flex-end;
+  opacity:0; animation:cmdkFade .16s ease forwards;
+}
+.mobile-drawer{
+  width:min(320px,86vw); height:100%; background:var(--surface);
+  border-left:1px solid var(--line); display:flex; flex-direction:column;
+  transform:translateX(20px); animation:drawerSlide .24s cubic-bezier(.2,.7,.3,1) forwards;
+}
+@keyframes drawerSlide{ to{ transform:none; } }
+.mobile-drawer-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 18px 14px; border-bottom:1px solid var(--line);
+}
+.mobile-drawer-close{
+  width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+  background:none; border:none; cursor:pointer; color:var(--ink-2);
+  border-radius:9px; transition:background .14s;
+}
+.mobile-drawer-close:hover{ background:var(--surface-2); color:var(--ink); }
+.mobile-drawer-body{ flex:1; overflow-y:auto; padding:8px 14px; }
+.mobile-drawer-foot{ padding:14px; border-top:1px solid var(--line); }
+
 @media(max-width:760px){
   .dash{ grid-template-columns:1fr; }
   .sidebar{ display:none; }
   .stats-row{ grid-template-columns:1fr 1fr; }
-  .search{ width:160px; }
+
+  /* Hide the desktop inline search, show the icon-button equivalent.
+     The CommandPalette still opens with ⌘K or the icon button. */
+  .search{ display:none; }
+  .topbar-search-mobile{ display:flex; }
+  .topbar-avatar-desktop{ display:none; }
+
+  /* Show the hamburger + bottom nav. */
+  .topbar-burger{ display:flex; }
+  .mobile-tabs{ display:grid; }
+
+  /* Leave room for the fixed bottom tab bar above the scroll area. */
+  .main-scroll{ padding-bottom:calc(68px + env(safe-area-inset-bottom)); }
+
+  /* Topbar: collapse subtitle, compress padding, smaller h1. */
+  .topbar{ padding:14px 16px; gap:10px; }
+  .topbar-title h1{ font-size:22px; }
+  .topbar-date{ display:none; }
+  .topbar-right{ gap:6px; }
+  .icon-btn.lg{ width:36px; height:36px; }
+
+  /* Brief card — tighter padding so it doesn't dominate the viewport. */
+  .brief-card{ padding:22px 20px 20px; border-radius:var(--r); }
+  .brief-lead{ font-size:18px; margin-top:14px; }
+  .brief-body{ font-size:16px; line-height:1.5; }
+  .brief-toggle{ margin-top:16px; }
+  .move-text{ font-size:14px; }
+
+  /* Signal card — looser tap targets, less wasted padding. */
+  .signal-body{ padding:16px 16px 14px; }
+  .signal-take{ font-size:17px; margin-top:11px; }
+  .signal-context{ font-size:14px; margin-top:8px; }
+  .signal-foot{ flex-direction:column; gap:10px; align-items:flex-start; padding-top:12px; }
+  .signal-foot .verified{ font-size:10px; }
+  .signal-actions .icon-btn{ width:36px; height:36px; }
+
+  /* Filter bar wraps cleanly on narrow widths. */
+  .filterbar{ flex-direction:column; align-items:stretch; gap:10px; }
+  .seg{ width:100%; justify-content:space-between; }
+  .seg-btn{ flex:1; padding:8px 6px; font-size:12.5px; }
+  .filter-selects{ width:100%; flex-wrap:wrap; gap:6px; }
+  .dd-btn{ height:36px; }
+
+  /* Page wrap — settings + sources pages. */
+  .page-wrap{ padding:18px 16px calc(68px + env(safe-area-inset-bottom)); }
+  .sources-summary{ gap:14px; padding:14px 16px; flex-wrap:wrap; }
+
+  /* Sources groups: stack always on mobile. */
+  .source-pubs{ grid-template-columns:1fr; }
+
+  /* Onboarding modal — fit a phone. */
+  .onb{ max-width:100%; margin:0; border-radius:0; min-height:100vh; }
+  .onb-body{ padding:14px 18px 8px; min-height:auto; }
+  .onb-foot{ padding:14px 18px calc(20px + env(safe-area-inset-bottom)); }
+  .onb-step h2{ font-size:23px; }
+  .lookup{ flex-direction:column; gap:10px; }
+  .lookup-btn{ width:100%; justify-content:center; }
+  .co-social{ flex-wrap:wrap; padding:10px 14px; }
+  .co-social-kind{ width:60px; font-size:11.5px; }
+  .co-social-val{ flex-basis:100%; order:3; padding:4px 0; }
 }
 
 /* ============================ MODERN · MINIMAL REFRESH ============================ */

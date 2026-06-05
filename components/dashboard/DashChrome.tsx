@@ -7,6 +7,8 @@ import { Icon } from "@/components/icons/Icon";
 import type { IconName } from "@/components/icons/registry";
 import { ERROR_MESSAGES } from "@/components/ui/ErrorState";
 import { DashboardViewProvider, useDashboardView, type DashboardView } from "./dashboard-view-context";
+import MobileNav from "./MobileNav";
+import MobileDrawer from "./MobileDrawer";
 
 /**
  * Persistent sidebar + topbar + ⌘K command palette.
@@ -73,6 +75,7 @@ function DashChromeInner({
   const pathname = usePathname();
   const { view, setView } = useDashboardView();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshErr, setRefreshErr] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
 
@@ -225,6 +228,13 @@ function DashChromeInner({
 
       <main className="main">
         <header className="topbar">
+          <button
+            className="topbar-burger"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open menu"
+          >
+            <Icon name="Menu01Icon" size={22} stroke={1.7} />
+          </button>
           <div className="topbar-title">
             <h1>{title.title}</h1>
             <span className="topbar-date">
@@ -237,10 +247,17 @@ function DashChromeInner({
               <span style={{ flex: 1, textAlign: "left", color: "var(--ink-4)", fontSize: 14 }}>Search or jump to…</span>
               <span className="kbd">⌘K</span>
             </button>
+            <button
+              className="icon-btn lg topbar-search-mobile"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Search"
+            >
+              <Icon name="Search01Icon" size={18} stroke={1.7} />
+            </button>
             <button className="icon-btn lg" onClick={runRefresh} title="Refresh data" disabled={refreshing}>
               <Icon name="RefreshIcon" size={18} stroke={1.6} className={refreshing ? "spin" : ""} />
             </button>
-            <span className="avatar sm">{user.initials}</span>
+            <span className="avatar sm topbar-avatar-desktop">{user.initials}</span>
           </div>
         </header>
         <div className="main-scroll">
@@ -256,6 +273,19 @@ function DashChromeInner({
           {children}
         </div>
       </main>
+
+      <MobileNav projectId={project.id} />
+
+      <MobileDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        projectId={project.id}
+        projectName={project.name}
+        userName={user.name || user.email}
+        competitors={competitors}
+        keywords={keywords}
+        initials={user.initials}
+      />
 
       <CommandPalette
         open={paletteOpen}

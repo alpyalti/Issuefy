@@ -7,6 +7,7 @@ import { SignalCard } from "@/components/signals/SignalCard";
 import { Favicon } from "@/components/signals/Favicon";
 import { EmptyState, EMPTY_SUMMARY_MESSAGE } from "@/components/ui/EmptyState";
 import { useDashboardView } from "./dashboard-view-context";
+import FirstRunCard from "./FirstRunCard";
 import type { IconName } from "@/components/icons/registry";
 import type { SignalItem, SourceItem } from "@/lib/types";
 
@@ -30,6 +31,9 @@ export interface ProjectDashboardProps {
   };
   recentSources: SourceItem[];
   competitorNames: string[];
+  /** True when the project has never been scraped (last_scraped_at IS NULL),
+   *  used to show the activation card instead of the passive empty state. */
+  firstRun?: boolean;
 }
 
 const TABS = [
@@ -42,7 +46,7 @@ const DATE_RANGES: [string, string][] = [["7d", "7 days"], ["30d", "30 days"], [
 const RANGE_HOURS: Record<string, number> = { "7d": 168, "30d": 720, "90d": 2160 };
 
 export default function ProjectDashboard({
-  project, signals: initialSignals, summary, recentSources, competitorNames,
+  project, signals: initialSignals, summary, recentSources, competitorNames, firstRun,
 }: ProjectDashboardProps) {
   const { view, setView } = useDashboardView();
 
@@ -130,6 +134,12 @@ export default function ProjectDashboard({
   return (
     <div className="main-grid">
       <div className="feed">
+        {/* First-run activation card sits ABOVE the summary card when the
+            project has never been scraped — gives concrete timing + a CTA
+            instead of the passive "awaiting" empty state. */}
+        {view === "today" && firstRun && (
+          <FirstRunCard projectId={project.id} firstCompetitorName={competitorNames[0]} />
+        )}
         {view === "today" && <SummaryCard summary={summary} />}
 
         {view !== "today" && (
