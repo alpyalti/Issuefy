@@ -1,29 +1,13 @@
-import { SignUp } from "@clerk/nextjs";
+import AuthShell from "@/components/auth/AuthShell";
+import SignUpForm from "@/components/auth/SignUpForm";
+import "../../auth.css";
+
+export const metadata = { title: "Create your account — Issuefy" };
 
 export default function SignUpPage() {
   return (
-    <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "32px 24px",
-      background: "var(--bg)",
-    }}>
-      <SignUp
-        appearance={{
-          variables: {
-            colorPrimary: "#2D5BE3",
-            colorText: "#15171A",
-            colorTextSecondary: "#565B62",
-            colorBackground: "#FFFFFF",
-            colorInputBackground: "#FFFFFF",
-            colorInputText: "#15171A",
-            borderRadius: "10px",
-            fontFamily: "var(--sans)",
-          },
-        }}
-      />
-    </div>
+    <AuthShell secondaryText="Already a member? Sign in →" secondaryHref="/sign-in">
+      <SignUpForm />
+    </AuthShell>
   );
 }

@@ -1,0 +1,140 @@
+/* Auth pages — editorial, mobile-first. Loaded only by /sign-in, /sign-up, /sign-in/forgot.
+   Scoped via .auth-shell so rules don't leak. */
+
+.auth-shell{
+  min-height:100vh;
+  display:flex; flex-direction:column;
+  background:
+    radial-gradient(60% 50% at 50% 0%, var(--accent-bg) 0%, transparent 50%),
+    var(--bg);
+  padding:24px 20px 40px;
+}
+
+.auth-top{
+  display:flex; align-items:center; justify-content:space-between;
+  max-width:520px; width:100%; margin:0 auto 32px;
+}
+.auth-top .brand-logo{ height:22px; }
+.auth-top-link{
+  font-size:13.5px; font-weight:500; color:var(--ink-2);
+  text-decoration:none; display:inline-flex; align-items:center; gap:6px;
+  transition:color .14s;
+}
+.auth-top-link:hover{ color:var(--ink); }
+
+.auth-card{
+  max-width:420px; width:100%; margin:0 auto;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--r-lg);
+  padding:32px 28px 28px;
+  box-shadow:var(--shadow);
+  display:flex; flex-direction:column; gap:22px;
+  animation:authRise .4s ease both;
+}
+@keyframes authRise{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+
+.auth-head{ display:flex; flex-direction:column; gap:8px; text-align:left; }
+.auth-head h1{
+  font-family:var(--serif); font-size:30px; font-weight:500;
+  letter-spacing:-0.02em; line-height:1.1; color:var(--ink);
+}
+.auth-head p{ font-size:14.5px; line-height:1.55; color:var(--ink-2); }
+
+.auth-fields{ display:flex; flex-direction:column; gap:12px; }
+.auth-field{ display:flex; flex-direction:column; gap:5px; }
+.auth-label{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ink-3);
+}
+.auth-input{
+  height:46px; padding:0 14px;
+  border:1px solid var(--line-2); border-radius:var(--r-sm);
+  background:var(--surface); color:var(--ink);
+  font-family:var(--sans); font-size:15px;
+  outline:none; transition:border-color .15s, box-shadow .15s;
+}
+.auth-input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg); }
+.auth-input:disabled{ background:var(--surface-2); color:var(--ink-3); cursor:not-allowed; }
+
+.auth-submit{ width:100%; justify-content:center; height:46px; margin-top:4px; }
+.auth-submit[disabled]{ opacity:.7; cursor:wait; }
+
+.auth-error{
+  display:flex; gap:8px; align-items:flex-start;
+  padding:10px 12px; border-radius:var(--r-sm);
+  background:var(--neg-bg); border:1px solid var(--neg-line);
+  color:var(--neg); font-size:13px; line-height:1.45;
+}
+.auth-error .ic-wrap{ flex:none; margin-top:1px; }
+
+.auth-link{
+  display:inline-flex; align-items:center; gap:4px;
+  color:var(--accent-ink); text-decoration:none; font-weight:600;
+  font-size:13px;
+}
+.auth-link:hover{ text-decoration:underline; }
+
+.auth-row{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  font-size:13px;
+}
+.auth-row-secondary{
+  text-align:center; font-size:13.5px; color:var(--ink-2);
+}
+
+.auth-divider{
+  display:flex; align-items:center; gap:12px;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-4);
+  margin:6px 0;
+}
+.auth-divider::before, .auth-divider::after{
+  content:""; flex:1; height:1px; background:var(--line);
+}
+
+.auth-social{ display:flex; flex-direction:column; gap:8px; }
+.auth-social-btn{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  height:44px; padding:0 16px;
+  background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r-sm);
+  font-family:var(--sans); font-size:14.5px; font-weight:600; color:var(--ink);
+  cursor:pointer; transition:.14s;
+}
+.auth-social-btn:hover{ border-color:var(--line-strong); background:var(--surface-2); }
+.auth-social-btn:active{ transform:scale(.99); }
+.auth-social-btn svg{ flex:none; }
+
+.auth-footer{
+  margin-top:16px; text-align:center;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
+  color:var(--ink-4);
+}
+.auth-footer a{ color:var(--ink-3); text-decoration:none; }
+.auth-footer a:hover{ color:var(--ink-2); }
+
+/* Six-digit code input for email verification + password reset. */
+.auth-code-fields{
+  display:grid; grid-template-columns:repeat(6, 1fr); gap:8px;
+  margin:6px 0;
+}
+.auth-code-input{
+  height:54px; text-align:center;
+  border:1px solid var(--line-2); border-radius:var(--r-sm);
+  background:var(--surface); color:var(--ink);
+  font-family:var(--mono); font-size:22px; font-weight:600;
+  outline:none; transition:border-color .15s, box-shadow .15s;
+}
+.auth-code-input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg); }
+
+/* Captcha mount point — Clerk requires an element with this ID in DOM
+   when SMS/CAPTCHA bot protection is enabled in the dashboard. */
+#clerk-captcha{ display:flex; justify-content:center; min-height:0; }
+
+@media(max-width:520px){
+  .auth-shell{ padding:18px 16px 32px; }
+  .auth-card{ padding:26px 22px 22px; border-radius:var(--r); }
+  .auth-head h1{ font-size:26px; }
+  .auth-code-fields{ gap:6px; }
+  .auth-code-input{ height:48px; font-size:20px; }
+}
