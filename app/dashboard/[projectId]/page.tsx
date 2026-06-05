@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
+import { getProject, getCompetitors } from "@/lib/project-data";
 import { todayUtcDate } from "@/lib/daily-summary";
 import { fmtAgo, hoursAgo } from "@/lib/format";
 import { EMPTY_SUMMARY_MESSAGE } from "@/components/ui/EmptyState";
@@ -57,24 +58,17 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
   const user = await getOrCreateUser();
   const sql = requireSql();
 
-  // Project ownership check + basics
-  const projRows = (await sql`
-    SELECT id, name, company_name
-    FROM projects WHERE id = ${projectId} AND user_id = ${user.id} LIMIT 1
-  `) as ProjectRow[];
-  if (!projRows[0]) {
-    // If the user just deleted the project (or never had it), bounce to the
-    // dashboard index, which then handles the 0/1/N cases.
+  // Project ownership check (cached — also fetched by layout, single round trip)
+  const project = await getProject(projectId, user.id);
+  if (!project) {
     const anyRows = await sql`SELECT id FROM projects WHERE user_id = ${user.id} LIMIT 1`;
     if (!anyRows[0]) redirect("/onboarding");
     notFound();
   }
-  const project = projRows[0];
 
-  // Parallel reads: signals, summary + cited sources, recent sources rail,
-  // watchlist (competitors + keywords). Neon's tagged-template returns its
-  // own NeonQueryPromise; we cast the resolved rows rather than the promise.
-  const [signalRowsRaw, summaryRowsRaw, recentRowsRaw, competitorsRaw, keywordsRaw] = await Promise.all([
+  // Parallel page-specific reads. Competitors come from the cached helper, so
+  // layout + page share one query.
+  const [signalRowsRaw, summaryRowsRaw, recentRowsRaw, competitorsCached] = await Promise.all([
     sql`SELECT id, title, category, description, importance, confidence_score, suggested_action, is_saved, created_at
         FROM signals WHERE project_id = ${projectId} AND dismissed_at IS NULL
         ORDER BY created_at DESC LIMIT 60`,
@@ -82,14 +76,12 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
         FROM daily_summaries WHERE project_id = ${projectId} AND summary_date = ${todayUtcDate()} LIMIT 1`,
     sql`SELECT title, url, domain, scraped_at
         FROM sources WHERE project_id = ${projectId} ORDER BY scraped_at DESC LIMIT 8`,
-    sql`SELECT id, name, website_url, is_active FROM competitors WHERE project_id = ${projectId} ORDER BY created_at ASC`,
-    sql`SELECT id, keyword, is_active FROM keywords WHERE project_id = ${projectId} ORDER BY created_at ASC`,
+    getCompetitors(projectId),
   ]);
   const signalRows = signalRowsRaw as unknown as SignalRow[];
   const summaryRows = summaryRowsRaw as unknown as { id: string; summary_date: string; summary_text: string; updated_at: string }[];
   const recentRows = recentRowsRaw as unknown as { title: string; url: string; domain: string; scraped_at: string }[];
-  const competitors = competitorsRaw as unknown as { id: string; name: string; website_url: string; is_active: boolean }[];
-  const keywords = keywordsRaw as unknown as { id: string; keyword: string; is_active: boolean }[];
+  const competitors = competitorsCached;
 
   // Fetch tags per signal — we surface a single category-derived tag for now.
   // (Phase 8 could derive tags from competitor matches in the signal text.)

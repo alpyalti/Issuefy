@@ -2,11 +2,11 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { SignalCard } from "@/components/signals/SignalCard";
 import { Favicon } from "@/components/signals/Favicon";
 import { EmptyState, EMPTY_SUMMARY_MESSAGE } from "@/components/ui/EmptyState";
+import { useDashboardView } from "./dashboard-view-context";
 import type { IconName } from "@/components/icons/registry";
 import type { SignalItem, SourceItem } from "@/lib/types";
 
@@ -44,9 +44,7 @@ const RANGE_HOURS: Record<string, number> = { "7d": 168, "30d": 720, "90d": 2160
 export default function ProjectDashboard({
   project, signals: initialSignals, summary, recentSources, competitorNames,
 }: ProjectDashboardProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const view = (searchParams.get("view") || "today") as ViewKey;
+  const { view, setView } = useDashboardView();
 
   const [signals, setSignals] = useState<SignalItem[]>(initialSignals);
   const [tab, setTab] = useState("all");
@@ -216,7 +214,7 @@ export default function ProjectDashboard({
         {view !== "saved" ? (
           <button
             className="rail-card mini saved-card"
-            onClick={() => router.push(`/dashboard/${project.id}?view=saved`)}
+            onClick={() => setView("saved")}
           >
             <div className="rail-head"><h3>Saved</h3><Icon name="ArrowRight01Icon" size={15} stroke={1.7} /></div>
             <div className="saved-count">
@@ -237,8 +235,6 @@ export default function ProjectDashboard({
     </div>
   );
 }
-
-type ViewKey = "today" | "signals" | "competitor" | "opportunity" | "threat" | "saved";
 
 /* ───────────── Summary card ───────────── */
 

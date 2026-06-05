@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
+import { getProject, getCompetitors, getKeywords } from "@/lib/project-data";
 import { getLimits, currentPeriodStart, HARD_CAPS } from "@/lib/usage";
 import { getUsage } from "@/lib/usage-counters";
 import { UsageMeter } from "@/components/ui/UsageMeter";
@@ -14,25 +14,16 @@ type Ctx = { params: Promise<{ projectId: string }> };
 export default async function SettingsPage({ params }: Ctx) {
   const { projectId } = await params;
   const user = await getOrCreateUser();
-  const sql = requireSql();
 
-  const projectRows = (await sql`
-    SELECT id, name, company_name, company_website, company_description,
-           company_socials, track_company, industry, business_type, target_market
-    FROM projects WHERE id = ${projectId} AND user_id = ${user.id} LIMIT 1
-  `) as {
-    id: string; name: string; company_name: string | null; company_website: string | null;
-    company_description: string | null; company_socials: Record<string, string> | null;
-    track_company: boolean; industry: string; business_type: string; target_market: string;
-  }[];
-  if (!projectRows[0]) notFound();
-  const project = projectRows[0];
-
-  const [competitors, keywords, usage] = await Promise.all([
-    sql`SELECT id, name, website_url, description, is_active FROM competitors WHERE project_id = ${projectId} ORDER BY created_at ASC`,
-    sql`SELECT id, keyword, is_active, last_discovered_at FROM keywords WHERE project_id = ${projectId} ORDER BY created_at ASC`,
+  // All four reads come from cache() — layout + settings page issue each
+  // underlying SQL only once per request.
+  const [project, competitors, keywords, usage] = await Promise.all([
+    getProject(projectId, user.id),
+    getCompetitors(projectId),
+    getKeywords(projectId),
     getUsage(user.id, currentPeriodStart()),
   ]);
+  if (!project) notFound();
 
   const limits = getLimits(user.plan);
   const usageRows = [
@@ -62,8 +53,8 @@ export default async function SettingsPage({ params }: Ctx) {
           business_type: project.business_type,
           target_market: project.target_market,
         }}
-        competitors={competitors as { id: string; name: string; website_url: string; description: string | null; is_active: boolean }[]}
-        keywords={keywords as { id: string; keyword: string; is_active: boolean; last_discovered_at: string | null }[]}
+        competitors={competitors}
+        keywords={keywords}
         competitorCap={competitorCap}
         keywordCap={keywordCap}
       />

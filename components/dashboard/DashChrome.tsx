@@ -6,12 +6,17 @@ import { useRouter, usePathname } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import type { IconName } from "@/components/icons/registry";
 import { ERROR_MESSAGES } from "@/components/ui/ErrorState";
+import { DashboardViewProvider, useDashboardView, type DashboardView } from "./dashboard-view-context";
 
 /**
- * Persistent sidebar + topbar + ⌘K command palette for every project page.
- * URL drives the active nav item; ⌘K opens a quick-jump palette with nav
- * destinations and any signal-search/source-search results that come back
- * from /api/projects/:id/signals?q=…
+ * Persistent sidebar + topbar + ⌘K command palette.
+ *
+ * The within-feed views (Today / Signals / Competitor / Opportunity / Risks /
+ * Saved) are client-only state via DashboardViewContext — clicking them
+ * doesn't change the URL, doesn't trigger a server fetch. Feels instant.
+ *
+ * Real-route nav (Sources, Settings) uses <Link> so Next prefetches on hover
+ * and the transition is as fast as it can be on those pages too.
  */
 
 interface Project { id: string; name: string; }
@@ -19,17 +24,16 @@ interface User { name: string | null; email: string; initials: string; }
 interface Competitor { id: string; name: string; is_active: boolean; }
 interface Keyword { id: string; keyword: string; is_active: boolean; }
 
-const NAV: { id: string; label: string; icon: IconName; href: (pid: string) => string; query?: string }[] = [
-  { id: "today", label: "Today", icon: "DashboardSquare01Icon", href: (id) => `/dashboard/${id}` },
-  { id: "signals", label: "All signals", icon: "FlashIcon", href: (id) => `/dashboard/${id}?view=signals`, query: "signals" },
-  { id: "competitors", label: "Competitors", icon: "Target01Icon", href: (id) => `/dashboard/${id}?view=competitor`, query: "competitor" },
-  { id: "opportunities", label: "Opportunities", icon: "BulbIcon", href: (id) => `/dashboard/${id}?view=opportunity`, query: "opportunity" },
-  { id: "risks", label: "Risks", icon: "Alert02Icon", href: (id) => `/dashboard/${id}?view=threat`, query: "threat" },
-  { id: "saved", label: "Saved", icon: "Bookmark01Icon", href: (id) => `/dashboard/${id}?view=saved`, query: "saved" },
-  { id: "sources", label: "Sources", icon: "News01Icon", href: (id) => `/dashboard/${id}/sources` },
+const FEED_VIEWS: { id: DashboardView; label: string; icon: IconName }[] = [
+  { id: "today", label: "Today", icon: "DashboardSquare01Icon" },
+  { id: "signals", label: "All signals", icon: "FlashIcon" },
+  { id: "competitor", label: "Competitors", icon: "Target01Icon" },
+  { id: "opportunity", label: "Opportunities", icon: "BulbIcon" },
+  { id: "threat", label: "Risks", icon: "Alert02Icon" },
+  { id: "saved", label: "Saved", icon: "Bookmark01Icon" },
 ];
 
-const NAV_TITLES: Record<string, { title: string; sub: string }> = {
+const VIEW_TITLES: Record<string, { title: string; sub: string }> = {
   today: { title: "Today", sub: "Your latest market brief" },
   signals: { title: "All signals", sub: "Everything Issuefy surfaced for your watchlist" },
   competitor: { title: "Competitors", sub: "Moves from the companies you track" },
@@ -40,7 +44,22 @@ const NAV_TITLES: Record<string, { title: string; sub: string }> = {
   settings: { title: "Settings", sub: "Project, watchlist and plan usage" },
 };
 
-export default function DashChrome({
+export default function DashChrome(props: {
+  project: Project;
+  user: User;
+  competitors: Competitor[];
+  keywords: Keyword[];
+  savedCount: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <DashboardViewProvider>
+      <DashChromeInner {...props} />
+    </DashboardViewProvider>
+  );
+}
+
+function DashChromeInner({
   project, user, competitors, keywords, savedCount, children,
 }: {
   project: Project;
@@ -52,19 +71,18 @@ export default function DashChrome({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { view, setView } = useDashboardView();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [refreshErr, setRefreshErr] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
 
-  // Determine active nav from URL.
-  const activeFromUrl = (() => {
-    if (pathname?.endsWith("/sources")) return "sources";
-    if (pathname?.endsWith("/settings")) return "settings";
-    const url = typeof window !== "undefined" ? new URL(window.location.href) : null;
-    const view = url?.searchParams.get("view");
-    if (view) return view;
-    return "today";
-  })();
+  // Real-route active: sources/settings get highlighted by URL.
+  const realRoute =
+    pathname?.endsWith("/sources") ? "sources" :
+    pathname?.endsWith("/settings") ? "settings" :
+    null;
+  const isDashboardIndex = !realRoute; // true on /dashboard/[id]
+  const activeView: string = realRoute ?? view;
 
   // Open ⌘K with Cmd/Ctrl + K.
   useEffect(() => {
@@ -99,12 +117,18 @@ export default function DashChrome({
     });
   }
 
-  function navTo(id: string) {
-    const item = NAV.find((n) => n.id === id || n.query === id);
-    if (item) router.push(item.href(project.id));
+  function switchToView(v: DashboardView) {
+    // If we're not on the dashboard index, hop there first; then context
+    // takes over for instant view-switch.
+    if (!isDashboardIndex) {
+      setView(v);
+      router.push(`/dashboard/${project.id}`);
+    } else {
+      setView(v);
+    }
   }
 
-  const title = NAV_TITLES[activeFromUrl] || NAV_TITLES.today;
+  const title = VIEW_TITLES[activeView] || VIEW_TITLES.today;
 
   return (
     <div className="dash">
@@ -117,24 +141,29 @@ export default function DashChrome({
         <div className="side-section">
           <div className="side-label">Workspace</div>
           <nav className="side-nav">
-            {NAV.map((n) => {
-              const isActive =
-                (n.id === "today" && activeFromUrl === "today") ||
-                (n.id === "signals" && activeFromUrl === "signals") ||
-                (n.id === "competitors" && activeFromUrl === "competitor") ||
-                (n.id === "opportunities" && activeFromUrl === "opportunity") ||
-                (n.id === "risks" && activeFromUrl === "threat") ||
-                (n.id === "saved" && activeFromUrl === "saved") ||
-                (n.id === "sources" && activeFromUrl === "sources");
+            {FEED_VIEWS.map((n) => {
+              const isActive = activeView === n.id;
               const badge = n.id === "saved" ? (savedCount || null) : null;
               return (
-                <button key={n.id} className={"side-item " + (isActive ? "on" : "")} onClick={() => navTo(n.id)}>
+                <button
+                  key={n.id}
+                  className={"side-item " + (isActive ? "on" : "")}
+                  onClick={() => switchToView(n.id)}
+                >
                   <Icon name={n.icon} size={19} stroke={isActive ? 1.9 : 1.6} />
                   <span>{n.label}</span>
                   {badge ? <span className="side-badge">{badge}</span> : null}
                 </button>
               );
             })}
+            <Link
+              href={`/dashboard/${project.id}/sources`}
+              prefetch
+              className={"side-item " + (activeView === "sources" ? "on" : "")}
+            >
+              <Icon name="News01Icon" size={19} stroke={activeView === "sources" ? 1.9 : 1.6} />
+              <span>Sources</span>
+            </Link>
           </nav>
         </div>
 
@@ -155,14 +184,14 @@ export default function DashChrome({
                 <span className="watch-label">{k.keyword}</span>
               </div>
             ))}
-            <Link href={`/dashboard/${project.id}/settings`} className="watch-add">
+            <Link href={`/dashboard/${project.id}/settings`} prefetch className="watch-add">
               <Icon name="PlusSignIcon" size={15} stroke={1.9} /> Manage watchlist
             </Link>
           </div>
         </div>
 
         <div className="side-foot">
-          <Link href={`/dashboard/${project.id}/settings`} className="profile">
+          <Link href={`/dashboard/${project.id}/settings`} prefetch className="profile">
             <span className="avatar">{user.initials}</span>
             <span className="profile-meta">
               <span className="profile-name">{user.name || user.email}</span>
@@ -211,7 +240,7 @@ export default function DashChrome({
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         projectId={project.id}
-        onJump={(id) => { navTo(id); setPaletteOpen(false); }}
+        onJump={(v) => { switchToView(v); setPaletteOpen(false); }}
       />
     </div>
   );
@@ -227,7 +256,7 @@ function CommandPalette({
   open: boolean;
   onClose: () => void;
   projectId: string;
-  onJump: (id: string) => void;
+  onJump: (v: DashboardView) => void;
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -247,8 +276,6 @@ function CommandPalette({
 
   useEffect(() => { setSel(0); }, [q]);
 
-  // Fetch top signals for the project once when the palette opens; filter
-  // client-side as the user types. Avoids a request per keystroke.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -262,41 +289,41 @@ function CommandPalette({
   if (!open) return null;
 
   const ql = q.trim().toLowerCase();
-  const navItems = [
-    { id: "today", label: "Today", icon: "DashboardSquare01Icon" as IconName, sub: "Go to today's brief" },
-    { id: "signals", label: "All signals", icon: "FlashIcon" as IconName, sub: "Browse every signal" },
-    { id: "competitor", label: "Competitors", icon: "Target01Icon" as IconName, sub: "Competitor moves" },
-    { id: "opportunity", label: "Opportunities", icon: "BulbIcon" as IconName, sub: "Openings worth acting on" },
-    { id: "threat", label: "Risks", icon: "Alert02Icon" as IconName, sub: "Threats flagged early" },
-    { id: "saved", label: "Saved", icon: "Bookmark01Icon" as IconName, sub: "Bookmarked signals" },
-    { id: "sources", label: "Sources", icon: "News01Icon" as IconName, sub: "All sources" },
-    { id: "settings", label: "Settings", icon: "Settings01Icon" as IconName, sub: "Watchlist, plan and usage" },
-  ].filter((n) => !ql || n.label.toLowerCase().includes(ql));
+  type NavOpt = { id: DashboardView | "sources" | "settings"; label: string; icon: IconName; sub: string };
+  const ALL_NAV: NavOpt[] = [
+    { id: "today", label: "Today", icon: "DashboardSquare01Icon", sub: "Go to today's brief" },
+    { id: "signals", label: "All signals", icon: "FlashIcon", sub: "Browse every signal" },
+    { id: "competitor", label: "Competitors", icon: "Target01Icon", sub: "Competitor moves" },
+    { id: "opportunity", label: "Opportunities", icon: "BulbIcon", sub: "Openings worth acting on" },
+    { id: "threat", label: "Risks", icon: "Alert02Icon", sub: "Threats flagged early" },
+    { id: "saved", label: "Saved", icon: "Bookmark01Icon", sub: "Bookmarked signals" },
+    { id: "sources", label: "Sources", icon: "News01Icon", sub: "All sources" },
+    { id: "settings", label: "Settings", icon: "Settings01Icon", sub: "Watchlist, plan and usage" },
+  ];
+  const navItems: NavOpt[] = ALL_NAV.filter((n) => !ql || n.label.toLowerCase().includes(ql));
 
   const sigItems = ql
     ? signals.filter((s) => s.title.toLowerCase().includes(ql) || s.category.toLowerCase().includes(ql)).slice(0, 5)
     : [];
 
-  const groups = [];
+  const groups: { label: string; kind: "nav" | "signal"; items: (NavOpt | SignalHit)[] }[] = [];
   if (navItems.length) groups.push({ label: "Navigate", kind: "nav", items: navItems });
   if (sigItems.length) groups.push({ label: "Signals", kind: "signal", items: sigItems });
-  const flat: { type: "nav" | "signal"; data: typeof navItems[number] | SignalHit }[] = [];
-  navItems.forEach((n) => flat.push({ type: "nav", data: n }));
-  sigItems.forEach((s) => flat.push({ type: "signal", data: s }));
+
+  const flat: { kind: "nav" | "signal"; data: NavOpt | SignalHit }[] = [];
+  groups.forEach((g) => g.items.forEach((item) => flat.push({ kind: g.kind, data: item })));
 
   function activate(idx: number) {
     const item = flat[idx];
     if (!item) return;
-    if (item.type === "nav") {
-      const id = (item.data as typeof navItems[number]).id;
-      if (id === "sources") router.push(`/dashboard/${projectId}/sources`);
-      else if (id === "settings") router.push(`/dashboard/${projectId}/settings`);
-      else onJump(id);
+    if (item.kind === "nav") {
+      const opt = item.data as NavOpt;
+      if (opt.id === "sources") router.push(`/dashboard/${projectId}/sources`);
+      else if (opt.id === "settings") router.push(`/dashboard/${projectId}/settings`);
+      else onJump(opt.id);
     } else {
-      // Signal: jump to that signal's view (route by category).
       const s = item.data as SignalHit;
-      const v = mapDbCategoryToView(s.category);
-      onJump(v);
+      onJump(mapDbCategoryToView(s.category));
     }
   }
 
@@ -325,9 +352,9 @@ function CommandPalette({
                 idx++;
                 const cur = idx;
                 const isSig = g.kind === "signal";
-                const title = isSig ? (item as SignalHit).title : (item as typeof navItems[number]).label;
-                const sub = isSig ? (item as SignalHit).category : (item as typeof navItems[number]).sub;
-                const icName = isSig ? "FlashIcon" : (item as typeof navItems[number]).icon;
+                const title = isSig ? (item as SignalHit).title : (item as NavOpt).label;
+                const sub = isSig ? (item as SignalHit).category : (item as NavOpt).sub;
+                const icName = isSig ? ("FlashIcon" as IconName) : (item as NavOpt).icon;
                 return (
                   <div
                     key={(item as { id?: string }).id ?? cur}
@@ -352,7 +379,7 @@ function CommandPalette({
   );
 }
 
-function mapDbCategoryToView(c: string): string {
+function mapDbCategoryToView(c: string): DashboardView {
   if (c === "Competitor Move" || c === "Pricing / Offer Change" || c === "Service Demand Signal") return "competitor";
   if (c === "Market Opportunity") return "opportunity";
   if (c === "Threat / Risk" || c === "Regulation / Policy") return "threat";

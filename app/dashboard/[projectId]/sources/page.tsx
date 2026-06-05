@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
+import { getProject } from "@/lib/project-data";
 import { Icon } from "@/components/icons/Icon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { fmtAgo } from "@/lib/format";
@@ -37,10 +38,9 @@ export default async function SourcesPage({ params }: Ctx) {
   const user = await getOrCreateUser();
   const sql = requireSql();
 
-  const projRows = (await sql`
-    SELECT id, name FROM projects WHERE id = ${projectId} AND user_id = ${user.id} LIMIT 1
-  `) as { id: string; name: string }[];
-  if (!projRows[0]) notFound();
+  // Project ownership comes from the cached helper (layout fetched it already)
+  const project = await getProject(projectId, user.id);
+  if (!project) notFound();
 
   const sources = (await sql`
     SELECT id, title, url, domain, source_type, scraped_at, content_snippet
