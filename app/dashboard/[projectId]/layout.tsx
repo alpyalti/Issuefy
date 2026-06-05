@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { getOrCreateUser } from "@/lib/clerk-user";
-import { getProject, getCompetitors, getKeywords, getSavedCount } from "@/lib/project-data";
+import {
+  getProject, getCompetitors, getKeywords, getSavedCount,
+  getNewSignalCount, getOwnedProjects,
+} from "@/lib/project-data";
 import DashChrome from "@/components/dashboard/DashChrome";
 import "../../dashboard.css";
 
@@ -21,11 +24,13 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const { projectId } = await params;
   const user = await getOrCreateUser();
 
-  const [project, competitors, keywords, savedCount] = await Promise.all([
+  const [project, competitors, keywords, savedCount, newSignalCount, ownedProjects] = await Promise.all([
     getProject(projectId, user.id),
     getCompetitors(projectId),
     getKeywords(projectId),
     getSavedCount(projectId),
+    getNewSignalCount(projectId),
+    getOwnedProjects(user.id),
   ]);
   if (!project) notFound();
 
@@ -39,6 +44,8 @@ export default async function ProjectLayout({ children, params }: { children: Re
       competitors={competitors.map((c) => ({ id: c.id, name: c.name, is_active: c.is_active }))}
       keywords={keywords.map((k) => ({ id: k.id, keyword: k.keyword, is_active: k.is_active }))}
       savedCount={savedCount}
+      newSignalCount={newSignalCount}
+      ownedProjects={ownedProjects}
     >
       {children}
     </DashChrome>

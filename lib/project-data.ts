@@ -50,3 +50,27 @@ export const getSavedCount = cache(async (projectId: string) => {
   `) as Array<{ n: number }>;
   return rows[0]?.n ?? 0;
 });
+
+/** Count of signals created in the last 24h that aren't dismissed.
+ *  Drives the notification bell badge in the topbar. */
+export const getNewSignalCount = cache(async (projectId: string) => {
+  const sql = requireSql();
+  const rows = (await sql`
+    SELECT COUNT(*)::int AS n FROM signals
+    WHERE project_id = ${projectId}
+      AND dismissed_at IS NULL
+      AND created_at > now() - interval '24 hours'
+  `) as Array<{ n: number }>;
+  return rows[0]?.n ?? 0;
+});
+
+/** All projects this user owns — used by the sidebar project switcher. */
+export const getOwnedProjects = cache(async (userId: string) => {
+  const sql = requireSql();
+  const rows = await sql`
+    SELECT id, name, company_name FROM projects
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+  `;
+  return rows as unknown as Array<{ id: string; name: string; company_name: string | null }>;
+});

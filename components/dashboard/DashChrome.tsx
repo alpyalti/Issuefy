@@ -9,6 +9,10 @@ import { ERROR_MESSAGES } from "@/components/ui/ErrorState";
 import { DashboardViewProvider, useDashboardView, type DashboardView } from "./dashboard-view-context";
 import MobileNav from "./MobileNav";
 import MobileDrawer from "./MobileDrawer";
+import ProjectSwitcher from "./ProjectSwitcher";
+import NotificationBell from "./NotificationBell";
+
+interface OwnedProject { id: string; name: string; company_name: string | null; }
 
 /**
  * Persistent sidebar + topbar + ⌘K command palette.
@@ -52,6 +56,8 @@ export default function DashChrome(props: {
   competitors: Competitor[];
   keywords: Keyword[];
   savedCount: number;
+  newSignalCount: number;
+  ownedProjects: OwnedProject[];
   children: React.ReactNode;
 }) {
   return (
@@ -62,13 +68,15 @@ export default function DashChrome(props: {
 }
 
 function DashChromeInner({
-  project, user, competitors, keywords, savedCount, children,
+  project, user, competitors, keywords, savedCount, newSignalCount, ownedProjects, children,
 }: {
   project: Project;
   user: User;
   competitors: Competitor[];
   keywords: Keyword[];
   savedCount: number;
+  newSignalCount: number;
+  ownedProjects: OwnedProject[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -162,6 +170,8 @@ function DashChromeInner({
           <img src="/brand/logo-ink.svg" className="brand-logo" alt="Issuefy" />
         </Link>
 
+        <ProjectSwitcher current={project} projects={ownedProjects} />
+
         <div className="side-section">
           <div className="side-label">Workspace</div>
           <nav className="side-nav">
@@ -254,6 +264,7 @@ function DashChromeInner({
             >
               <Icon name="Search01Icon" size={18} stroke={1.7} />
             </button>
+            <NotificationBell unread={newSignalCount} />
             <button className="icon-btn lg" onClick={runRefresh} title="Refresh data" disabled={refreshing}>
               <Icon name="RefreshIcon" size={18} stroke={1.6} className={refreshing ? "spin" : ""} />
             </button>
