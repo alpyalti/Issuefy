@@ -1,9 +1,14 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import "./landing.css";
 import { Icon } from "@/components/icons/Icon";
-import GradientBlinds from "@/components/landing/GradientBlinds";
-import SignalFlow from "@/components/landing/SignalFlow";
 import LandingChrome from "@/components/landing/LandingChrome";
+
+// Heavy interactive canvases load on demand — saves ~30KB on initial LCP.
+const GradientBlinds = dynamic(() => import("@/components/landing/GradientBlinds"), {
+  loading: () => <div className="hero-canvas" />,
+});
+const SignalFlow = dynamic(() => import("@/components/landing/SignalFlow"));
 
 export default function LandingPage() {
   return (
@@ -426,6 +431,44 @@ export default function LandingPage() {
       </footer>
 
       <LandingChrome />
+
+      {/* JSON-LD for SEO: Organization + SoftwareApplication + Product offers. */}
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            {
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "Issuefy",
+              url: "https://issuefy.app",
+              logo: "https://issuefy.app/brand/logo-ink.svg",
+              sameAs: [],
+              description: "Daily AI market intelligence for businesses that move first.",
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              name: "Issuefy",
+              applicationCategory: "BusinessApplication",
+              operatingSystem: "Web",
+              offers: [
+                { "@type": "Offer", name: "Starter",  price: "29",  priceCurrency: "USD", description: "1 project · 3 competitors · 15 keywords" },
+                { "@type": "Offer", name: "Growth",   price: "79",  priceCurrency: "USD", description: "3 projects · 5 competitors/project · 20 keywords" },
+                { "@type": "Offer", name: "Agency",   price: "199", priceCurrency: "USD", description: "10 projects · 5 competitors/project · 20 keywords" },
+              ],
+              aggregateRating: undefined,
+            },
+          ]),
+        }}
+      />
     </div>
   );
 }
+
+export const metadata = {
+  title: "Daily AI market intelligence",
+  description: "Issuefy reads the open web — competitors, customer signals, emerging risks — and hands you one short, sourced brief every morning. Built for teams that read the room.",
+  alternates: { canonical: "/" },
+};
