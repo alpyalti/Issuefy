@@ -55,6 +55,7 @@ export default async function SettingsPage({ params }: Ctx) {
           industry: project.industry,
           business_type: project.business_type,
           target_market: project.target_market,
+          is_active: project.is_active ?? true,
         }}
         competitors={competitors}
         keywords={keywords}

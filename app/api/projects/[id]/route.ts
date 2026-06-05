@@ -44,6 +44,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
       business_type       = COALESCE(${body.business_type ?? null},       business_type),
       target_market       = COALESCE(${body.target_market ?? null},       target_market),
       description         = COALESCE(${body.description ?? null},         description),
+      is_active           = COALESCE(${body.is_active ?? null},           is_active),
       updated_at          = now()
     WHERE id = ${id} AND user_id = ${user.id}
     RETURNING *

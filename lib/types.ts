@@ -29,6 +29,12 @@ export interface SignalItem {
   context: string;
   tags: string[];
   sources: SourceItem[];
+  /** AI-suggested action surfaced as its own block on the card. */
+  suggestedAction?: string | null;
+  /** True when the user marked the suggested action as done. */
+  actionDone?: boolean;
+  /** User-attached note, plain text. */
+  userNote?: string | null;
 }
 
 export interface StatItem {

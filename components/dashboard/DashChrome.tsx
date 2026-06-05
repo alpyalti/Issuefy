@@ -84,6 +84,7 @@ function DashChromeInner({
   const { view, setView } = useDashboardView();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [refreshErr, setRefreshErr] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
 
@@ -95,17 +96,36 @@ function DashChromeInner({
   const isDashboardIndex = !realRoute; // true on /dashboard/[id]
   const activeView: string = realRoute ?? view;
 
-  // Open ⌘K with Cmd/Ctrl + K.
+  // Keyboard shortcuts. ⌘K opens the palette; r runs a refresh; ? toggles
+  // the shortcuts overlay. Single-letter shortcuts are ignored when focus is
+  // in a text input (so "r" while typing a note doesn't fire a refresh).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+        return;
+      }
+      // Ignore single-letter shortcuts while typing into an input or modal.
+      const tag = (e.target as HTMLElement)?.tagName;
+      const editable = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
+      if (editable || e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
+        e.preventDefault();
+        setShortcutsOpen((o) => !o);
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        runRefresh();
+      } else if (e.key === "Escape") {
+        if (shortcutsOpen) setShortcutsOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // runRefresh is stable per render; including it would re-bind on every state change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shortcutsOpen]);
 
   // When the user is on a real route (sources / settings), warm Next's router
   // cache for the dashboard index. By the time they click a feed-view button,
@@ -304,6 +324,42 @@ function DashChromeInner({
         projectId={project.id}
         onJump={(v) => { switchToView(v); setPaletteOpen(false); }}
       />
+
+      <ShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+    </div>
+  );
+}
+
+/* ───────────── Keyboard shortcuts help overlay ───────────── */
+
+function ShortcutsOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+  const items: Array<{ keys: string[]; label: string }> = [
+    { keys: ["⌘", "K"], label: "Open the command palette" },
+    { keys: ["R"], label: "Refresh data" },
+    { keys: ["?"], label: "Show / hide this overlay" },
+    { keys: ["Esc"], label: "Close any open dialog" },
+  ];
+  return (
+    <div className="cmdk-overlay" onClick={onClose}>
+      <div className="cmdk" style={{ maxHeight: "auto", padding: 18 }} onClick={(e) => e.stopPropagation()}>
+        <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+          <h3 style={{ fontFamily: "var(--serif)", fontSize: 18, fontWeight: 500 }}>Keyboard shortcuts</h3>
+          <span className="esc" style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--ink-3)", border: "1px solid var(--line-2)", borderRadius: 6, padding: "3px 7px" }}>ESC</span>
+        </header>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {items.map((it) => (
+            <div key={it.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderRadius: 10, background: "var(--surface-2)" }}>
+              <span style={{ fontSize: 13.5, color: "var(--ink-2)" }}>{it.label}</span>
+              <span style={{ display: "flex", gap: 4 }}>
+                {it.keys.map((k) => (
+                  <span key={k} className="kbd" style={{ background: "var(--surface)", border: "1px solid var(--line-2)", padding: "3px 8px", fontSize: 11.5, fontWeight: 600 }}>{k}</span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

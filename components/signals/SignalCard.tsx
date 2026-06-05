@@ -7,13 +7,25 @@ import { Icon } from "@/components/icons/Icon";
 import { SourceButton } from "./SourceButton";
 import { SourceStack } from "./SourceStack";
 
-/* Signal card (components.jsx SignalCard). */
+/**
+ * Signal card.
+ *
+ * Now surfaces:
+ *   - the AI's suggested_action as a calm-blue block under the context
+ *     (with a "mark done" toggle that strikes through when complete)
+ *   - a collapsible "Note" expander for the user's private annotation
+ *
+ * Both wire to PATCH /api/signals/:id with optimistic updates handled by
+ * the parent. The card receives note + actionDone via the sig prop.
+ */
 export function SignalCard({
   sig,
   saved,
   leaving,
   onSave,
   onDismiss,
+  onNoteChange,
+  onActionDoneToggle,
   companySet,
 }: {
   sig: SignalItem;
@@ -21,9 +33,13 @@ export function SignalCard({
   leaving: boolean;
   onSave: () => void;
   onDismiss: () => void;
+  onNoteChange?: (next: string) => void;
+  onActionDoneToggle?: (next: boolean) => void;
   companySet: Set<string>;
 }) {
-  const [open, setOpen] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(sig.userNote ?? "");
   const cat = CAT[sig.category];
   const _sev = SEV[sig.severity];
   void _sev;
@@ -31,6 +47,11 @@ export function SignalCard({
   const sortedTags = [...sig.tags].sort(
     (a, b) => (companySet.has(b) ? 1 : 0) - (companySet.has(a) ? 1 : 0),
   );
+
+  function saveNote() {
+    if (onNoteChange) onNoteChange(noteDraft.trim());
+    setNoteOpen(false);
+  }
 
   return (
     <article className={"signal " + (sig.isNew ? "is-new " : "") + (leaving ? "leaving" : "")}>
@@ -50,9 +71,22 @@ export function SignalCard({
               </span>
             )}
             {sig.isNew && <span className="new-dot">New</span>}
+            {sig.userNote && (
+              <span className="signal-note-flag" title="You have a note on this signal">
+                <Icon name="Bookmark01Icon" size={12} stroke={2} />
+              </span>
+            )}
             <span className="signal-age">{fmtAge(sig.hoursAgo)}</span>
           </div>
           <div className="signal-actions">
+            <button
+              className="icon-btn"
+              title="Add note"
+              aria-label={sig.userNote ? "Edit note" : "Add note"}
+              onClick={() => setNoteOpen((o) => !o)}
+            >
+              <Icon name="Idea01Icon" size={16} stroke={sig.userNote ? 2 : 1.6} />
+            </button>
             <button className={"icon-btn " + (saved ? "on" : "")} title={saved ? "Saved" : "Save"} onClick={onSave}>
               <Icon name="Bookmark01Icon" size={17} stroke={saved ? 2 : 1.6} />
             </button>
@@ -65,6 +99,50 @@ export function SignalCard({
         <p className="signal-take">{sig.title}</p>
         <p className="signal-context">{sig.context}</p>
 
+        {sig.suggestedAction && (
+          <div className={"signal-action " + (sig.actionDone ? "is-done" : "")}>
+            <div className="signal-action-head">
+              <Icon name="BulbIcon" size={13} stroke={1.8} color={sig.actionDone ? "var(--ink-4)" : "var(--accent-ink)"} />
+              <span>Suggested action</span>
+              {onActionDoneToggle && (
+                <button
+                  className="signal-action-toggle"
+                  onClick={() => onActionDoneToggle(!sig.actionDone)}
+                  title={sig.actionDone ? "Mark as not done" : "Mark as done"}
+                  aria-pressed={sig.actionDone}
+                >
+                  <Icon name={sig.actionDone ? "CheckmarkBadge01Icon" : "Tick02Icon"} size={14} stroke={1.8} />
+                  {sig.actionDone ? "Done" : "Mark done"}
+                </button>
+              )}
+            </div>
+            <p className="signal-action-text">{sig.suggestedAction}</p>
+          </div>
+        )}
+
+        {noteOpen && (
+          <div className="signal-note-editor">
+            <textarea
+              className="signal-note-input"
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Add a personal note — anything you want to remember about this signal."
+              autoFocus
+              rows={3}
+            />
+            <div className="signal-note-actions">
+              <button className="btn btn-quiet btn-sm" onClick={() => { setNoteDraft(sig.userNote ?? ""); setNoteOpen(false); }}>Cancel</button>
+              <button className="btn btn-accent btn-sm" onClick={saveNote}>Save note</button>
+            </div>
+          </div>
+        )}
+        {!noteOpen && sig.userNote && (
+          <div className="signal-note-display" onClick={() => setNoteOpen(true)} role="button" tabIndex={0}>
+            <Icon name="Bookmark01Icon" size={12} stroke={1.7} color="var(--ink-3)" />
+            <span>{sig.userNote}</span>
+          </div>
+        )}
+
         <div className="signal-meta">
           {sortedTags.map((t, i) => (
             <span className={"tag " + (companySet.has(t) ? "tag-co" : "")} key={i}>{t}</span>
@@ -72,15 +150,15 @@ export function SignalCard({
         </div>
 
         <footer className="signal-foot">
-          <button className="srcbtn" onClick={() => setOpen((o) => !o)}>
+          <button className="srcbtn" onClick={() => setSourcesOpen((o) => !o)}>
             <SourceStack sources={sig.sources} />
             <span className="srcbtn-label">{sig.sources.length} sources</span>
-            <Icon name={open ? "ArrowUp01Icon" : "ArrowDown01Icon"} size={15} stroke={1.8} />
+            <Icon name={sourcesOpen ? "ArrowUp01Icon" : "ArrowDown01Icon"} size={15} stroke={1.8} />
           </button>
           <span className="verified"><Icon name="CheckmarkBadge01Icon" size={15} stroke={1.7} /> Cross-verified</span>
         </footer>
 
-        {open && (
+        {sourcesOpen && (
           <div className="sources-open">
             <div className="sources-open-head">
               <Icon name="LinkSquare02Icon" size={14} stroke={1.7} />

@@ -45,7 +45,11 @@ export const projectCreateSchema = z.object({
   track_company: z.boolean().optional().default(false),
 }).strict();
 
-export const projectUpdateSchema = projectCreateSchema.partial();
+export const projectUpdateSchema = projectCreateSchema.partial().extend({
+  // Pause / resume the project — when false, the worker skips Stage 1–4 for
+  // this project but rows + signals stay intact for browsing.
+  is_active: z.boolean().optional(),
+});
 
 export const competitorCreateSchema = z.object({
   website_url: url,

@@ -99,29 +99,40 @@ export default function ProjectDashboard({
     return true;
   }), [base, effectiveTab]);
 
+  async function patchSignal(id: string, body: Record<string, unknown>): Promise<boolean> {
+    try {
+      const r = await fetch(`/api/signals/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return r.ok;
+    } catch {
+      return false;
+    }
+  }
   async function toggleSave(id: string) {
     const current = signals.find((s) => s.id === id);
     if (!current) return;
     setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, saved: !s.saved } : s)));
-    try {
-      await fetch(`/api/signals/${id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ is_saved: !current.saved }),
-      });
-    } catch {
-      setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, saved: current.saved } : s)));
-    }
+    const ok = await patchSignal(id, { is_saved: !current.saved });
+    if (!ok) setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, saved: current.saved } : s)));
   }
   async function dismiss(id: string) {
     setSignals((prev) => prev.filter((s) => s.id !== id));
-    try {
-      await fetch(`/api/signals/${id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ dismissed: true }),
-      });
-    } catch { /* optimistic */ }
+    await patchSignal(id, { dismissed: true });
+  }
+  async function setNote(id: string, next: string) {
+    const current = signals.find((s) => s.id === id);
+    setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, userNote: next || null } : s)));
+    const ok = await patchSignal(id, { user_note: next });
+    if (!ok && current) setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, userNote: current.userNote } : s)));
+  }
+  async function toggleActionDone(id: string, done: boolean) {
+    const current = signals.find((s) => s.id === id);
+    setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, actionDone: done } : s)));
+    const ok = await patchSignal(id, { action_done: done });
+    if (!ok && current) setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, actionDone: current.actionDone } : s)));
   }
 
   const viewLabel = view === "today" ? "Today"
@@ -185,6 +196,8 @@ export default function ProjectDashboard({
               <SignalCard
                 key={s.id} sig={s} saved={s.saved} leaving={false}
                 onSave={() => toggleSave(s.id)} onDismiss={() => dismiss(s.id)}
+                onNoteChange={(next) => setNote(s.id, next)}
+                onActionDoneToggle={(done) => toggleActionDone(s.id, done)}
                 companySet={companySet}
               />
             ))

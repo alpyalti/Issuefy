@@ -13,12 +13,13 @@ export const getProject = cache(async (projectId: string, userId: string) => {
   const rows = (await sql`
     SELECT id, name, company_name, company_website, company_description,
            company_socials, track_company, industry, business_type, target_market,
-           last_scraped_at, last_manual_refresh_at, created_at
+           is_active, last_scraped_at, last_manual_refresh_at, created_at
     FROM projects WHERE id = ${projectId} AND user_id = ${userId} LIMIT 1
   `) as Array<{
     id: string; name: string; company_name: string | null; company_website: string | null;
     company_description: string | null; company_socials: Record<string, string> | null;
     track_company: boolean; industry: string; business_type: string; target_market: string;
+    is_active: boolean;
     last_scraped_at: string | null; last_manual_refresh_at: string | null; created_at: string;
   }>;
   return rows[0] ?? null;

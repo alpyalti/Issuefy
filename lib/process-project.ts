@@ -75,10 +75,20 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
   let serpCallsUsed = 0;
   let scrapeCallsUsed = 0;
 
-  const projRows = (await sql`SELECT id, user_id, name FROM projects WHERE id = ${projectId} LIMIT 1`) as ProjectRow[];
+  const projRows = (await sql`SELECT id, user_id, name, is_active FROM projects WHERE id = ${projectId} LIMIT 1`) as Array<ProjectRow & { is_active: boolean }>;
   const project = projRows[0];
   if (!project) {
     throw new Error(`processProject: project ${projectId} not found`);
+  }
+  // Paused project — short-circuit before any external API calls.
+  if (!project.is_active) {
+    return {
+      jobId: "skipped-paused", status: "completed",
+      sourcesNew: 0, sourcesRefreshed: 0, serpCallsUsed: 0, scrapeCallsUsed: 0,
+      signalsInserted: 0, signalsRejected: 0, modelUsed: null,
+      summaryStatus: "skipped", summaryDate: null,
+      errors: ["project is paused"],
+    };
   }
 
   const userRows = (await sql`

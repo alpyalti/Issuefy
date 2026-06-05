@@ -16,6 +16,7 @@ interface Project {
   industry: string;
   business_type: string;
   target_market: string;
+  is_active: boolean;
 }
 
 interface Competitor { id: string; name: string; website_url: string; description: string | null; is_active: boolean; }
@@ -142,6 +143,20 @@ export default function SettingsClient({
     router.refresh();
   }
 
+  // ── Pause / resume project ────────────────────────────────────────────
+  const [isActive, setIsActive] = useState(project.is_active);
+  async function togglePause() {
+    const next = !isActive;
+    setIsActive(next);
+    const res = await fetch(`/api/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ is_active: next }),
+    });
+    if (!res.ok) setIsActive(!next);
+    else router.refresh();
+  }
+
   // ── Delete project ────────────────────────────────────────────────────
   async function deleteProject() {
     const res = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
@@ -249,6 +264,25 @@ export default function SettingsClient({
             {pending ? "Adding…" : "Add keyword"}
           </button>
         </div>
+      </section>
+
+      {/* Pause / Resume */}
+      <section className="card" style={{ padding: 22, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18 }}>{isActive ? "Project is active" : "Project is paused"}</h2>
+          <p className="muted" style={{ fontSize: 13.5, maxWidth: 480 }}>
+            {isActive
+              ? "Issuefy scans this project every morning. Pause it to stop the daily scan without deleting any data."
+              : "The daily cron skips this project. Existing signals + sources remain visible. Resume any time to start scanning again."}
+          </p>
+        </div>
+        <button
+          className={"btn " + (isActive ? "btn-ghost" : "btn-accent")}
+          onClick={togglePause}
+        >
+          <Icon name={isActive ? "Bookmark01Icon" : "RefreshIcon"} size={15} stroke={1.8} />
+          {isActive ? "Pause project" : "Resume project"}
+        </button>
       </section>
 
       {/* Danger zone */}

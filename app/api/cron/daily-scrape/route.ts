@@ -33,18 +33,17 @@ interface ActiveProject {
 
 async function listActiveProjects(): Promise<ActiveProject[]> {
   const sql = requireSql();
-  // "Active" = at least one active competitor OR three active keywords.
-  // PRD §13.1 acceptance: a project must have ≥1 competitor or ≥3 keywords
-  // before monitoring starts.
+  // "Active" = project is not paused (projects.is_active = true) AND has at
+  // least one active competitor OR three active keywords. PRD §13.1
+  // acceptance criteria for the monitoring-eligibility gate.
   const rows = (await sql`
     SELECT DISTINCT p.id, p.user_id
     FROM projects p
-    WHERE EXISTS (
-        SELECT 1 FROM competitors c WHERE c.project_id = p.id AND c.is_active = true
+    WHERE p.is_active = true
+      AND (
+        EXISTS (SELECT 1 FROM competitors c WHERE c.project_id = p.id AND c.is_active = true)
+        OR (SELECT COUNT(*) FROM keywords k WHERE k.project_id = p.id AND k.is_active = true) >= 3
       )
-       OR (
-        SELECT COUNT(*) FROM keywords k WHERE k.project_id = p.id AND k.is_active = true
-      ) >= 3
     ORDER BY p.id
   `) as ActiveProject[];
   return rows;

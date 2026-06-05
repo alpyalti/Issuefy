@@ -24,6 +24,8 @@ interface BundledSignalRow {
   confidence_score: number | null;
   suggested_action: string | null;
   is_saved: boolean;
+  user_note: string | null;
+  action_done_at: string | null;
   created_at: string;
   // jsonb_agg yields an array of objects (or [null] when empty before filter).
   sources: Array<{ title: string; url: string; domain: string; scraped_at: string }> | null;
@@ -83,7 +85,7 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
     sql`
       SELECT
         s.id, s.title, s.category, s.description, s.importance, s.confidence_score,
-        s.suggested_action, s.is_saved, s.created_at,
+        s.suggested_action, s.is_saved, s.user_note, s.action_done_at, s.created_at,
         COALESCE(
           jsonb_agg(jsonb_build_object(
             'title',      src.title,
@@ -146,6 +148,9 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
     hoursAgo: hoursAgo(r.created_at),
     tags: [r.category],
     sources: (r.sources ?? []).map(toSourceItem),
+    suggestedAction: r.suggested_action,
+    userNote: r.user_note,
+    actionDone: !!r.action_done_at,
   }));
 
   const sumRow = summaryRows[0];
