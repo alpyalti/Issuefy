@@ -330,7 +330,7 @@ const labelStyle: React.CSSProperties = {
 
 /* ───────────── Competitor row with collapsible socials editor ───────────── */
 
-const SOCIAL_PLATFORMS: { key: string; label: string; icon: "Globe02Icon" | "Linkedin01Icon" | "NewTwitterIcon" | "InstagramIcon" | "Facebook01Icon" | "YoutubeIcon" | "TiktokIcon"; placeholder: string }[] = [
+const SOCIAL_PLATFORMS: { key: string; label: string; icon: "Globe02Icon" | "Linkedin01Icon" | "NewTwitterIcon" | "InstagramIcon" | "Facebook01Icon" | "YoutubeIcon" | "TiktokIcon" | "RedditIcon"; placeholder: string }[] = [
   { key: "website", label: "Website", icon: "Globe02Icon", placeholder: "https://example.com" },
   { key: "linkedin", label: "LinkedIn", icon: "Linkedin01Icon", placeholder: "linkedin.com/company/example" },
   { key: "x", label: "X (Twitter)", icon: "NewTwitterIcon", placeholder: "x.com/example" },
@@ -338,6 +338,7 @@ const SOCIAL_PLATFORMS: { key: string; label: string; icon: "Globe02Icon" | "Lin
   { key: "facebook", label: "Facebook", icon: "Facebook01Icon", placeholder: "facebook.com/example" },
   { key: "youtube", label: "YouTube", icon: "YoutubeIcon", placeholder: "youtube.com/@example" },
   { key: "tiktok", label: "TikTok", icon: "TiktokIcon", placeholder: "tiktok.com/@example" },
+  { key: "reddit", label: "Reddit", icon: "RedditIcon", placeholder: "reddit.com/r/example" },
 ];
 
 function CompetitorRow({

@@ -23,7 +23,7 @@ import { decodeEntities } from "./cleaner";
 
 export type SocialPlatform =
   | "instagram" | "facebook" | "linkedin" | "x" | "twitter"
-  | "youtube" | "tiktok" | "website";
+  | "youtube" | "tiktok" | "reddit" | "website";
 
 export interface EnrichmentProfile {
   name: string;
@@ -69,36 +69,86 @@ function absolutize(maybeUrl: string, base: string): string {
   try { return new URL(maybeUrl, base).toString(); } catch { return ""; }
 }
 
+// First non-empty path segment, lowercased. "/company/acme" → "company".
+function firstSegment(path: string): string {
+  return path.replace(/^\/+/, "").split("/")[0]?.toLowerCase() || "";
+}
+
+// Path segments that are share buttons / generic pages, never a profile.
+const NON_PROFILE_SEGMENTS = new Set([
+  "sharer", "sharer.php", "share", "sharearticle", "intent", "dialog",
+  "login", "signup", "home", "privacy", "policies", "tos", "terms", "help",
+  "watch", "embed", "search", "hashtag", "explore",
+]);
+
+// Strip fragments + tracking params but keep meaningful ones (e.g. the
+// `?id=` on facebook.com/profile.php). Returns a clean canonical profile URL.
+function cleanSocialUrl(u: URL): string {
+  u.hash = "";
+  const kept: [string, string][] = [];
+  for (const [k, v] of u.searchParams.entries()) {
+    const lk = k.toLowerCase();
+    if (lk.startsWith("utm_") || ["fbclid", "igshid", "ref", "ref_src", "ref_url", "mibextid", "_rdr"].includes(lk)) continue;
+    kept.push([k, v]);
+  }
+  const sp = new URLSearchParams(kept);
+  u.search = sp.toString() ? `?${sp.toString()}` : "";
+  return u.toString();
+}
+
 // Map a social URL to a (platform, value) pair, or null if not a social link.
+// Host matching uses suffix tests so subdomains (de.linkedin.com, m.facebook.com,
+// old.reddit.com) all resolve correctly. bareDomain() already strips a leading www.
 function classifySocial(href: string): [SocialPlatform, string] | null {
   let u: URL;
   try { u = new URL(href); } catch { return null; }
   const host = bareDomain(u.hostname);
+  const is = (d: string) => host === d || host.endsWith("." + d);
   const path = u.pathname.replace(/\/+$/, "");
   // Reject root-only links (e.g. "https://facebook.com/") which add no value.
   const hasHandle = path.length > 1;
-  if ((host === "instagram.com" || host === "instagr.am") && hasHandle) return ["instagram", u.toString()];
-  if ((host === "facebook.com" || host === "fb.com") && hasHandle) return ["facebook", u.toString()];
-  if ((host === "linkedin.com") && /\/(company|in|school)\//i.test(path)) return ["linkedin", u.toString()];
-  if ((host === "x.com" || host === "twitter.com") && hasHandle) return ["x", u.toString()];
-  if ((host === "youtube.com" || host === "youtu.be") && hasHandle) return ["youtube", u.toString()];
-  if (host === "tiktok.com" && hasHandle) return ["tiktok", u.toString()];
+  if (!hasHandle) return null;
+  const seg = firstSegment(path);
+  if (NON_PROFILE_SEGMENTS.has(seg)) return null;
+  const clean = cleanSocialUrl(u);
+
+  if ((is("instagram.com") || is("instagr.am"))) return ["instagram", clean];
+  if ((is("facebook.com") || is("fb.com") || is("fb.me"))) return ["facebook", clean];
+  // LinkedIn: accept any handle path (company / in / school / showcase / etc.),
+  // not just the previously-required /company|in|school/ — that strict pattern
+  // was the main reason valid footer links were missed.
+  if (is("linkedin.com")) return ["linkedin", clean];
+  if ((is("x.com") || is("twitter.com")) && !["i", "intent", "share", "home", "hashtag", "search"].includes(seg)) return ["x", clean];
+  if ((is("youtube.com") || is("youtu.be"))) return ["youtube", clean];
+  if (is("tiktok.com")) return ["tiktok", clean];
+  if (is("reddit.com") && /^\/(r|user|u)\//i.test(u.pathname)) return ["reddit", clean];
   return null;
 }
 
 function extractSocials(html: string, base: string): Partial<Record<SocialPlatform, string>> {
   const out: Partial<Record<SocialPlatform, string>> = {};
-  // Match every anchor href, then classify.
-  const re = /<a[^>]*\shref\s*=\s*["']([^"']+)["'][^>]*>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    const abs = absolutize(m[1], base);
-    if (!abs) continue;
+  const consider = (raw: string) => {
+    const abs = absolutize(raw, base);
+    if (!abs) return;
     const c = classifySocial(abs);
-    if (!c) continue;
+    if (!c) return;
     const [platform, val] = c;
-    if (!out[platform]) out[platform] = val;
-  }
+    if (!out[platform]) out[platform] = val; // first match per platform wins
+  };
+
+  // Pass 1 — anchor hrefs. Cleanest signal: footer/nav social icon links.
+  const anchorRe = /<a[^>]*\shref\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = anchorRe.exec(html))) consider(m[1]);
+
+  // Pass 2 — any social URL anywhere in the raw HTML, even outside a clean
+  // <a href>. Catches JSON-LD `sameAs`, data-* attributes, inline JSON and
+  // icon lists that the anchor scan misses. Only fills gaps Pass 1 left (the
+  // `if (!out[platform])` guard). Candidate set is pre-filtered to the known
+  // social hosts; classifySocial then validates each via new URL().
+  const urlRe = /https?:\/\/[^\s"'<>\\),\]}]*(?:instagram|instagr\.am|facebook|fb\.com|fb\.me|linkedin|x\.com|twitter|youtube|youtu\.be|tiktok|reddit)[^\s"'<>\\),\]}]*/gi;
+  while ((m = urlRe.exec(html))) consider(m[0]);
+
   return out;
 }
 
