@@ -13,6 +13,7 @@
     "@clerk/nextjs": "^7.4.3",
     "@hugeicons/core-free-icons": "latest",
     "@neondatabase/serverless": "^1.1.0",
+    "@sentry/nextjs": "^10.56.0",
     "next": "^16.2.7",
     "ogl": "^1.0.11",
     "react": "^19.2.7",

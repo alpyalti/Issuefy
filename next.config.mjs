@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -13,4 +14,22 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap with Sentry — uploads source maps at build time (silent in CI) and
+// instruments the Next router. Only active when SENTRY_AUTH_TOKEN + DSN are set;
+// otherwise builds cleanly without trying to upload.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG || "issuefy",
+  project: process.env.SENTRY_PROJECT || "issuefy",
+  // Suppress non-error logs during build
+  silent: !process.env.CI,
+  // Upload source maps for clearer stack traces. Requires SENTRY_AUTH_TOKEN.
+  widenClientFileUpload: true,
+  // Hide source maps from public URLs.
+  hideSourceMaps: true,
+  // Tree-shake Sentry's internal logger in production for smaller bundles.
+  disableLogger: true,
+  // Skip source map uploads when no auth token (local builds, preview deploys).
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+  },
+});
