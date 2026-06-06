@@ -134,9 +134,15 @@ export default function ProjectDashboard({
   }
   async function setNote(id: string, next: string) {
     const current = signals.find((s) => s.id === id);
-    setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, userNote: next || null } : s)));
-    const ok = await patchSignal(id, { user_note: next });
-    if (!ok && current) setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, userNote: current.userNote } : s)));
+    // Adding a note auto-saves the signal so it's easy to find again. We only
+    // do this when adding (non-empty) a note to a not-yet-saved signal — never
+    // auto-unsave when a note is cleared (the user can unsave explicitly).
+    const autoSave = !!next.trim() && !!current && !current.saved;
+    setSignals((prev) => prev.map((s) =>
+      s.id === id ? { ...s, userNote: next || null, ...(autoSave ? { saved: true } : {}) } : s));
+    const ok = await patchSignal(id, { user_note: next, ...(autoSave ? { is_saved: true } : {}) });
+    if (!ok && current) setSignals((prev) => prev.map((s) =>
+      s.id === id ? { ...s, userNote: current.userNote, ...(autoSave ? { saved: current.saved } : {}) } : s));
   }
   async function toggleActionDone(id: string, done: boolean) {
     const current = signals.find((s) => s.id === id);

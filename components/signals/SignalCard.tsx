@@ -62,10 +62,10 @@ export function SignalCard({
         <header className="signal-top">
           <div className="signal-tags">
             <span className={"pill " + cat.pill}><span className="dot" />{cat.label}</span>
-            {(sig.severity === "high" || sig.severity === "med") && (
+            {sig.severity === "high" && (
               <span
-                className={"sev-flag sev-" + sig.severity}
-                title={sig.severity === "high" ? "Flagged · high importance" : "Worth a look"}
+                className="sev-flag sev-high"
+                title="Flagged · high importance"
               >
                 <Icon name="Flag02Icon" size={13} stroke={2} />
               </span>
@@ -85,7 +85,7 @@ export function SignalCard({
               aria-label={sig.userNote ? "Edit note" : "Add note"}
               onClick={() => setNoteOpen((o) => !o)}
             >
-              <Icon name="Idea01Icon" size={16} stroke={sig.userNote ? 2 : 1.6} />
+              <Icon name="NoteAddIcon" size={16} stroke={sig.userNote ? 2 : 1.6} />
             </button>
             <button className={"icon-btn " + (saved ? "on" : "")} title={saved ? "Saved" : "Save"} onClick={onSave}>
               <Icon name="Bookmark01Icon" size={17} stroke={saved ? 2 : 1.6} />

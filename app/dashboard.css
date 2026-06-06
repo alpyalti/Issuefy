@@ -746,7 +746,6 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 /* ---------- Signal importance flag + category bar + company tag ---------- */
 .sev-flag{ display:inline-flex; align-items:center; }
 .sev-flag.sev-high{ color:var(--neg); }
-.sev-flag.sev-med{ color:var(--warn); }
 .sev-bar.cat-competitor{ background:var(--accent); }
 .sev-bar.cat-opportunity{ background:var(--pos); }
 .sev-bar.cat-threat{ background:var(--neg); }
