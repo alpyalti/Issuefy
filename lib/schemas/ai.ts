@@ -6,7 +6,10 @@ import { z } from "zod";
  * Malformed output is rejected + logged, never stored (PRD §10.9 / §13.5).
  */
 
-// 8 categories per PRD §13.5
+// 9 categories. Original 8 per PRD §13.5; "Industry Event" was added later
+// to let the AI surface conferences, summits, webinars, and networking events
+// found in the same scraped articles (kept in sync with the CHECK constraint
+// in migrations/0007_industry_events.sql).
 export const SIGNAL_CATEGORIES = [
   "Competitor Move",
   "Customer Pain Point",
@@ -16,6 +19,7 @@ export const SIGNAL_CATEGORIES = [
   "Regulation / Policy",
   "Pricing / Offer Change",
   "Service Demand Signal",
+  "Industry Event",
 ] as const;
 
 export const IMPORTANCE = ["Low", "Medium", "High"] as const;

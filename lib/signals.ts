@@ -159,10 +159,11 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     "  1. Use ONLY information present in the provided source texts. Never invent facts.",
     "  2. Each signal must cite ONE specific source_id from the input set.",
     "  3. If no useful business signal exists, return an empty signals array.",
-    "  4. Categories MUST be one of: Competitor Move, Customer Pain Point, Market Opportunity, Threat / Risk, Trend Signal, Regulation / Policy, Pricing / Offer Change, Service Demand Signal.",
+    "  4. Categories MUST be one of: Competitor Move, Customer Pain Point, Market Opportunity, Threat / Risk, Trend Signal, Regulation / Policy, Pricing / Offer Change, Service Demand Signal, Industry Event.",
+    "     - 'Industry Event' covers relevant conferences, summits, trade shows, webinars, and networking events mentioned in the source — the kind a user would want to attend, sponsor, or watch. Include the event date and location in the description if the source provides them. Skip routine vendor product webinars unless they're publicly notable.",
     "  5. Importance is Low, Medium, or High. confidence_score is a 0-100 integer reflecting how clearly the source supports the claim.",
     "  6. Keep titles short (<= 120 chars). Keep descriptions short and business-focused.",
-    "  7. Prefer signals that change a decision: pricing moves, demand shifts, recurring complaints, new entrants, regulation.",
+    "  7. Prefer signals that change a decision: pricing moves, demand shifts, recurring complaints, new entrants, regulation, must-attend events.",
     "  8. Assess opportunities and risks RELATIVE TO the user's own company when the company profile is provided.",
   ].join("\n");
 
