@@ -128,13 +128,19 @@
 .auth-footer a{ color:var(--ink-3); text-decoration:none; }
 .auth-footer a:hover{ color:var(--ink-2); }
 
-/* Six-digit code input for email verification + password reset. */
+/* Six-digit code input for email verification + password reset.
+   `minmax(0, 1fr)` (not just `1fr`) lets each track shrink below the
+   input's intrinsic width — without this each <input> claims its default
+   ~150px and the row blows out past the card on narrow widths. The
+   width:100% + min-width:0 + box-sizing:border-box on the input lock it
+   inside its cell. */
 .auth-code-fields{
-  display:grid; grid-template-columns:repeat(6, 1fr); gap:8px;
+  display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:8px;
   margin:6px 0;
 }
 .auth-code-input{
-  height:54px; text-align:center;
+  width:100%; min-width:0; box-sizing:border-box;
+  height:54px; padding:0; text-align:center;
   border:1px solid var(--line-2); border-radius:var(--r-sm);
   background:var(--surface); color:var(--ink);
   font-family:var(--mono); font-size:22px; font-weight:600;
