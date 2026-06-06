@@ -1,6 +1,14 @@
 import { Resend } from "resend";
 import { buildDailyBriefEmail, type DailyBriefEmailInput } from "./daily-brief-email";
 import { buildInvitationEmail, type InvitationEmailInput } from "./invitation-email";
+import {
+  buildSupportAdminReplyEmail,
+  buildSupportInboundEmail,
+  buildSupportTicketCreatedEmail,
+  type SupportAdminReplyInput,
+  type SupportInboundInput,
+  type SupportTicketCreatedInput,
+} from "./support-emails";
 
 /**
  * Product-email mailer (Resend).
@@ -87,6 +95,28 @@ export async function sendDailyBriefEmail(to: string, input: DailyBriefEmailInpu
 export async function sendInvitationEmail(to: string, input: InvitationEmailInput) {
   const { subject, html, text } = buildInvitationEmail(input);
   return send({ to, subject, html, text });
+}
+
+// ── Support ticket emails ──────────────────────────────────────────────
+const APP_URL = (process.env.APP_URL || "https://issuefy.app").replace(/\/+$/, "");
+const SUPPORT_INBOX = process.env.SUPPORT_INBOX_EMAIL || "support@issuefy.app";
+
+/** Confirmation sent to the user when they open a ticket. */
+export async function sendSupportTicketCreatedEmail(to: string, input: SupportTicketCreatedInput) {
+  const { subject, html, text } = buildSupportTicketCreatedEmail(input, APP_URL);
+  return send({ to, subject, html, text });
+}
+
+/** Notification sent to the user when an admin replies on their ticket. */
+export async function sendSupportAdminReplyEmail(to: string, input: SupportAdminReplyInput) {
+  const { subject, html, text } = buildSupportAdminReplyEmail(input, APP_URL);
+  return send({ to, subject, html, text });
+}
+
+/** Heads-up sent to support@issuefy.app for ops staff who live in email. */
+export async function sendSupportInboundNotification(input: SupportInboundInput) {
+  const { subject, html, text } = buildSupportInboundEmail(input, APP_URL);
+  return send({ to: SUPPORT_INBOX, subject, html, text });
 }
 
 /** Stripe — payment failed (sent on invoice.payment_failed webhook). */

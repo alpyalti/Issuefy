@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useClerk } from "@clerk/nextjs";
 import { Icon } from "@/components/icons/Icon";
 
-const HELP_HREF = "mailto:hello@issuefy.app?subject=Issuefy%20support";
+// Help link points to the in-app support page (Phase 5: support).
+const HELP_HREF = "/support";
 
 interface MenuUser { name: string | null; email: string; initials: string }
 

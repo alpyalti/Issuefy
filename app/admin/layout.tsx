@@ -28,6 +28,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/users" className="side-item">
               <Icon name="Target01Icon" size={19} stroke={1.6} /> Users
             </Link>
+            <Link href="/admin/support" className="side-item">
+              <Icon name="HelpCircleIcon" size={19} stroke={1.6} /> Support
+            </Link>
             <Link href="/admin/settings" className="side-item">
               <Icon name="Settings01Icon" size={19} stroke={1.6} /> Settings
             </Link>
