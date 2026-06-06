@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { buildDailyBriefEmail, type DailyBriefEmailInput } from "./daily-brief-email";
+import { buildInvitationEmail, type InvitationEmailInput } from "./invitation-email";
 
 /**
  * Product-email mailer (Resend).
@@ -75,6 +76,16 @@ export async function sendTrialReminderEmail(to: string, daysLeft: number) {
  */
 export async function sendDailyBriefEmail(to: string, input: DailyBriefEmailInput) {
   const { subject, html, text } = buildDailyBriefEmail(input);
+  return send({ to, subject, html, text });
+}
+
+/**
+ * Team invitation (Teams Phase 3). Sent when an owner invites someone to a
+ * project via POST /api/projects/:id/invitations. The recipient gets a link
+ * to /invite/{token} that drives the acceptance flow in Phase 4.
+ */
+export async function sendInvitationEmail(to: string, input: InvitationEmailInput) {
+  const { subject, html, text } = buildInvitationEmail(input);
   return send({ to, subject, html, text });
 }
 
