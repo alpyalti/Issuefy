@@ -47,7 +47,7 @@ export default async function OG() {
             display: "flex",
           }}
         >
-          ✦ ISSUEFY
+          ISSUEFY
         </div>
 
         {/* Headline */}

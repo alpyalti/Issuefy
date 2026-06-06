@@ -26,8 +26,6 @@ export default withSentryConfig(nextConfig, {
   widenClientFileUpload: true,
   // Hide source maps from public URLs.
   hideSourceMaps: true,
-  // Tree-shake Sentry's internal logger in production for smaller bundles.
-  disableLogger: true,
   // Skip source map uploads when no auth token (local builds, preview deploys).
   sourcemaps: {
     disable: !process.env.SENTRY_AUTH_TOKEN,
