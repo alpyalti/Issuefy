@@ -38,7 +38,7 @@ export interface PlanLimits {
 // layer (no DB constraint, since PRD per-plan limits differ). These ceil the
 // raw per-project values regardless of plan.
 export const HARD_CAPS = {
-  competitorsPerProject: 5,
+  competitorsPerProject: 10,
   keywordsPerProject: 20,
 } as const;
 
@@ -47,7 +47,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     projects: 1,
     seats: 1,
     competitorsPerProject: 3,
-    keywordsPerProject: 15,
+    keywordsPerProject: 10,
     sourcesPerMonth: 300,
     signalsPerMonth: 100,
     sourceHistoryDays: 30,
@@ -61,7 +61,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     projects: 3,
     seats: 3,
     competitorsPerProject: 5,
-    keywordsPerProject: 20,
+    keywordsPerProject: 15,
     sourcesPerMonth: 1_500,
     signalsPerMonth: 500,
     sourceHistoryDays: 90,
@@ -74,7 +74,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
   agency: {
     projects: 10,
     seats: 10,
-    competitorsPerProject: 5,
+    competitorsPerProject: 10,
     keywordsPerProject: 20,
     sourcesPerMonth: 6_000,
     signalsPerMonth: 2_000,
@@ -88,7 +88,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
   enterprise: {
     projects: 9_999,
     seats: 9_999,
-    competitorsPerProject: 5,
+    competitorsPerProject: 10,
     keywordsPerProject: 20,
     sourcesPerMonth: 60_000,
     signalsPerMonth: 20_000,

@@ -183,7 +183,7 @@ export default function LandingPage() {
         <div className="wrap">
           <div className="sec-head center">
             <h2>Simple pricing that scales with you.</h2>
-            <p>Try Starter free for 14 days, no credit card. Upgrade anytime as you grow.</p>
+            <p>Start with Starter free for 14 days. Upgrade anytime as you grow.</p>
             <div className="bill-toggle">
               <button type="button" id="billMonthly">Monthly</button>
               <button type="button" id="billAnnual" className="on">Annual <span className="bill-save">Save ~2 months</span></button>
@@ -202,12 +202,12 @@ export default function LandingPage() {
               <div className="tier-bill pa">billed annually · $288/yr</div>
               <div className="tier-bill pm">billed monthly</div>
               <div className="tier-cta"><Link href="/sign-up?plan=starter&billing=annual" className="btn btn-accent">Start free trial</Link></div>
-              <div className="tier-trial">14-day free trial · no card</div>
+              <div className="tier-trial">14-day free trial · card required</div>
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">1</span></li>
                 <li><span className="lbl">Projects</span><span className="val">1</span></li>
                 <li><span className="lbl">Competitors/project</span><span className="val">3</span></li>
-                <li><span className="lbl">Keywords/project</span><span className="val">15</span></li>
+                <li><span className="lbl">Keywords/project</span><span className="val">10</span></li>
                 <li><span className="lbl">Sources/month</span><span className="val">300</span></li>
                 <li><span className="lbl">AI signals/month</span><span className="val">100</span></li>
               </ul>
@@ -235,7 +235,7 @@ export default function LandingPage() {
                 <li><span className="lbl">Seats</span><span className="val">3</span></li>
                 <li><span className="lbl">Projects</span><span className="val">3</span></li>
                 <li><span className="lbl">Competitors/project</span><span className="val">5</span></li>
-                <li><span className="lbl">Keywords/project</span><span className="val">20</span></li>
+                <li><span className="lbl">Keywords/project</span><span className="val">15</span></li>
                 <li><span className="lbl">Sources/month</span><span className="val">1,500</span></li>
                 <li><span className="lbl">AI signals/month</span><span className="val">500</span></li>
               </ul>
@@ -261,7 +261,7 @@ export default function LandingPage() {
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">10</span></li>
                 <li><span className="lbl">Projects</span><span className="val">10</span></li>
-                <li><span className="lbl">Competitors/project</span><span className="val">5</span></li>
+                <li><span className="lbl">Competitors/project</span><span className="val">10</span></li>
                 <li><span className="lbl">Keywords/project</span><span className="val">20</span></li>
                 <li><span className="lbl">Sources/month</span><span className="val">6,000</span></li>
                 <li><span className="lbl">AI signals/month</span><span className="val">2,000</span></li>
@@ -319,7 +319,7 @@ export default function LandingPage() {
                 ["How is the daily brief generated?", "Each morning, Issuefy reads overnight activity across your sources and condenses it into one short summary plus a handful of categorized signal cards — what changed, and why it matters to you."],
                 ["Can I choose what to monitor?", "Yes. Set the competitors, keywords and markets you care about in your watchlist, and adjust them anytime. Your brief adapts the next morning."],
                 ["Is my data secure?", "Issuefy only reads public sources — never your private systems. Your watchlist and workspace stay private to your team, and SSO with white-label is available on Enterprise."],
-                ["Do you offer a free trial?", "Starter comes with a 14-day free trial — no credit card needed. Explore the full daily brief and dashboard, then pick a plan whenever you're ready."],
+                ["Do you offer a free trial?", "Yes — Starter comes with a 14-day free trial. We collect a card upfront, but you won't be charged until day 15. Cancel anytime before then and you pay nothing."],
               ].map(([q, a]) => (
                 <div className="faq-item" key={q}>
                   <button className="faq-q">{q}<span className="faq-ic"><Icon name="Add01Icon" size={16} stroke={1.8} /></span></button>
@@ -385,7 +385,7 @@ export default function LandingPage() {
             <Link href="/sign-up" className="btn btn-accent btn-lg">Start free<Icon name="ArrowRight01Icon" size={18} stroke={2} /></Link>
             <a href="#product" className="btn btn-ghost btn-lg">See a sample brief</a>
           </div>
-          <div className="cta-note">No credit card · 14-day trial · Cancel anytime</div>
+          <div className="cta-note">14-day trial · Card required · Cancel anytime</div>
         </div>
       </section>
 

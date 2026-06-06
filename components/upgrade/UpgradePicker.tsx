@@ -21,18 +21,18 @@ const TIERS: Tier[] = [
   {
     id: "starter", name: "Starter", desc: "One company, one market.",
     monthly: 29, annual: 24, annualTotal: 288,
-    bullets: ["1 project", "3 competitors", "15 keywords", "300 sources / month", "100 AI signals / month"],
+    bullets: ["1 project", "3 competitors", "10 keywords", "300 sources / month", "100 AI signals / month"],
   },
   {
     id: "growth", name: "Growth", desc: "Multiple markets or a small team.",
     monthly: 79, annual: 65, annualTotal: 780,
-    bullets: ["3 projects", "5 competitors / project", "20 keywords / project", "1,500 sources / month", "500 AI signals / month", "Source filters"],
+    bullets: ["3 projects", "5 competitors / project", "15 keywords / project", "1,500 sources / month", "500 AI signals / month", "Source filters"],
     featured: true,
   },
   {
     id: "agency", name: "Agency", desc: "Several clients or brands.",
     monthly: 199, annual: 165, annualTotal: 1980,
-    bullets: ["10 projects", "5 competitors / project", "20 keywords / project", "6,000 sources / month", "2,000 AI signals / month", "Priority processing"],
+    bullets: ["10 projects", "10 competitors / project", "20 keywords / project", "6,000 sources / month", "2,000 AI signals / month", "Priority processing"],
   },
 ];
 

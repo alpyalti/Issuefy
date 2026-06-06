@@ -135,7 +135,7 @@ export default function SignUpForm({
         ) : (
           <>
             <h1>Start your morning brief.</h1>
-            <p>Create your account — no card required to try Issuefy.</p>
+            <p>Create your account — Starter is free for 14 days, then your plan kicks in.</p>
           </>
         )}
       </header>
