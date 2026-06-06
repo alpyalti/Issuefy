@@ -13,7 +13,13 @@ import ProjectSwitcher from "./ProjectSwitcher";
 import NotificationBell from "./NotificationBell";
 import ProfileMenu from "./ProfileMenu";
 
-interface OwnedProject { id: string; name: string; company_name: string | null; }
+interface OwnedProject {
+  id: string;
+  name: string;
+  company_name: string | null;
+  /** Caller's role on the project — drives the EDITOR/VIEWER chip in the switcher. */
+  role: "owner" | "editor" | "viewer";
+}
 
 /**
  * Persistent sidebar + topbar + ⌘K command palette.
@@ -195,7 +201,11 @@ function DashChromeInner({
           <img src="/brand/logo-ink.svg" className="brand-logo" alt="Issuefy" />
         </Link>
 
-        <ProjectSwitcher current={project} projects={ownedProjects} />
+        <ProjectSwitcher
+          current={project}
+          currentRole={ownedProjects.find((p) => p.id === project.id)?.role}
+          projects={ownedProjects}
+        />
 
         <div className="side-section">
           <div className="side-label">Workspace</div>
@@ -321,6 +331,7 @@ function DashChromeInner({
         competitors={competitors}
         keywords={keywords}
         initials={user.initials}
+        projects={ownedProjects}
       />
 
       <CommandPalette

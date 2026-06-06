@@ -15,9 +15,16 @@ import { useAccountActions } from "./ProfileMenu";
  */
 interface Competitor { id: string; name: string; is_active: boolean; }
 interface Keyword { id: string; keyword: string; is_active: boolean; }
+interface AccessibleProject {
+  id: string;
+  name: string;
+  company_name: string | null;
+  role: "owner" | "editor" | "viewer";
+}
 
 export default function MobileDrawer({
   open, onClose, projectId, projectName, userName, competitors, keywords, initials,
+  projects = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -27,6 +34,9 @@ export default function MobileDrawer({
   competitors: Competitor[];
   keywords: Keyword[];
   initials: string;
+  /** Every project the user can access — owned + member. Drives the
+   *  drawer's project switcher (Teams Phase 2). */
+  projects?: AccessibleProject[];
 }) {
   const { manageSubscription, signOut, helpHref, busy } = useAccountActions();
 
@@ -57,6 +67,41 @@ export default function MobileDrawer({
         </header>
 
         <div className="mobile-drawer-body">
+          {/* Project switcher — top of the drawer. Lists every project the user
+              can access, with role chip for non-owner ones, plus a "New project"
+              row at the bottom. */}
+          {projects.length > 0 && (
+            <section className="side-section" style={{ flex: "initial" }}>
+              <div className="side-label">Projects</div>
+              <div className="mobile-drawer-projects">
+                {projects.map((p) => {
+                  const isCurrent = p.id === projectId;
+                  return (
+                    <Link
+                      key={p.id}
+                      href={`/dashboard/${p.id}`}
+                      onClick={onClose}
+                      className={"mobile-drawer-project " + (isCurrent ? "on" : "")}
+                    >
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span className="mobile-drawer-project-name">{p.name}</span>
+                        {p.company_name && <span className="mobile-drawer-project-sub">{p.company_name}</span>}
+                      </span>
+                      {p.role !== "owner" && (
+                        <span className={"proj-role-chip role-" + p.role}>{p.role.toUpperCase()}</span>
+                      )}
+                      {isCurrent && <Icon name="Tick02Icon" size={15} stroke={2} />}
+                    </Link>
+                  );
+                })}
+                <Link href="/dashboard/new" onClick={onClose} className="mobile-drawer-project new">
+                  <Icon name="Add01Icon" size={14} stroke={1.9} />
+                  <span>New project</span>
+                </Link>
+              </div>
+            </section>
+          )}
+
           <section className="side-section side-watch" style={{ flex: "initial" }}>
             <div className="side-label">Watchlist</div>
             <div className="watchlist">

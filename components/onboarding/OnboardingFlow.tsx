@@ -84,7 +84,24 @@ function cardToSocialsPayload(card: CompanyData): Record<string, string> {
   return out;
 }
 
-export default function OnboardingFlow({ userName }: { userName: string }) {
+/**
+ * mode="first-run"   → opening flow for a brand-new user. After project
+ *                       creation, routes to Stripe Checkout (the new trial
+ *                       starts there). The welcome step keeps its "Welcome
+ *                       to Issuefy" copy.
+ * mode="new-project" → adding another project for an already-subscribed user.
+ *                       Step 0 copy becomes "Create a new project." After
+ *                       submit, jumps directly to /dashboard/{newId} — the
+ *                       user already has an active subscription, no Checkout.
+ */
+export type OnboardingMode = "first-run" | "new-project";
+
+export default function OnboardingFlow({
+  userName, mode = "first-run",
+}: {
+  userName: string;
+  mode?: OnboardingMode;
+}) {
   const router = useRouter();
 
   const [step, setStep] = useState(0);
@@ -272,13 +289,19 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
       }));
       await Promise.allSettled([...compCalls, ...kwCalls]);
 
-      // Trial gate. Two paths:
+      // new-project mode: the user already has an active subscription —
+      // adding another project is on-plan. Skip the trial gate and route
+      // straight into the project they just created.
+      if (mode === "new-project") {
+        router.push(`/dashboard/${project.id}`);
+        return;
+      }
+
+      // first-run trial gate. Two paths:
       //   - If they pre-selected a plan on the pricing page (?plan & ?billing
       //     in the URL), respect that choice and jump straight to Stripe Checkout.
       //   - Otherwise send them to /upgrade?required=1 so they consciously pick
-      //     a plan + monthly/annual before payment. Defaulting silently to
-      //     Starter/annual was confusing — users were landing on Stripe Checkout
-      //     without knowing what they'd just been signed up for.
+      //     a plan + monthly/annual before payment.
       // If Checkout can't be created (Stripe not configured, e.g. dev) we fall
       // through to the dashboard so local development isn't blocked.
       const params = new URLSearchParams(window.location.search);
@@ -339,8 +362,17 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
           {step === 0 && (
             <div className="onb-step">
               <div className="onb-mark"><Icon name="SparklesIcon" size={34} stroke={1.5} /></div>
-              <h2>Welcome to Issuefy{userName ? `, ${userName}` : ""}.</h2>
-              <p>Every morning, Issuefy reads the market for you — competitors, customer signals and risks — and hands you one short, sourced brief. Let&apos;s set up what to watch. It takes about a minute.</p>
+              {mode === "new-project" ? (
+                <>
+                  <h2>Create a new project.</h2>
+                  <p>Tracking a new company, market or client? Each project gets its own competitors, keywords and daily brief. Takes about a minute.</p>
+                </>
+              ) : (
+                <>
+                  <h2>Welcome to Issuefy{userName ? `, ${userName}` : ""}.</h2>
+                  <p>Every morning, Issuefy reads the market for you — competitors, customer signals and risks — and hands you one short, sourced brief. Let&apos;s set up what to watch. It takes about a minute.</p>
+                </>
+              )}
             </div>
           )}
 

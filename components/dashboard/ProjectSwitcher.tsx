@@ -5,18 +5,28 @@ import Link from "next/link";
 import { Icon } from "@/components/icons/Icon";
 
 /**
- * Dropdown above the sidebar brand mark — lists every project the user owns.
- * Current project bolded. Clicking another project navigates to its dashboard
- * (real route; the layout re-fetches that project's data automatically).
+ * Project switcher in the dashboard sidebar — always visible, even for users
+ * with a single project (Teams Phase 2). The dropdown lets the user pick
+ * another project they own OR are an editor / viewer on, and offers a
+ * "+ New project" footer that routes through /dashboard/new (which handles
+ * plan-limit checks before opening the onboarding wizard).
  *
- * Hidden when the user only owns one project (the switcher would be noise).
+ * Non-owner projects show a small role chip (EDITOR / VIEWER) so the user
+ * can tell at a glance whose project they're in.
  */
-interface Project { id: string; name: string; company_name: string | null; }
+interface Project {
+  id: string;
+  name: string;
+  company_name: string | null;
+  role?: "owner" | "editor" | "viewer";
+}
 
 export default function ProjectSwitcher({
-  current, projects,
+  current, currentRole, projects,
 }: {
   current: { id: string; name: string };
+  /** Caller's role on the currently-open project — shown as a chip when not owner. */
+  currentRole?: "owner" | "editor" | "viewer";
   projects: Project[];
 }) {
   const [open, setOpen] = useState(false);
@@ -36,9 +46,6 @@ export default function ProjectSwitcher({
     };
   }, [open]);
 
-  // Hide the switcher entirely if the user only owns one project.
-  if (projects.length <= 1) return null;
-
   return (
     <div className="proj-switch" ref={ref}>
       <button
@@ -49,12 +56,16 @@ export default function ProjectSwitcher({
         aria-label="Switch project"
       >
         <span className="proj-switch-name">{current.name}</span>
+        {currentRole && currentRole !== "owner" && (
+          <span className={"proj-role-chip role-" + currentRole}>{currentRole.toUpperCase()}</span>
+        )}
         <Icon name={open ? "ArrowUp01Icon" : "ArrowDown01Icon"} size={14} stroke={1.8} />
       </button>
       {open && (
         <div className="proj-switch-menu" role="listbox">
           {projects.map((p) => {
             const isCurrent = p.id === current.id;
+            const showRole = p.role && p.role !== "owner";
             return (
               <Link
                 key={p.id}
@@ -69,14 +80,29 @@ export default function ProjectSwitcher({
                   <span className="proj-switch-item-name">{p.name}</span>
                   {p.company_name && <span className="proj-switch-item-sub">{p.company_name}</span>}
                 </span>
+                {showRole && <span className={"proj-role-chip role-" + p.role}>{p.role!.toUpperCase()}</span>}
                 {isCurrent && <Icon name="Tick02Icon" size={15} stroke={2} />}
               </Link>
             );
           })}
-          <Link href="/dashboard" className="proj-switch-item proj-switch-foot" onClick={() => setOpen(false)}>
-            <Icon name="PlusSignIcon" size={14} stroke={1.9} />
-            <span>All projects</span>
+          <Link
+            href="/dashboard/new"
+            className="proj-switch-item proj-switch-foot"
+            onClick={() => setOpen(false)}
+          >
+            <Icon name="Add01Icon" size={14} stroke={1.9} />
+            <span>New project</span>
           </Link>
+          {projects.length > 1 && (
+            <Link
+              href="/dashboard"
+              className="proj-switch-item proj-switch-foot"
+              onClick={() => setOpen(false)}
+            >
+              <Icon name="DashboardSquare01Icon" size={14} stroke={1.6} />
+              <span>All projects</span>
+            </Link>
+          )}
         </div>
       )}
     </div>
