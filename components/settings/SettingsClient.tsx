@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { ErrorState, ERROR_MESSAGES } from "@/components/ui/ErrorState";
+import { useDashboardRole, canManage } from "@/components/dashboard/dashboard-role-context";
 
 interface Project {
   id: string;
@@ -39,6 +40,11 @@ export default function SettingsClient({
   keywordCap: number;
 }) {
   const router = useRouter();
+  // Role gates (Teams Phase 5). Pause/Delete are owner-only; everything else
+  // editor-or-owner. The server still enforces all of this — this is UX.
+  const role = useDashboardRole();
+  const isOwner = role === "owner";
+  const canEdit = canManage(role);
   const [competitors, setCompetitors] = useState(initialCompetitors);
   const [keywords, setKeywords] = useState(initialKeywords);
   const [err, setErr] = useState<string | null>(null);
@@ -251,12 +257,14 @@ export default function SettingsClient({
             />
           ))}
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <input className="modal-input" placeholder="newcompetitor.com" value={newCompetitorUrl} onChange={(e) => setNewCompetitorUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addCompetitor(); }} />
-          <button className="btn btn-accent" onClick={addCompetitor} disabled={pending || !newCompetitorUrl.trim() || competitors.length >= competitorCap}>
-            {pending ? "Adding…" : "Add competitor"}
-          </button>
-        </div>
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <input className="modal-input" placeholder="newcompetitor.com" value={newCompetitorUrl} onChange={(e) => setNewCompetitorUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addCompetitor(); }} />
+            <button className="btn btn-accent" onClick={addCompetitor} disabled={pending || !newCompetitorUrl.trim() || competitors.length >= competitorCap}>
+              {pending ? "Adding…" : "Add competitor"}
+            </button>
+          </div>
+        )}
       </section>
 
       {/* Keywords */}
@@ -289,52 +297,58 @@ export default function SettingsClient({
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <input className="modal-input" placeholder="e.g. usage-based pricing" value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addKeyword(); }} />
-          <button className="btn btn-accent" onClick={addKeyword} disabled={pending || !newKeyword.trim() || keywords.length >= keywordCap}>
-            {pending ? "Adding…" : "Add keyword"}
-          </button>
-        </div>
-      </section>
-
-      {/* Pause / Resume */}
-      <section className="card" style={{ padding: 22, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18 }}>{isActive ? "Project is active" : "Project is paused"}</h2>
-          <p className="muted" style={{ fontSize: 13.5, maxWidth: 480 }}>
-            {isActive
-              ? "Issuefy scans this project every morning. Pause it to stop the daily scan without deleting any data."
-              : "The daily cron skips this project. Existing signals + sources remain visible. Resume any time to start scanning again."}
-          </p>
-        </div>
-        <button
-          className={"btn " + (isActive ? "btn-ghost" : "btn-accent")}
-          onClick={togglePause}
-        >
-          <Icon name={isActive ? "PauseIcon" : "PlayIcon"} size={15} stroke={1.8} />
-          {isActive ? "Pause project" : "Resume project"}
-        </button>
-      </section>
-
-      {/* Danger zone */}
-      <section className="card" style={{ padding: 22, borderColor: "var(--neg-line)" }}>
-        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, color: "var(--neg)", marginBottom: 8 }}>Danger zone</h2>
-        <p className="muted" style={{ fontSize: 13.5 }}>
-          Deleting a project removes its competitors, keywords, sources, signals and daily summaries — permanently.
-        </p>
-        {!deleteOpen ? (
-          <button className="btn btn-ghost" style={{ marginTop: 12, color: "var(--neg)", borderColor: "var(--neg-line)" }} onClick={() => setDeleteOpen(true)}>
-            Delete project…
-          </button>
-        ) : (
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            <button className="btn btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</button>
-            <button className="btn btn-accent" style={{ background: "var(--neg)" }} onClick={deleteProject}>
-              Yes, delete &quot;{project.name}&quot;
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <input className="modal-input" placeholder="e.g. usage-based pricing" value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addKeyword(); }} />
+            <button className="btn btn-accent" onClick={addKeyword} disabled={pending || !newKeyword.trim() || keywords.length >= keywordCap}>
+              {pending ? "Adding…" : "Add keyword"}
             </button>
           </div>
         )}
       </section>
+
+      {/* Pause / Resume — owner only (it controls billing-relevant scan cadence). */}
+      {isOwner && (
+        <section className="card" style={{ padding: 22, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <h2 style={{ fontFamily: "var(--serif)", fontSize: 18 }}>{isActive ? "Project is active" : "Project is paused"}</h2>
+            <p className="muted" style={{ fontSize: 13.5, maxWidth: 480 }}>
+              {isActive
+                ? "Issuefy scans this project every morning. Pause it to stop the daily scan without deleting any data."
+                : "The daily cron skips this project. Existing signals + sources remain visible. Resume any time to start scanning again."}
+            </p>
+          </div>
+          <button
+            className={"btn " + (isActive ? "btn-ghost" : "btn-accent")}
+            onClick={togglePause}
+          >
+            <Icon name={isActive ? "PauseIcon" : "PlayIcon"} size={15} stroke={1.8} />
+            {isActive ? "Pause project" : "Resume project"}
+          </button>
+        </section>
+      )}
+
+      {/* Danger zone — owner only. Deleting the project removes everyone's access. */}
+      {isOwner && (
+        <section className="card" style={{ padding: 22, borderColor: "var(--neg-line)" }}>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, color: "var(--neg)", marginBottom: 8 }}>Danger zone</h2>
+          <p className="muted" style={{ fontSize: 13.5 }}>
+            Deleting a project removes its competitors, keywords, sources, signals and daily summaries — permanently.
+          </p>
+          {!deleteOpen ? (
+            <button className="btn btn-ghost" style={{ marginTop: 12, color: "var(--neg)", borderColor: "var(--neg-line)" }} onClick={() => setDeleteOpen(true)}>
+              Delete project…
+            </button>
+          ) : (
+            <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</button>
+              <button className="btn btn-accent" style={{ background: "var(--neg)" }} onClick={deleteProject}>
+                Yes, delete &quot;{project.name}&quot;
+              </button>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

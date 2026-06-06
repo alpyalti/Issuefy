@@ -27,6 +27,7 @@ export function SignalCard({
   onNoteChange,
   onActionDoneToggle,
   companySet,
+  readOnly = false,
 }: {
   sig: SignalItem;
   saved: boolean;
@@ -36,6 +37,10 @@ export function SignalCard({
   onNoteChange?: (next: string) => void;
   onActionDoneToggle?: (next: boolean) => void;
   companySet: Set<string>;
+  /** Viewer mode (Teams Phase 5). Disables every action button with a
+   *  tooltip. The card still shows the signal in full so viewers see
+   *  exactly what their team is seeing. */
+  readOnly?: boolean;
 }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -81,16 +86,27 @@ export function SignalCard({
           <div className="signal-actions">
             <button
               className="icon-btn"
-              title="Add note"
+              title={readOnly ? "Viewers can't add notes" : "Add note"}
               aria-label={sig.userNote ? "Edit note" : "Add note"}
               onClick={() => setNoteOpen((o) => !o)}
+              disabled={readOnly}
             >
               <Icon name="NoteAddIcon" size={16} stroke={sig.userNote ? 2 : 1.6} />
             </button>
-            <button className={"icon-btn " + (saved ? "on" : "")} title={saved ? "Saved" : "Save"} onClick={onSave}>
+            <button
+              className={"icon-btn " + (saved ? "on" : "")}
+              title={readOnly ? "Viewers can't save signals" : (saved ? "Saved" : "Save")}
+              onClick={onSave}
+              disabled={readOnly}
+            >
               <Icon name="Bookmark01Icon" size={17} stroke={saved ? 2 : 1.6} />
             </button>
-            <button className="icon-btn" title="Dismiss" onClick={onDismiss}>
+            <button
+              className="icon-btn"
+              title={readOnly ? "Viewers can't dismiss signals" : "Dismiss"}
+              onClick={onDismiss}
+              disabled={readOnly}
+            >
               <Icon name="Cancel01Icon" size={16} stroke={1.7} />
             </button>
           </div>
@@ -104,7 +120,7 @@ export function SignalCard({
             <div className="signal-action-head">
               <Icon name="BulbIcon" size={13} stroke={1.8} color={sig.actionDone ? "var(--ink-4)" : "var(--accent-ink)"} />
               <span>Suggested action</span>
-              {onActionDoneToggle && (
+              {onActionDoneToggle && !readOnly && (
                 <button
                   className="signal-action-toggle"
                   onClick={() => onActionDoneToggle(!sig.actionDone)}

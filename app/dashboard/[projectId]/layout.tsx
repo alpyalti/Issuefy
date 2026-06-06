@@ -53,6 +53,7 @@ export default async function ProjectLayout({ children, params, searchParams }: 
       savedCount={savedCount}
       newSignalCount={newSignalCount}
       ownedProjects={ownedProjects}
+      role={project.current_user_role}
     >
       {children}
     </DashChrome>

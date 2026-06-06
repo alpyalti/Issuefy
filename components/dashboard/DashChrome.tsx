@@ -7,6 +7,7 @@ import { Icon } from "@/components/icons/Icon";
 import type { IconName } from "@/components/icons/registry";
 import { ERROR_MESSAGES } from "@/components/ui/ErrorState";
 import { DashboardViewProvider, useDashboardView, type DashboardView } from "./dashboard-view-context";
+import { DashboardRoleProvider, useDashboardRole, canManage, type DashboardRole } from "./dashboard-role-context";
 import MobileNav from "./MobileNav";
 import MobileDrawer from "./MobileDrawer";
 import ProjectSwitcher from "./ProjectSwitcher";
@@ -67,12 +68,17 @@ export default function DashChrome(props: {
   savedCount: number;
   newSignalCount: number;
   ownedProjects: OwnedProject[];
+  /** Caller's role on the currently-open project (Teams Phase 5). Threaded
+   *  to every client component below via DashboardRoleProvider. */
+  role: DashboardRole;
   children: React.ReactNode;
 }) {
   return (
-    <DashboardViewProvider>
-      <DashChromeInner {...props} />
-    </DashboardViewProvider>
+    <DashboardRoleProvider role={props.role}>
+      <DashboardViewProvider>
+        <DashChromeInner {...props} />
+      </DashboardViewProvider>
+    </DashboardRoleProvider>
   );
 }
 
@@ -96,6 +102,10 @@ function DashChromeInner({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [refreshErr, setRefreshErr] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
+  // Project role. Viewers can't trigger a refresh (it burns the owner's
+  // scrape budget) or use the "r" shortcut.
+  const role = useDashboardRole();
+  const canEdit = canManage(role);
 
   // Real-route active: sources/settings/account/archive get highlighted by URL.
   const realRoute =
@@ -127,7 +137,7 @@ function DashChromeInner({
         setShortcutsOpen((o) => !o);
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
-        runRefresh();
+        if (canEdit) runRefresh();
       } else if (e.key === "Escape") {
         if (shortcutsOpen) setShortcutsOpen(false);
       }
@@ -301,7 +311,12 @@ function DashChromeInner({
               <Icon name="Search01Icon" size={18} stroke={1.7} />
             </button>
             <NotificationBell unread={newSignalCount} />
-            <button className="icon-btn lg" onClick={runRefresh} title="Refresh data" disabled={refreshing}>
+            <button
+              className="icon-btn lg"
+              onClick={runRefresh}
+              title={canEdit ? "Refresh data" : "Viewers can't trigger a refresh"}
+              disabled={refreshing || !canEdit}
+            >
               <Icon name="RefreshIcon" size={18} stroke={1.6} className={refreshing ? "spin" : ""} />
             </button>
           </div>

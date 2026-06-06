@@ -8,6 +8,7 @@ import { SignalCard } from "@/components/signals/SignalCard";
 import { Favicon } from "@/components/signals/Favicon";
 import { EmptyState, EMPTY_SUMMARY_MESSAGE } from "@/components/ui/EmptyState";
 import { useDashboardView } from "./dashboard-view-context";
+import { useDashboardRole } from "./dashboard-role-context";
 import FirstRunCard from "./FirstRunCard";
 import type { IconName } from "@/components/icons/registry";
 import type { SignalItem, SourceItem } from "@/lib/types";
@@ -56,6 +57,10 @@ export default function ProjectDashboard({
 }: ProjectDashboardProps) {
   const { view, setView } = useDashboardView();
   const router = useRouter();
+  // Viewers see a read-only feed (Teams Phase 5). The actual security
+  // boundary is the server-side manageableSignal check on PATCH /signals/:id.
+  const role = useDashboardRole();
+  const readOnly = role === "viewer";
 
   const [signals, setSignals] = useState<SignalItem[]>(initialSignals);
   const [tab, setTab] = useState("all");
@@ -240,6 +245,7 @@ export default function ProjectDashboard({
                 onNoteChange={(next) => setNote(s.id, next)}
                 onActionDoneToggle={(done) => toggleActionDone(s.id, done)}
                 companySet={companySet}
+                readOnly={readOnly}
               />
             ))
           )}
