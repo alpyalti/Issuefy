@@ -26,6 +26,7 @@ import { sendUsageNoticeEmail, sendDailyBriefEmail } from "./mailer";
 import { captureBreadcrumb, captureError } from "./sentry";
 import { generateSignalsForProject } from "./signals";
 import { generateDailySummaryForProject } from "./daily-summary";
+import { pickSocialScrapeTargets, ingestRedditActivity } from "./social-monitor";
 
 interface ProjectRow {
   id: string;
@@ -39,7 +40,12 @@ interface UserRow {
   email_brief_enabled: boolean;
   email_brief_unsubscribe_token: string;
 }
-interface CompetitorRow { id: string; website_url: string; is_active: boolean; }
+interface CompetitorRow {
+  id: string;
+  website_url: string;
+  is_active: boolean;
+  socials: Record<string, string> | null;
+}
 interface KeywordRow { id: string; keyword: string; is_active: boolean; last_discovered_at: string | null; }
 
 const SCRAPE_CONCURRENCY = 4; // PRD §10.7: 3–5 concurrent
@@ -153,7 +159,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
 
     // ── Stage 2: scrape the known URL set (competitors + discovered URLs) ──
     const competitors = (await sql`
-      SELECT id, website_url, is_active
+      SELECT id, website_url, is_active, socials
       FROM competitors
       WHERE project_id = ${projectId} AND is_active = true
     `) as CompetitorRow[];
@@ -169,7 +175,29 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
       sourceType: SourceType;
       competitorId: string | null;
       keywordId: string | null;
+      /** Per-target ScraperAPI flags. LinkedIn passes premium+render. */
+      scrapeOpts?: { render?: boolean; premium?: boolean };
     };
+
+    // Stage 2.5 — social account monitoring (YouTube daily / LinkedIn weekly).
+    // Built into the same targets array so it shares the same budget guard,
+    // concurrency, and change-detection plumbing. Reddit is fetched separately
+    // AFTER the scrape loop (free, direct JSON fetch).
+    let socialTargets: ScrapeTarget[] = [];
+    try {
+      const picked = await pickSocialScrapeTargets(projectId, competitors);
+      socialTargets = picked.map((p) => ({
+        url: p.url,
+        sourceType: p.sourceType,
+        competitorId: p.competitorId,
+        keywordId: null,
+        scrapeOpts: p.scrapeOpts,
+      }));
+    } catch (e) {
+      // Non-fatal — the main competitor-website + SERP discovery loop still runs.
+      captureBreadcrumb("social: pickSocialScrapeTargets failed", { projectId, msg: e instanceof Error ? e.message : "?" });
+    }
+
     const targets: ScrapeTarget[] = [
       ...competitors.map((c): ScrapeTarget => ({
         url: c.website_url, sourceType: "Competitor Website", competitorId: c.id, keywordId: null,
@@ -180,6 +208,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
         competitorId: s.competitor_id,
         keywordId: s.keyword_id,
       })),
+      ...socialTargets,
     ];
 
     // Per-project/day safety rail (PRD §21.3): cap how many sources this run
@@ -237,6 +266,20 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
           sourcesRefreshed++;
         }
       }
+    }
+
+    // ── Stage 2.6: Reddit ingestion (free, direct JSON fetch) ─────────────
+    // Reddit exposes a public `.json` variant of every URL. We hit it directly
+    // so it costs nothing against the user's ScraperAPI budget. Each fresh
+    // post lands as a "Public Discussion" source and flows through Stage 3
+    // exactly like a scraped article. Non-fatal: any failure just skips Reddit.
+    try {
+      const redditResult = await ingestRedditActivity(competitors, projectId);
+      if (redditResult.inserted > 0) {
+        captureBreadcrumb("reddit ingestion", { projectId, scanned: redditResult.scanned, inserted: redditResult.inserted });
+      }
+    } catch (e) {
+      captureBreadcrumb("reddit ingestion failed", { projectId, msg: e instanceof Error ? e.message : "?" });
     }
 
     // ── Stage 3: AI signal extraction (PRD §13.5 / §16.1) ──────────────────
@@ -404,7 +447,7 @@ interface ScrapeOutcome {
 }
 
 async function scrapeAndStore(
-  t: { url: string; sourceType: SourceType; competitorId: string | null; keywordId: string | null },
+  t: { url: string; sourceType: SourceType; competitorId: string | null; keywordId: string | null; scrapeOpts?: { render?: boolean; premium?: boolean } },
   projectId: string,
   userId: string,
   limits: ReturnType<typeof getLimits>,
@@ -415,7 +458,10 @@ async function scrapeAndStore(
   if (after > limits.scrapeCallsPerCycle) throw new Error("BUDGET_EXHAUSTED");
   if (storedTodayGet() >= limits.maxSourcesPerProjectPerDay) return { skipped: true, inserted: false };
 
-  const { html } = await standardScrape({ url: t.url });
+  // Per-target options let LinkedIn use premium+render proxies (5× cost from
+  // ScraperAPI's side, 1 budget tick from the user's). Defaults keep the
+  // standard-and-cheap path for everything else.
+  const { html } = await standardScrape({ url: t.url, ...(t.scrapeOpts ?? {}) });
   const cleaned = cleanForStorage(html);
 
   // PRD §13.3 — empty/blocked pages must NOT enter the store nor the AI layer.

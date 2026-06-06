@@ -42,6 +42,10 @@ export interface StandardScrapeOptions {
   url: string;
   /** JS rendering — defaults to false (cheaper). Only enable for SPA-heavy targets. */
   render?: boolean;
+  /** Premium proxies — required for sites with aggressive anti-bot (LinkedIn,
+   *  Instagram, some news sites). Costs additional ScraperAPI credits per call;
+   *  only enable when standard proxies are known to fail. */
+  premium?: boolean;
   /** Geo target, e.g. "us", "de". Optional. */
   countryCode?: string;
 }
@@ -62,6 +66,7 @@ export async function standardScrape(opts: StandardScrapeOptions): Promise<Stand
     url: opts.url,
     render: String(opts.render ?? false),
   });
+  if (opts.premium) params.set("premium", "true");
   if (opts.countryCode) params.set("country_code", opts.countryCode);
 
   const res = await fetchWithTimeout(`https://api.scraperapi.com/?${params.toString()}`);
