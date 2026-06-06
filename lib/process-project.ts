@@ -300,11 +300,47 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
         const summaryRow = sendRows[0];
         if (summaryRow && !summaryRow.email_sent_at) {
           const appUrl = (process.env.APP_URL || "https://issuefy.app").replace(/\/+$/, "");
+
+          // Pull today's signals (same scrape cycle as this summary) so the
+          // email can include the full scannable list under the brief. Capped
+          // at 12, ordered High → Low importance then newest first. One
+          // representative source per signal via lateral join. Non-fatal: if
+          // this fails the email still goes out without the list.
+          let signals: Array<{ title: string; category: string; description: string; importance: "High" | "Medium" | "Low"; source: { url: string; domain: string } | null }> = [];
+          try {
+            const signalRows = (await sql`
+              SELECT s.title, s.category, s.description, s.importance,
+                     (SELECT jsonb_build_object('url', src.url, 'domain', src.domain)
+                        FROM signal_sources ss
+                        JOIN sources src ON src.id = ss.source_id
+                        WHERE ss.signal_id = s.id
+                        ORDER BY src.scraped_at DESC NULLS LAST
+                        LIMIT 1) AS source
+                FROM signals s
+               WHERE s.project_id = ${projectId}
+                 AND s.dismissed_at IS NULL
+                 AND s.created_at >= (${summaryDate}::date)
+                 AND s.created_at <  (${summaryDate}::date + INTERVAL '1 day')
+               ORDER BY CASE s.importance
+                          WHEN 'High' THEN 0
+                          WHEN 'Medium' THEN 1
+                          ELSE 2
+                        END,
+                        s.created_at DESC
+               LIMIT 12
+            `) as Array<{ title: string; category: string; description: string; importance: "High" | "Medium" | "Low"; source: { url: string; domain: string } | null }>;
+            signals = signalRows;
+          } catch (e) {
+            captureBreadcrumb("daily brief: signals query failed", { projectId, msg: e instanceof Error ? e.message : "?" });
+          }
+
           await sendDailyBriefEmail(user.email, {
             projectName: project.name || "your project",
             summaryDate,
             summaryText: summaryRow.summary_text,
             sources: summaryRow.sources ?? [],
+            signals,
+            appUrl,
             dashboardUrl: `${appUrl}/dashboard/${projectId}`,
             unsubscribeUrl: `${appUrl}/unsubscribe?token=${encodeURIComponent(user.email_brief_unsubscribe_token)}`,
           });
