@@ -27,10 +27,10 @@ export default async function SettingsPage({ params }: Ctx) {
 
   const limits = getLimits(user.plan);
   const usageRows = [
-    { label: "Sources stored", used: usage.sources_stored, limit: limits.sourcesPerMonth, note: "Resets at the start of each calendar month." },
-    { label: "AI signals generated", used: usage.signals_generated, limit: limits.signalsPerMonth },
-    { label: "SERP discovery calls", used: usage.serp_calls, limit: limits.serpCallsPerCycle, note: "Weekly discovery — keyword → top organic results." },
-    { label: "Scrape calls", used: usage.scrape_calls, limit: limits.scrapeCallsPerCycle, note: "Daily competitor + discovered URL scraping." },
+    { label: "Sources collected", used: usage.sources_stored, limit: limits.sourcesPerMonth, note: "Articles, posts and pages we've gathered for you this month." },
+    { label: "Insights generated", used: usage.signals_generated, limit: limits.signalsPerMonth, note: "Key findings our AI summarized from those sources." },
+    { label: "Keyword searches", used: usage.serp_calls, limit: limits.serpCallsPerCycle, note: "Web searches we run on your keywords to find new sources." },
+    { label: "Page checks", used: usage.scrape_calls, limit: limits.scrapeCallsPerCycle, note: "Times we visit your competitors and links to check for updates." },
   ];
 
   const competitorCap = Math.min(limits.competitorsPerProject, HARD_CAPS.competitorsPerProject);
