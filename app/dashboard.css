@@ -46,32 +46,49 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .watch-add:hover{ border-color:var(--accent); color:var(--accent-ink); }
 
 .side-foot{ margin-top:auto; padding-top:12px; }
+
+/* The profile chip is a dropdown trigger; .profile-wrap anchors the popover. */
+.profile-wrap{ position:relative; }
 .profile{ display:flex; align-items:center; gap:10px; padding:9px; border-radius:var(--r-sm); border:1px solid var(--line); }
 .profile:hover{ background:var(--surface-2); }
 .profile .ic-wrap{ margin-left:auto; color:var(--ink-3); }
+/* When .profile is a <button> (sidebar trigger), reset native button styling. */
+.profile-trigger{ width:100%; background:var(--surface); font:inherit; color:inherit; text-align:left; cursor:pointer; }
+.profile-trigger.on{ background:var(--surface-2); border-color:var(--line-strong); }
 .avatar{ width:34px; height:34px; border-radius:50%; background:var(--ink); color:#fff; flex:none;
   display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:.02em; }
 .avatar.sm{ width:32px; height:32px; font-size:11px; }
 .profile-meta{ display:flex; flex-direction:column; min-width:0; }
-.profile-name{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.profile-name{ font-size:13.5px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .profile-role{ font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
 
-/* Compact sign-out icon button used inside the profile chip (sidebar + drawer).
-   Sits at the right edge; click steals the event so the chip's Link doesn't
-   fire alongside it. */
-.signout-icon{
-  margin-left:auto; flex:none;
-  display:inline-flex; align-items:center; justify-content:center;
-  width:30px; height:30px; padding:0;
-  border-radius:var(--r-sm);
-  background:transparent; border:1px solid transparent;
-  color:var(--ink-3);
-  cursor:pointer;
-  transition:background .14s, color .14s, border-color .14s;
+/* Profile dropdown — opens upward, anchored to the chip. */
+.profile-menu{
+  position:absolute; left:0; right:0; bottom:calc(100% + 8px);
+  background:var(--surface); border:1px solid var(--line-2);
+  border-radius:var(--r); box-shadow:var(--shadow-lg);
+  padding:6px; z-index:60;
+  display:flex; flex-direction:column; gap:1px;
+  animation:profileMenuRise .14s ease both;
 }
-.signout-icon:hover{ background:var(--surface); border-color:var(--line); color:var(--neg); }
-.signout-icon:active{ transform:scale(.97); }
-.signout-icon:disabled{ opacity:.5; cursor:wait; }
+@keyframes profileMenuRise{ from{ opacity:0; transform:translateY(4px); } to{ opacity:1; transform:none; } }
+.profile-menu-head{ display:flex; align-items:center; gap:10px; padding:8px 8px 10px; }
+.profile-menu-email{ font-family:var(--mono); font-size:10.5px; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.profile-menu-sep{ height:1px; background:var(--line); margin:4px 2px; }
+.profile-menu-item{
+  display:flex; align-items:center; gap:10px; width:100%;
+  padding:9px 10px; border-radius:var(--r-sm);
+  background:transparent; border:none; cursor:pointer;
+  font-family:var(--sans); font-size:13.5px; font-weight:500; color:var(--ink-2);
+  text-align:left; text-decoration:none; transition:background .12s, color .12s;
+}
+.profile-menu-item:hover{ background:var(--surface-2); color:var(--ink); }
+.profile-menu-item .ic-wrap{ color:var(--ink-3); flex:none; }
+.profile-menu-item:hover .ic-wrap{ color:var(--ink-2); }
+.profile-menu-item.danger{ color:var(--neg); }
+.profile-menu-item.danger .ic-wrap{ color:var(--neg); }
+.profile-menu-item.danger:hover{ background:var(--neg-bg); color:var(--neg); }
+.profile-menu-item:disabled{ opacity:.55; cursor:wait; }
 
 /* ---------- Main ---------- */
 .main{ display:flex; flex-direction:column; min-width:0; height:100vh; }
@@ -360,7 +377,20 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 }
 .mobile-drawer-close:hover{ background:var(--surface-2); color:var(--ink); }
 .mobile-drawer-body{ flex:1; overflow-y:auto; padding:8px 14px; }
-.mobile-drawer-foot{ padding:14px; border-top:1px solid var(--line); }
+.mobile-drawer-foot{ padding:14px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:6px; }
+.mobile-drawer-actions{ display:flex; flex-direction:column; gap:1px; margin-top:4px; }
+.mobile-drawer-action{
+  display:flex; align-items:center; gap:10px; width:100%;
+  padding:11px 10px; border-radius:var(--r-sm);
+  background:transparent; border:none; cursor:pointer;
+  font-family:var(--sans); font-size:14px; font-weight:500; color:var(--ink-2);
+  text-align:left; text-decoration:none; transition:background .12s, color .12s;
+}
+.mobile-drawer-action:hover{ background:var(--surface-2); color:var(--ink); }
+.mobile-drawer-action .ic-wrap{ color:var(--ink-3); flex:none; }
+.mobile-drawer-action.danger{ color:var(--neg); }
+.mobile-drawer-action.danger .ic-wrap{ color:var(--neg); }
+.mobile-drawer-action:disabled{ opacity:.55; cursor:wait; }
 
 @media(max-width:760px){
   .dash{ grid-template-columns:1fr; }
@@ -371,7 +401,6 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
      The CommandPalette still opens with ⌘K or the icon button. */
   .search{ display:none; }
   .topbar-search-mobile{ display:flex; }
-  .topbar-avatar-desktop{ display:none; }
 
   /* Show the hamburger + bottom nav. */
   .topbar-burger{ display:flex; }

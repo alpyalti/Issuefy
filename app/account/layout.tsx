@@ -1,7 +1,5 @@
-import "../dashboard.css";
-
-/* Reuses the dashboard's design tokens / card styles for visual consistency.
-   No sidebar/topbar on /account — it's a focused, single-column flow. */
+/* /account only redirects (see page.tsx) into /dashboard/[projectId]/account,
+   where the dashboard shell provides chrome. No UI renders here. */
 export default function AccountLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }

@@ -4,7 +4,6 @@ import { getProject, getCompetitors, getKeywords } from "@/lib/project-data";
 import { getLimits, currentPeriodStart, HARD_CAPS } from "@/lib/usage";
 import { getUsage } from "@/lib/usage-counters";
 import { UsageMeter } from "@/components/ui/UsageMeter";
-import EmailPreferences from "@/components/settings/EmailPreferences";
 import SettingsClient from "@/components/settings/SettingsClient";
 
 export const runtime = "nodejs";
@@ -40,8 +39,6 @@ export default async function SettingsPage({ params }: Ctx) {
   return (
     <div className="page-wrap" style={{ display: "flex", flexDirection: "column", gap: 28 }}>
       <UsageMeter rows={usageRows} />
-
-      <EmailPreferences initialEnabled={user.email_brief_enabled} />
 
       <SettingsClient
         project={{

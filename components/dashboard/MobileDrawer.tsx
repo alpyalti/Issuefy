@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons/Icon";
-import SignOutButton from "@/components/auth/SignOutButton";
+import { useAccountActions } from "./ProfileMenu";
 
 /**
  * Mobile slide-in drawer holding the watchlist + profile.
@@ -28,6 +28,8 @@ export default function MobileDrawer({
   keywords: Keyword[];
   initials: string;
 }) {
+  const { manageSubscription, signOut, helpHref, busy } = useAccountActions();
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -80,14 +82,29 @@ export default function MobileDrawer({
         </div>
 
         <footer className="mobile-drawer-foot">
-          <Link href="/account" className="profile" onClick={onClose}>
+          <Link href={`/dashboard/${projectId}/account`} className="profile" onClick={onClose}>
             <span className="avatar">{initials}</span>
             <span className="profile-meta">
               <span className="profile-name">{userName}</span>
               <span className="profile-role">{projectName}</span>
             </span>
-            <SignOutButton variant="icon" />
+            <Icon name="ArrowRight01Icon" size={16} stroke={1.7} />
           </Link>
+          <div className="mobile-drawer-actions">
+            <button
+              className="mobile-drawer-action"
+              onClick={() => { onClose(); manageSubscription(); }}
+              disabled={busy}
+            >
+              <Icon name="CreditCardIcon" size={17} stroke={1.7} /> Manage subscription
+            </button>
+            <a className="mobile-drawer-action" href={helpHref}>
+              <Icon name="HelpCircleIcon" size={17} stroke={1.7} /> Help &amp; support
+            </a>
+            <button className="mobile-drawer-action danger" onClick={signOut}>
+              <Icon name="Logout01Icon" size={17} stroke={1.7} /> Log out
+            </button>
+          </div>
         </footer>
       </aside>
     </div>

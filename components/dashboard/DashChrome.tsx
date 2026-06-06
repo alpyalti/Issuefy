@@ -11,7 +11,7 @@ import MobileNav from "./MobileNav";
 import MobileDrawer from "./MobileDrawer";
 import ProjectSwitcher from "./ProjectSwitcher";
 import NotificationBell from "./NotificationBell";
-import SignOutButton from "@/components/auth/SignOutButton";
+import ProfileMenu from "./ProfileMenu";
 
 interface OwnedProject { id: string; name: string; company_name: string | null; }
 
@@ -50,6 +50,7 @@ const VIEW_TITLES: Record<string, { title: string; sub: string }> = {
   sources: { title: "Sources", sub: "Every source behind your signals — click any to verify" },
   settings: { title: "Settings", sub: "Project, watchlist and plan usage" },
   archive: { title: "Archive", sub: "Past daily briefs" },
+  account: { title: "Account", sub: "Your identity, plan, billing and security" },
 };
 
 export default function DashChrome(props: {
@@ -90,10 +91,11 @@ function DashChromeInner({
   const [refreshErr, setRefreshErr] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
 
-  // Real-route active: sources/settings get highlighted by URL.
+  // Real-route active: sources/settings/account/archive get highlighted by URL.
   const realRoute =
     pathname?.endsWith("/sources") ? "sources" :
     pathname?.endsWith("/settings") ? "settings" :
+    pathname?.endsWith("/account") ? "account" :
     pathname?.includes("/archive") ? "archive" :
     null;
   const isDashboardIndex = !realRoute; // true on /dashboard/[id]
@@ -256,14 +258,7 @@ function DashChromeInner({
         </div>
 
         <div className="side-foot">
-          <Link href="/account" prefetch className="profile">
-            <span className="avatar">{user.initials}</span>
-            <span className="profile-meta">
-              <span className="profile-name">{user.name || user.email}</span>
-              <span className="profile-role">{project.name}</span>
-            </span>
-            <SignOutButton variant="icon" />
-          </Link>
+          <ProfileMenu projectId={project.id} user={user} />
         </div>
       </aside>
 
@@ -299,7 +294,6 @@ function DashChromeInner({
             <button className="icon-btn lg" onClick={runRefresh} title="Refresh data" disabled={refreshing}>
               <Icon name="RefreshIcon" size={18} stroke={1.6} className={refreshing ? "spin" : ""} />
             </button>
-            <span className="avatar sm topbar-avatar-desktop">{user.initials}</span>
           </div>
         </header>
         <div className="main-scroll">
