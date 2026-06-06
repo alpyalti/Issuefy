@@ -71,20 +71,30 @@ export async function POST(req: Request, { params }: Ctx) {
     return conflict("An invitation to that email is already pending.");
   }
 
-  // Per-account seat cap. We count:
+  // Per-account seat cap, enforced atomically by Postgres. We count:
   //   - distinct user_ids that are members of any project owned by THIS owner
   //     (the owner counts as one; their own membership on each project is the
   //     same user_id)
   //   - plus pending, non-expired, non-accepted invites on any project owned
   //     by this owner
   // The +1 below represents this new invitation.
-  const seatRows = (await sql`
-    SELECT
+  //
+  // Previously: SELECT count, JS compare, INSERT — raced under concurrent
+  // requests (two parallel invites at the boundary both passed the check
+  // and both inserted, blowing the seat cap). Now: INSERT ... SELECT WHERE
+  // the seat math passes. Single statement, single round-trip; the subqueries
+  // can't see another in-flight insert that hasn't committed yet, so the
+  // race window collapses from "network roundtrip" to "single SQL statement
+  // execution". If the cap is hit, INSERT returns 0 rows and we 409.
+  const rows = (await sql`
+    INSERT INTO project_invitations (project_id, inviter_id, email, role)
+    SELECT ${projectId}::uuid, ${user.id}, ${body.email}, ${body.role}
+    WHERE (
       (SELECT COUNT(DISTINCT pm.user_id)::int
          FROM project_members pm
          JOIN projects p ON p.id = pm.project_id
         WHERE p.user_id = ${user.id})
-      AS members,
+      +
       (SELECT COUNT(*)::int
          FROM project_invitations pi
          JOIN projects p ON p.id = pi.project_id
@@ -92,22 +102,14 @@ export async function POST(req: Request, { params }: Ctx) {
           AND pi.accepted_at IS NULL
           AND pi.canceled_at IS NULL
           AND pi.expires_at > now())
-      AS pending
-  `) as Array<{ members: number; pending: number }>;
-  const seatsUsed = (seatRows[0]?.members ?? 0) + (seatRows[0]?.pending ?? 0);
-  if (seatsUsed + 1 > limits.seats) {
+    ) + 1 <= ${limits.seats}
+    RETURNING id, email, role, token, expires_at, created_at
+  `) as Array<{ id: string; email: string; role: "editor" | "viewer"; token: string; expires_at: string; created_at: string }>;
+  if (rows.length === 0) {
     return conflict(
       `Your plan allows ${limits.seats} team seat${limits.seats === 1 ? "" : "s"} (you plus invitees). Upgrade for more.`,
     );
   }
-
-  // Insert the invitation — the DB generates the random UUID token and the
-  // 7-day expiry via DEFAULT.
-  const rows = (await sql`
-    INSERT INTO project_invitations (project_id, inviter_id, email, role)
-    VALUES (${projectId}, ${user.id}, ${body.email}, ${body.role})
-    RETURNING id, email, role, token, expires_at, created_at
-  `) as Array<{ id: string; email: string; role: "editor" | "viewer"; token: string; expires_at: string; created_at: string }>;
   const invite = rows[0];
 
   // Send the email best-effort — non-fatal so a Resend hiccup doesn't lose
