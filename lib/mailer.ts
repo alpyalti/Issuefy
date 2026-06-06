@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { buildDailyBriefEmail, type DailyBriefEmailInput } from "./daily-brief-email";
 import { buildInvitationEmail, type InvitationEmailInput } from "./invitation-email";
 import { buildLapseEmail, type LapseEmailInput } from "./lapse-email";
+import { captureBreadcrumb, captureError } from "./sentry";
 import {
   buildSupportAdminReplyEmail,
   buildSupportInboundEmail,
@@ -31,19 +32,64 @@ const FROM = process.env.RESEND_FROM_EMAIL || "Issuefy <hello@issuefy.app>";
 
 const client = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
+/**
+ * Heuristic: looks like a transient failure that's worth retrying.
+ * Resend's typed error doesn't expose an HTTP-status field reliably, so we
+ * pattern-match the message string. False negatives just skip the retry
+ * (we still surface the original error); false positives waste up to 6s
+ * but eventually fail with the same message. Acceptable for daily cron.
+ */
+function isTransientError(msg: string): boolean {
+  const s = msg.toLowerCase();
+  return (
+    s.includes("rate") ||         // 429
+    s.includes("timeout") ||
+    s.includes("timed out") ||
+    s.includes("network") ||
+    s.includes("econnreset") ||
+    s.includes("etimedout") ||
+    s.includes(" 500") || s.includes(" 502") || s.includes(" 503") || s.includes(" 504") ||
+    s.includes("internal server") ||
+    s.includes("bad gateway") ||
+    s.includes("service unavailable") ||
+    s.includes("gateway timeout")
+  );
+}
+
 async function send({ to, subject, html, text }: SendArgs): Promise<{ ok: boolean; id?: string; error?: string }> {
   if (!client) {
+    // Loudly surface a missing key — without this, a deploy without
+    // RESEND_API_KEY silently dropped every email for weeks. Sentry now
+    // captures a breadcrumb so we notice on first traffic.
+    captureBreadcrumb("email.skipped: RESEND_API_KEY not set", { to, subject });
     // eslint-disable-next-line no-console
     console.info("[mailer] (no RESEND_API_KEY) would send:", { to, subject });
     return { ok: true };
   }
-  try {
-    const res = await client.emails.send({ from: FROM, to, subject, html, text });
-    if (res.error) return { ok: false, error: res.error.message };
-    return { ok: true, id: res.data?.id };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  // 3-attempt exponential backoff (500ms / 1.5s / 4.5s ≈ 6.5s worst case).
+  // Only retry on transient errors — permanent errors (invalid email, blocked
+  // sender) fail fast on the first attempt.
+  const delays = [500, 1500, 4500];
+  let lastError = "send failed";
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    try {
+      const res = await client.emails.send({ from: FROM, to, subject, html, text });
+      if (!res.error) return { ok: true, id: res.data?.id };
+      lastError = res.error.message || "send failed";
+      if (!isTransientError(lastError) || attempt === delays.length - 1) {
+        return { ok: false, error: lastError };
+      }
+      captureBreadcrumb("email.retry", { to, subject, attempt: attempt + 1, msg: lastError });
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      if (!isTransientError(lastError) || attempt === delays.length - 1) {
+        return { ok: false, error: lastError };
+      }
+      captureBreadcrumb("email.retry", { to, subject, attempt: attempt + 1, msg: lastError });
+    }
+    await new Promise(r => setTimeout(r, delays[attempt]));
   }
+  return { ok: false, error: lastError };
 }
 
 export async function sendWelcomeEmail(to: string, name?: string | null) {
@@ -113,6 +159,13 @@ export async function sendSubscriptionLapsedEmail(to: string, input: Omit<LapseE
 // ── Support ticket emails ──────────────────────────────────────────────
 const APP_URL = (process.env.APP_URL || "https://issuefy.app").replace(/\/+$/, "");
 const SUPPORT_INBOX = process.env.SUPPORT_INBOX_EMAIL || "support@issuefy.app";
+
+// One-time warning at module init if SUPPORT_INBOX_EMAIL wasn't set. Without
+// this, a deploy that forgets the env var silently routes every support
+// notification to support@issuefy.app — fine in prod, surprising in staging.
+if (!process.env.SUPPORT_INBOX_EMAIL) {
+  captureBreadcrumb("env.SUPPORT_INBOX_EMAIL not set — falling back to support@issuefy.app");
+}
 
 /** Confirmation sent to the user when they open a ticket. */
 export async function sendSupportTicketCreatedEmail(to: string, input: SupportTicketCreatedInput) {

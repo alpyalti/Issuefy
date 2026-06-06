@@ -394,7 +394,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
         }
       } catch (e) {
         errors.push(`email: ${e instanceof Error ? e.message : "failed"}`);
-        captureError(e, { stage: "email", projectId });
+        captureError(e, { stage: "email.dailyBrief", projectId });
       }
     }
     void emailSent;
