@@ -34,7 +34,7 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .side-item.on .side-badge{ background:rgba(255,255,255,.16); color:#fff; }
 
 .watchlist{ display:flex; flex-direction:column; gap:1px; }
-.watch-item{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px; transition:background .14s; }
+.watch-item{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px; transition:background .14s; text-decoration:none; color:inherit; cursor:pointer; }
 .watch-item:hover{ background:var(--surface-2); }
 .watch-live{ width:7px; height:7px; border-radius:50%; background:var(--ink-4); flex:none; }
 .watch-live.on{ background:var(--pos); box-shadow:0 0 0 3px var(--pos-bg); }

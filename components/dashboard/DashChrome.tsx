@@ -262,22 +262,36 @@ function DashChromeInner({
         <div className="side-section side-watch">
           <div className="side-label">Watchlist</div>
           <div className="watchlist">
+            {/* Each competitor / keyword is a Link to the project settings
+                page — clicking jumps the user to where they can edit it. */}
             {competitors.length > 0 && <div className="watch-group">Competitors</div>}
             {competitors.map((c) => (
-              <div className="watch-item" key={"c-" + c.id}>
+              <Link
+                href={`/dashboard/${project.id}/settings`}
+                prefetch
+                className="watch-item"
+                key={"c-" + c.id}
+                title={`Edit ${c.name} in project settings`}
+              >
                 <span className={"watch-live " + (c.is_active ? "on" : "")} />
                 <span className="watch-label">{c.name}</span>
-              </div>
+              </Link>
             ))}
             {keywords.length > 0 && <div className="watch-group">Keywords</div>}
             {keywords.map((k) => (
-              <div className="watch-item" key={"k-" + k.id}>
+              <Link
+                href={`/dashboard/${project.id}/settings`}
+                prefetch
+                className="watch-item"
+                key={"k-" + k.id}
+                title={`Edit ${k.keyword} in project settings`}
+              >
                 <span className={"watch-live " + (k.is_active ? "on" : "")} />
                 <span className="watch-label">{k.keyword}</span>
-              </div>
+              </Link>
             ))}
             <Link href={`/dashboard/${project.id}/settings`} prefetch className="watch-add">
-              <Icon name="PlusSignIcon" size={15} stroke={1.9} /> Manage watchlist
+              <Icon name="Settings01Icon" size={15} stroke={1.8} /> Project settings
             </Link>
           </div>
         </div>

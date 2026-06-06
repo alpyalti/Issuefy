@@ -110,20 +110,30 @@ export default function MobileDrawer({
             <div className="watchlist">
               {competitors.length > 0 && <div className="watch-group">Competitors</div>}
               {competitors.map((c) => (
-                <div className="watch-item" key={"c-" + c.id}>
+                <Link
+                  href={`/dashboard/${projectId}/settings`}
+                  onClick={onClose}
+                  className="watch-item"
+                  key={"c-" + c.id}
+                >
                   <span className={"watch-live " + (c.is_active ? "on" : "")} />
                   <span className="watch-label">{c.name}</span>
-                </div>
+                </Link>
               ))}
               {keywords.length > 0 && <div className="watch-group">Keywords</div>}
               {keywords.map((k) => (
-                <div className="watch-item" key={"k-" + k.id}>
+                <Link
+                  href={`/dashboard/${projectId}/settings`}
+                  onClick={onClose}
+                  className="watch-item"
+                  key={"k-" + k.id}
+                >
                   <span className={"watch-live " + (k.is_active ? "on" : "")} />
                   <span className="watch-label">{k.keyword}</span>
-                </div>
+                </Link>
               ))}
               <Link href={`/dashboard/${projectId}/settings`} className="watch-add" onClick={onClose}>
-                <Icon name="PlusSignIcon" size={15} stroke={1.9} /> Manage watchlist
+                <Icon name="Settings01Icon" size={15} stroke={1.8} /> Project settings
               </Link>
             </div>
           </section>
