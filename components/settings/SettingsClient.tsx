@@ -72,6 +72,24 @@ export default function SettingsClient({
     }
   }
 
+  // ── Your company (PATCH /api/projects/:id company_* fields) ───────────
+  async function saveCompany(patch: Record<string, unknown>): Promise<boolean> {
+    setErr(null);
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error("save failed");
+      router.refresh();
+      return true;
+    } catch {
+      setErr("Couldn't save your company details — try again.");
+      return false;
+    }
+  }
+
   // ── Competitor add / toggle / remove ──────────────────────────────────
   async function addCompetitor() {
     if (!newCompetitorUrl.trim()) return;
@@ -208,6 +226,9 @@ export default function SettingsClient({
         </div>
       </section>
 
+      {/* Your company */}
+      <YourCompanyCard project={project} onSave={saveCompany} />
+
       {/* Competitors */}
       <section className="card" style={{ padding: 22 }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
@@ -328,6 +349,138 @@ const labelStyle: React.CSSProperties = {
   marginBottom: 6,
 };
 
+/* ───────────── Shared socials editor (competitor + your company) ───────────── */
+
+function SocialsFields({
+  draft, setDraft,
+}: {
+  draft: Record<string, string>;
+  setDraft: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}) {
+  return (
+    <>
+      {SOCIAL_PLATFORMS.map((p) => (
+        <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 26, height: 26, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--line)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", flex: "none" }}>
+            <Icon name={p.icon} size={13} stroke={1.6} />
+          </span>
+          <span style={{ width: 88, fontSize: 12, fontWeight: 600, color: "var(--ink-2)", flex: "none" }}>{p.label}</span>
+          <input
+            value={draft[p.key] || ""}
+            onChange={(e) => setDraft((d) => ({ ...d, [p.key]: e.target.value }))}
+            placeholder={p.placeholder}
+            style={{
+              flex: 1, minWidth: 0, height: 32, padding: "0 10px",
+              border: "1px solid var(--line-2)", borderRadius: 8, background: "var(--surface)",
+              fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink)", outline: "none",
+            }}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/* ───────────── Your company card (edit own company like a competitor) ───────────── */
+
+function YourCompanyCard({
+  project, onSave,
+}: {
+  project: Project;
+  onSave: (patch: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const [name, setName] = useState(project.company_name ?? "");
+  const [website, setWebsite] = useState(project.company_website ?? "");
+  const [description, setDescription] = useState(project.company_description ?? "");
+  const [socials, setSocials] = useState<Record<string, string>>(() => ({ ...(project.company_socials || {}) }));
+  const [track, setTrack] = useState(project.track_company);
+  const [socialsOpen, setSocialsOpen] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+
+  // Re-seed from server after a refresh.
+  useEffect(() => {
+    setName(project.company_name ?? "");
+    setWebsite(project.company_website ?? "");
+    setDescription(project.company_description ?? "");
+    setSocials({ ...(project.company_socials || {}) });
+    setTrack(project.track_company);
+  }, [project.company_name, project.company_website, project.company_description, project.company_socials, project.track_company]);
+
+  async function save() {
+    setStatus("saving");
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(socials)) {
+      const t = (v || "").trim();
+      if (t) clean[k] = t;
+    }
+    const ok = await onSave({
+      company_name: name.trim() || undefined,
+      company_website: website.trim() || undefined,
+      company_description: description.trim() || undefined,
+      company_socials: clean,
+      track_company: track,
+    });
+    setStatus(ok ? "saved" : "idle");
+    if (ok) setTimeout(() => setStatus("idle"), 1_500);
+  }
+
+  const filledSocials = Object.values(socials).filter((v) => v && v.trim()).length;
+
+  return (
+    <section className="card" style={{ padding: 22 }}>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, gap: 12, flexWrap: "wrap" }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18 }}>Your company</h2>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--ink-2)", cursor: "pointer" }}>
+          <input type="checkbox" checked={track} onChange={(e) => setTrack(e.target.checked)} />
+          Track my company in the daily scan
+        </label>
+      </header>
+      <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 14, maxWidth: 560 }}>
+        This is the company Issuefy defends — opportunities and risks are weighed against it. Keep its details and links current.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div>
+          <label style={labelStyle}>Company name</label>
+          <input className="modal-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Inc." />
+        </div>
+        <div>
+          <label style={labelStyle}>Website</label>
+          <input className="modal-input" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="acme.com" />
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label style={labelStyle}>Short description</label>
+          <input className="modal-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What your company does, in one line." />
+        </div>
+      </div>
+
+      <button
+        className="btn btn-quiet btn-sm"
+        style={{ marginTop: 12 }}
+        onClick={() => setSocialsOpen((o) => !o)}
+        aria-expanded={socialsOpen}
+      >
+        <Icon name={socialsOpen ? "ArrowUp01Icon" : "ArrowDown01Icon"} size={14} stroke={1.8} />
+        {socialsOpen ? "Hide social links" : "Social links"}
+        {filledSocials > 0 && <span className="mono" style={{ fontSize: 10.5, color: "var(--ink-3)" }}>{filledSocials}</span>}
+      </button>
+
+      {socialsOpen && (
+        <div style={{ marginTop: 10, padding: "12px 14px 14px", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+          <SocialsFields draft={socials} setDraft={setSocials} />
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16, alignItems: "center" }}>
+        {status === "saved" && <span className="mono" style={{ fontSize: 12, color: "var(--pos)" }}>✓ Saved</span>}
+        <button className="btn btn-accent" onClick={save} disabled={status === "saving"}>
+          {status === "saving" ? "Saving…" : "Save company"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 /* ───────────── Competitor row with collapsible socials editor ───────────── */
 
 const SOCIAL_PLATFORMS: { key: string; label: string; icon: "Globe02Icon" | "Linkedin01Icon" | "NewTwitterIcon" | "InstagramIcon" | "Facebook01Icon" | "YoutubeIcon" | "TiktokIcon" | "RedditIcon"; placeholder: string }[] = [
@@ -402,24 +555,7 @@ function CompetitorRow({
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 4 }}>
             These links are saved on the competitor for your reference. Issuefy doesn&apos;t scrape social posts at this time — only the main website.
           </p>
-          {SOCIAL_PLATFORMS.map((p) => (
-            <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ width: 26, height: 26, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--line)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2)", flex: "none" }}>
-                <Icon name={p.icon} size={13} stroke={1.6} />
-              </span>
-              <span style={{ width: 88, fontSize: 12, fontWeight: 600, color: "var(--ink-2)", flex: "none" }}>{p.label}</span>
-              <input
-                value={draft[p.key] || ""}
-                onChange={(e) => setDraft((d) => ({ ...d, [p.key]: e.target.value }))}
-                placeholder={p.placeholder}
-                style={{
-                  flex: 1, minWidth: 0, height: 32, padding: "0 10px",
-                  border: "1px solid var(--line-2)", borderRadius: 8, background: "var(--surface)",
-                  fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink)", outline: "none",
-                }}
-              />
-            </div>
-          ))}
+          <SocialsFields draft={draft} setDraft={setDraft} />
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>
             {saveStatus === "saved" && <span className="mono" style={{ fontSize: 12, color: "var(--pos)", alignSelf: "center" }}>✓ Saved</span>}
             <button className="btn btn-quiet btn-sm" onClick={() => setDraft({ ...(competitor.socials || {}) })} disabled={saveStatus === "saving"}>Reset</button>

@@ -16,6 +16,7 @@ const socials = z.object({
   twitter: z.string().optional(),
   youtube: z.string().optional(),
   tiktok: z.string().optional(),
+  reddit: z.string().optional(),
   website: z.string().optional(),
 }).strict().partial();
 
