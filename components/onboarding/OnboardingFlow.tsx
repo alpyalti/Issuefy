@@ -272,14 +272,24 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
       }));
       await Promise.allSettled([...compCalls, ...kwCalls]);
 
-      // Trial gate: every new user must finish Stripe Checkout before reaching
-      // the dashboard. Pricing-page params (?plan & ?billing) win; otherwise
-      // we default to Starter / annual (the 14-day free trial). If Checkout
-      // can't be created (Stripe not configured, e.g. dev) we fall through to
-      // the dashboard so local development isn't blocked.
+      // Trial gate. Two paths:
+      //   - If they pre-selected a plan on the pricing page (?plan & ?billing
+      //     in the URL), respect that choice and jump straight to Stripe Checkout.
+      //   - Otherwise send them to /upgrade?required=1 so they consciously pick
+      //     a plan + monthly/annual before payment. Defaulting silently to
+      //     Starter/annual was confusing — users were landing on Stripe Checkout
+      //     without knowing what they'd just been signed up for.
+      // If Checkout can't be created (Stripe not configured, e.g. dev) we fall
+      // through to the dashboard so local development isn't blocked.
       const params = new URLSearchParams(window.location.search);
-      const plan = params.get("plan") || "starter";
-      const billing = params.get("billing") || "annual";
+      const plan = params.get("plan");
+      const billing = params.get("billing");
+
+      if (!plan || !billing) {
+        window.location.href = "/upgrade?required=1";
+        return;
+      }
+
       try {
         const res = await fetch("/api/billing/checkout", {
           method: "POST",
@@ -295,8 +305,7 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
           router.push(`/dashboard/${project.id}`);
           return;
         }
-        // Other failures: the gate on /dashboard will catch them and bounce
-        // to /upgrade?required=1. Send them straight there to skip a hop.
+        // Other failures: bounce to the plan picker so they can retry.
         window.location.href = "/upgrade?required=1";
       } catch {
         window.location.href = "/upgrade?required=1";

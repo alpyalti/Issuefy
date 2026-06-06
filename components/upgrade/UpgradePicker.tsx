@@ -94,7 +94,10 @@ export default function UpgradePicker({ currentPlan }: { currentPlan: string }) 
               </div>
               <div className="tier-cta">
                 <button
-                  className={"btn " + (t.featured ? "btn-accent" : "btn-ghost")}
+                  // Only the Starter (free-trial) CTA gets the accent — the
+                  // paid plans use the neutral ghost style, consistent with
+                  // the landing pricing block.
+                  className={"btn " + (t.id === "starter" ? "btn-accent" : "btn-ghost")}
                   onClick={() => pick(t.id)}
                   disabled={busy === t.id || isCurrent}
                   style={{ width: "100%", justifyContent: "center" }}

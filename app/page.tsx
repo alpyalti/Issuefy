@@ -229,7 +229,7 @@ export default function LandingPage() {
               </div>
               <div className="tier-bill pa">billed annually · $780/yr</div>
               <div className="tier-bill pm">billed monthly</div>
-              <div className="tier-cta"><Link href="/sign-up?plan=growth&billing=annual" className="btn btn-accent">Get started</Link></div>
+              <div className="tier-cta"><Link href="/sign-up?plan=growth&billing=annual" className="btn btn-ghost">Get started</Link></div>
               <div className="tier-trial" />
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">3</span></li>
