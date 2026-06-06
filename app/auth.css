@@ -34,7 +34,11 @@
 .auth-top-link:hover{ color:var(--ink); }
 
 .auth-card{
-  max-width:420px; width:100%; margin:0 auto;
+  /* margin:auto (not 0 auto) centers the card vertically in the column's free
+     space — the brand header stays pinned to the top, the Clerk attribution
+     drops to the bottom, and the form sits in the middle on both desktop and
+     the single-column mobile layout. */
+  max-width:420px; width:100%; margin:auto;
   background:var(--surface);
   border:1px solid var(--line);
   border-radius:var(--r-lg);
