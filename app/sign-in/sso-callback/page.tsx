@@ -25,8 +25,12 @@ export default function SSOCallbackPage() {
         <p style={{ fontSize: 14, color: "var(--ink-2)", lineHeight: 1.5 }}>
           Hold on a moment while we finish connecting your account.
         </p>
+        {/* Required: a first-time Google sign-in transfers to a sign-up, which
+            needs a CAPTCHA mount when bot protection is enabled — without this
+            the transfer fails with a 400. */}
+        <div id="clerk-captcha" />
       </main>
-      <AuthenticateWithRedirectCallback />
+      <AuthenticateWithRedirectCallback signUpForceRedirectUrl="/onboarding" signInForceRedirectUrl="/dashboard" />
     </div>
   );
 }
