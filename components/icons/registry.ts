@@ -59,6 +59,8 @@ import {
   HelpCircleIcon,
   UserCircleIcon,
   NoteAddIcon,
+  PauseIcon,
+  PlayIcon,
   // sources / socials / providers
   Globe02Icon,
   NewTwitterIcon,
@@ -115,6 +117,8 @@ export const ICONS = {
   HelpCircleIcon,
   UserCircleIcon,
   NoteAddIcon,
+  PauseIcon,
+  PlayIcon,
   Globe02Icon,
   NewTwitterIcon,
   Linkedin01Icon,

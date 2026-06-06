@@ -290,7 +290,7 @@ export default function SettingsClient({
           className={"btn " + (isActive ? "btn-ghost" : "btn-accent")}
           onClick={togglePause}
         >
-          <Icon name={isActive ? "Bookmark01Icon" : "RefreshIcon"} size={15} stroke={1.8} />
+          <Icon name={isActive ? "PauseIcon" : "PlayIcon"} size={15} stroke={1.8} />
           {isActive ? "Pause project" : "Resume project"}
         </button>
       </section>
