@@ -90,21 +90,14 @@ export default async function SupportPage({ params }: Ctx) {
 
         {/* ── Right column ──────────────────────────────────────── */}
         <div className="support-col support-col-right">
-          {/* SLA card */}
-          <section className="support-card support-sla">
-            <span className="support-sla-mark">
-              <Icon name="CheckmarkBadge01Icon" size={18} stroke={1.7} color="#fff" />
-            </span>
-            <h3>We typically reply within 24 hours.</h3>
-            <p>Faster on bugs, billing, and account issues. You&apos;ll get an email when we respond, and the full thread lives on this page.</p>
-          </section>
-
-          {/* Email card */}
+          {/* Email card — also carries the 24-hour SLA note so the right
+              column starts with a single clear "talk to us" panel. */}
           <section className="support-card support-email">
-            <div className="support-email-meta">
-              <p className="support-card-eyebrow">Prefer email?</p>
-              <p className="support-email-addr">support@issuefy.app</p>
-            </div>
+            <p className="support-card-eyebrow">Prefer email?</p>
+            <p className="support-email-addr">support@issuefy.app</p>
+            <p className="support-email-sla">
+              We typically reply within 24 hours — faster on bugs, billing, and account issues.
+            </p>
             <a
               className="btn btn-accent support-email-btn"
               href={`mailto:support@issuefy.app?subject=${encodeURIComponent(`Issuefy support — ${user.email}`)}`}

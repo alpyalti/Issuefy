@@ -137,37 +137,21 @@
   font-family:var(--mono); font-size:10.5px; color:var(--ink-4); letter-spacing:.04em;
 }
 
-/* ── Right-column accents ──────────────────────────────────────── */
-.support-sla{
-  position:relative; padding:24px 22px;
-  background:linear-gradient(180deg, var(--surface) 0%, var(--surface) 100%);
-  border:1px solid var(--accent-bg-2);
-  box-shadow:0 1px 0 0 var(--accent-bg);
-}
-.support-sla-mark{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:36px; height:36px; border-radius:50%;
-  background:var(--accent);
-  margin-bottom:4px;
-}
-.support-sla h3{
-  font-family:var(--serif); font-size:18px; font-weight:500;
-  letter-spacing:-0.01em; color:var(--ink); line-height:1.3;
-}
-.support-sla p{
-  font-size:13.5px; color:var(--ink-2); line-height:1.55;
-}
-
+/* ── Right-column email card ───────────────────────────────────── */
 .support-email{
-  display:flex; align-items:center; justify-content:space-between;
-  gap:14px; flex-wrap:wrap;
+  display:flex; flex-direction:column; gap:10px;
+  border-color:var(--accent-bg-2);
+  background:linear-gradient(180deg, var(--accent-bg) 0%, var(--surface) 28%);
 }
-.support-email-meta{ display:flex; flex-direction:column; gap:3px; min-width:0; }
 .support-email-addr{
-  font-family:var(--mono); font-size:13.5px; font-weight:600; color:var(--ink);
+  font-family:var(--mono); font-size:15px; font-weight:600; color:var(--ink);
   letter-spacing:.01em;
 }
-.support-email-btn{ flex:none; }
+.support-email-sla{
+  font-size:13px; color:var(--ink-2); line-height:1.55;
+  margin-top:-2px;
+}
+.support-email-btn{ width:100%; justify-content:center; margin-top:4px; }
 
 /* ── FAQ accordion ─────────────────────────────────────────────── */
 .support-faq{ display:flex; flex-direction:column; }
