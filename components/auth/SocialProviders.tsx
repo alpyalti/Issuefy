@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
-type OAuthStrategy = "oauth_google" | "oauth_github";
 
-/* Inline brand glyphs — avoids pulling logos as remote images. */
+type OAuthStrategy = "oauth_google";
+
+/* Inline brand glyph — avoids pulling logos as remote images. */
 function GoogleGlyph() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -14,46 +16,50 @@ function GoogleGlyph() {
     </svg>
   );
 }
-function GitHubGlyph() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="#15171A">
-      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2c-3.2.7-3.87-1.36-3.87-1.36-.52-1.32-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18a10.95 10.95 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.7 5.4-5.27 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56C20.21 21.38 23.5 17.07 23.5 12 23.5 5.65 18.35.5 12 .5z"/>
-    </svg>
-  );
-}
-
-const PROVIDERS: { strategy: OAuthStrategy; label: string; glyph: React.ReactNode }[] = [
-  { strategy: "oauth_google", label: "Continue with Google", glyph: <GoogleGlyph /> },
-  { strategy: "oauth_github", label: "Continue with GitHub", glyph: <GitHubGlyph /> },
-];
 
 export default function SocialProviders({ mode }: { mode: "sign-in" | "sign-up" }) {
-  const { signIn } = useSignIn();
-  const { signUp } = useSignUp();
+  const { isLoaded: signInLoaded, signIn } = useSignIn();
+  const { isLoaded: signUpLoaded, signUp } = useSignUp();
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Don't let the button no-op before Clerk is ready (that read as "doesn't work").
+  const ready = mode === "sign-in" ? signInLoaded : signUpLoaded;
 
   async function authenticate(strategy: OAuthStrategy) {
     const fn = mode === "sign-in" ? signIn : signUp;
     if (!fn) return;
-    await fn.authenticateWithRedirect({
-      strategy,
-      redirectUrl: "/sign-in/sso-callback",
-      redirectUrlComplete: mode === "sign-in" ? "/dashboard" : "/onboarding",
-    });
+    setErr(null);
+    setPending(true);
+    try {
+      await fn.authenticateWithRedirect({
+        strategy,
+        // Concrete callback route that completes the handshake (see
+        // app/sign-in/sso-callback/page.tsx), then forwards here:
+        redirectUrl: "/sign-in/sso-callback",
+        redirectUrlComplete: mode === "sign-in" ? "/dashboard" : "/onboarding",
+      });
+      // On success the browser is redirected to Google — code below won't run.
+    } catch {
+      setPending(false);
+      setErr("Couldn't start Google sign-in. Please try again in a moment.");
+    }
   }
 
   return (
     <div className="auth-social">
-      {PROVIDERS.map((p) => (
-        <button
-          key={p.strategy}
-          type="button"
-          className="auth-social-btn"
-          onClick={() => authenticate(p.strategy)}
-        >
-          {p.glyph}
-          <span>{p.label}</span>
-        </button>
-      ))}
+      <button
+        type="button"
+        className="auth-social-btn"
+        onClick={() => authenticate("oauth_google")}
+        disabled={!ready || pending}
+      >
+        <GoogleGlyph />
+        <span>{pending ? "Redirecting…" : "Continue with Google"}</span>
+      </button>
+      {err && (
+        <p className="modal-hint" style={{ color: "var(--neg)", marginTop: 2, textAlign: "center" }}>{err}</p>
+      )}
     </div>
   );
 }
