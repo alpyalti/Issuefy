@@ -272,25 +272,35 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
       }));
       await Promise.allSettled([...compCalls, ...kwCalls]);
 
-      // If they came in via the pricing page (?plan & ?billing) and Stripe is
-      // wired, redirect to checkout. Otherwise straight to the dashboard.
+      // Trial gate: every new user must finish Stripe Checkout before reaching
+      // the dashboard. Pricing-page params (?plan & ?billing) win; otherwise
+      // we default to Starter / annual (the 14-day free trial). If Checkout
+      // can't be created (Stripe not configured, e.g. dev) we fall through to
+      // the dashboard so local development isn't blocked.
       const params = new URLSearchParams(window.location.search);
-      const plan = params.get("plan");
-      const billing = params.get("billing");
-      if (plan && billing) {
-        try {
-          const res = await fetch("/api/billing/checkout", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ plan, billing }),
-          });
-          if (res.ok) {
-            const { url } = await res.json();
-            if (url) { window.location.href = url; return; }
-          }
-        } catch { /* fall through to dashboard */ }
+      const plan = params.get("plan") || "starter";
+      const billing = params.get("billing") || "annual";
+      try {
+        const res = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ plan, billing }),
+        });
+        if (res.ok) {
+          const { url } = await res.json();
+          if (url) { window.location.href = url; return; }
+        }
+        if (res.status === 501) {
+          // Stripe not configured — let the user into the app (dev/beta).
+          router.push(`/dashboard/${project.id}`);
+          return;
+        }
+        // Other failures: the gate on /dashboard will catch them and bounce
+        // to /upgrade?required=1. Send them straight there to skip a hop.
+        window.location.href = "/upgrade?required=1";
+      } catch {
+        window.location.href = "/upgrade?required=1";
       }
-      router.push(`/dashboard/${project.id}`);
     } catch (e) {
       setSubmitting(false);
       setSubmitErr(e instanceof Error ? e.message : "Something went wrong");

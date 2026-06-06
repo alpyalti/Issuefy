@@ -2,12 +2,15 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
+import { requireActiveSubscription } from "@/lib/billing-gate";
 import { Icon } from "@/components/icons/Icon";
 import { EmptyState, EMPTY_STATES } from "@/components/ui/EmptyState";
 import "../dashboard.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type SearchParams = Promise<{ upgraded?: string }>;
 
 /**
  * /dashboard
@@ -18,10 +21,16 @@ export const dynamic = "force-dynamic";
  *
  * Server component: hits Neon directly via `sql` (auth + lazy upsert happens
  * here on the first authed action, fulfilling PRD §10.4).
+ *
+ * Trial gate: users without an active Stripe subscription get bounced to
+ * /upgrade?required=1 (lib/billing-gate.ts). `?upgraded=1` (set by Stripe's
+ * success_url) bypasses the gate once to absorb the webhook race.
  */
-export default async function DashboardIndex() {
+export default async function DashboardIndex({ searchParams }: { searchParams: SearchParams }) {
   // Lazy user upsert + Resend welcome email (first time only).
   const user = await getOrCreateUser();
+  const sp = await searchParams;
+  await requireActiveSubscription(user.id, { allowUpgradedHint: sp.upgraded === "1" });
 
   const sql = requireSql();
   const projects = (await sql`
