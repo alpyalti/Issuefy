@@ -31,6 +31,13 @@
   .support-grid{ grid-template-columns:1fr; }
   .support-col-right{ position:static; }
 }
+/* iPhone SE / very narrow phones: the 1fr 380px grid fully collapses to 1fr
+   above, but on the tightest viewports the right column's content (FAQ) is
+   buried below the form. Hide it on phones since the form is the primary
+   action and the support email is in the page header. */
+@media (max-width: 480px){
+  .support-col-right{ display:none; }
+}
 
 /* ── Card surface (slightly softer than .card) ─────────────────── */
 .support-card{
@@ -105,7 +112,8 @@
   width:100%; min-width:0; box-sizing:border-box;
   border:1px solid var(--line-2); border-radius:12px;
   background:var(--surface); color:var(--ink);
-  font-family:var(--sans); font-size:14.5px;
+  /* 16px minimum to prevent iOS Safari auto-zoom on focus. */
+  font-family:var(--sans); font-size:16px;
   outline:none; transition:border-color .15s, box-shadow .15s;
 }
 .support-input, .support-select{ height:46px; padding:0 14px; }

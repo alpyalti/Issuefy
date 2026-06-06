@@ -15,6 +15,9 @@ export default function robots(): MetadataRoute.Robots {
         "/onboarding",
         "/api",
         "/unsubscribe",
+        // Auth-only or token-protected — don't waste crawl budget here.
+        "/support",
+        "/invite",
       ],
     }],
     sitemap: `${SITE}/sitemap.xml`,

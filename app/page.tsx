@@ -454,9 +454,9 @@ export default function LandingPage() {
               applicationCategory: "BusinessApplication",
               operatingSystem: "Web",
               offers: [
-                { "@type": "Offer", name: "Starter",  price: "29",  priceCurrency: "USD", description: "1 project · 3 competitors · 15 keywords" },
-                { "@type": "Offer", name: "Growth",   price: "79",  priceCurrency: "USD", description: "3 projects · 5 competitors/project · 20 keywords" },
-                { "@type": "Offer", name: "Agency",   price: "199", priceCurrency: "USD", description: "10 projects · 5 competitors/project · 20 keywords" },
+                { "@type": "Offer", name: "Starter",  price: "29",  priceCurrency: "USD", description: "1 project · 3 competitors · 10 keywords" },
+                { "@type": "Offer", name: "Growth",   price: "79",  priceCurrency: "USD", description: "3 projects · 5 competitors/project · 15 keywords" },
+                { "@type": "Offer", name: "Agency",   price: "199", priceCurrency: "USD", description: "10 projects · 10 competitors/project · 20 keywords" },
               ],
               aggregateRating: undefined,
             },

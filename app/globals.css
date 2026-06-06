@@ -3,6 +3,35 @@
 @tailwind utilities;
 
 /* =========================================================================
+   Pre-launch hardening (Phase 1) — keyboard a11y, defensive overflow,
+   screen-reader-only utility for the skip-to-content link.
+   ========================================================================= */
+
+/* Global keyboard focus ring — applies to every focusable element. The
+   :where() keeps specificity 0 so component-specific :focus rules win. */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible{
+  outline: 2px solid #2D5BE3;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Defensive horizontal-scroll guard. If any new component ever overflows
+   on mobile, the page won't gain a horizontal scrollbar — it'll clip
+   instead, which is preferable while we investigate. */
+html, body{ overflow-x: hidden; }
+
+/* Skip-to-content link — hidden visually but reachable via Tab as the
+   first focusable element on every page. */
+.skip-link{
+  position: absolute; top: -40px; left: 12px; z-index: 1000;
+  background: #15171A; color: #fff;
+  padding: 8px 14px; border-radius: 8px;
+  font-family: 'Hanken Grotesk', -apple-system, sans-serif;
+  font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.skip-link:focus{ top: 12px; }
+
+/* =========================================================================
    ISSUEFY — Design Tokens & Primitives  (ported verbatim from tokens.css)
    Editorial serif headlines · grotesque body · mono data · calm blue accent
    Light only. Black / white / warm-neutral grays.

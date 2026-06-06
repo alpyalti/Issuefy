@@ -3,13 +3,16 @@ import { Newsreader, Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
-// Editorial serif (variable: optical size + italics) → --font-serif
+// Editorial serif (variable: optical size + italics) → --font-serif.
+// preload:true because Newsreader is above the fold on the landing page
+// (headline + hero) and every auth page, so a font-swap flash hurts LCP.
 const serif = Newsreader({
   subsets: ["latin"],
   display: "swap",
   style: ["normal", "italic"],
   axes: ["opsz"],
   variable: "--font-serif",
+  preload: true,
 });
 
 // Interface sans (variable) → --font-sans
@@ -83,7 +86,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       signUpFallbackRedirectUrl="/onboarding"
     >
       <html lang="en" className={`${serif.variable} ${sans.variable} ${mono.variable}`}>
-        <body>{children}</body>
+        <body>
+          {/* Keyboard-only skip link — first focusable element on every page,
+              jumps over the global chrome to the page's main content. */}
+          <a href="#main-content" className="skip-link">Skip to main content</a>
+          {children}
+        </body>
       </html>
     </ClerkProvider>
   );

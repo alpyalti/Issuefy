@@ -66,7 +66,8 @@
   height:46px; padding:0 14px;
   border:1px solid var(--line-2); border-radius:var(--r-sm);
   background:var(--surface); color:var(--ink);
-  font-family:var(--sans); font-size:15px;
+  /* 16px minimum to prevent iOS Safari auto-zoom on focus. */
+  font-family:var(--sans); font-size:16px;
   outline:none; transition:border-color .15s, box-shadow .15s;
 }
 .auth-input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg); }
