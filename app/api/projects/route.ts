@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/clerk-user";
+import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
 import { getLimits } from "@/lib/usage";
 import { json, parseJson, conflict } from "@/lib/api";
@@ -36,6 +37,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const user = await requireUser();
   if (user instanceof Response) return user;
+  const guard = await ensureActiveSubscriptionApi(user.id);
+  if (guard) return guard;
   const body = await parseJson(req, projectCreateSchema);
   if (body instanceof Response) return body;
 

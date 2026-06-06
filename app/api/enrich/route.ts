@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/clerk-user";
+import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import { parseJson, json, rateLimited } from "@/lib/api";
 import { enrichRequestSchema } from "@/lib/schemas/api";
 import { enrichWebsite } from "@/lib/enrichment";
@@ -22,6 +23,8 @@ export const maxDuration = 30; // ScraperAPI timeout is 25s; give the handler 5s
 export async function POST(req: Request) {
   const user = await requireUser();
   if (user instanceof Response) return user;
+  const guard = await ensureActiveSubscriptionApi(user.id);
+  if (guard) return guard;
 
   const body = await parseJson(req, enrichRequestSchema);
   if (body instanceof Response) return body;

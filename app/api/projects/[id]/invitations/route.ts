@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/clerk-user";
+import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
 import { adminProject, conflict, json, notFound, parseJson } from "@/lib/api";
 import { getLimits } from "@/lib/usage";
@@ -25,6 +26,8 @@ const bodySchema = z.object({
 export async function POST(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
+  const guard = await ensureActiveSubscriptionApi(user.id);
+  if (guard) return guard;
   const { id: projectId } = await params;
   const proj = await adminProject<{ id: string; name: string; user_id: string }>(user.id, projectId);
   if (!proj) return notFound();

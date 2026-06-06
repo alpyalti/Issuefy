@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/clerk-user";
+import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
 import { json, manageableProject, notFound, rateLimited } from "@/lib/api";
 import { getLimits } from "@/lib/usage";
@@ -32,6 +33,8 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function POST(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
+  const guard = await ensureActiveSubscriptionApi(user.id);
+  if (guard) return guard;
   const { id: projectId } = await params;
   // Editors + owners can burn a refresh; viewers can't trigger billable scrapes.
   const proj = await manageableProject<{ id: string; last_manual_refresh_at: string | null }>(user.id, projectId);

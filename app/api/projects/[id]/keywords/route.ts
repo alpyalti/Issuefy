@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/clerk-user";
+import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
 import { getLimits, HARD_CAPS } from "@/lib/usage";
 import { conflict, json, manageableProject, notFound, parseJson } from "@/lib/api";
@@ -12,6 +13,8 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function POST(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
+  const guard = await ensureActiveSubscriptionApi(user.id);
+  if (guard) return guard;
   const { id: projectId } = await params;
   // Editors + owners can manage watchlist; viewers get 404.
   const proj = await manageableProject(user.id, projectId);

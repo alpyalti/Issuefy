@@ -142,3 +142,35 @@ export async function requireActiveSubscription(
   if (await isMemberOfSubscribedProject(userId)) return;
   redirect("/upgrade?required=1");
 }
+
+/**
+ * API-route variant of `requireActiveSubscription`. Same gating rules — admin
+ * bypass, member-of-subscribed-project bypass, Stripe-not-configured bypass —
+ * but returns a `Response` (402 Payment Required) instead of redirecting.
+ *
+ * Used on mutating API routes (POST /api/projects, /enrich, /refresh, etc.)
+ * to close the gap where a scripted caller could burn ScraperAPI / OpenRouter
+ * budget without ever loading a gated dashboard page.
+ *
+ * Pattern:
+ *
+ *     const guard = await ensureActiveSubscriptionApi(user.id);
+ *     if (guard) return guard;
+ *
+ * Returns `null` when the user is allowed through (so the route continues
+ * normally).
+ */
+export async function ensureActiveSubscriptionApi(userId: string): Promise<Response | null> {
+  if (!stripe) return null;
+  const { subscription_status, role } = await getSubscriptionStatus(userId);
+  if (role === "admin") return null;
+  if (subscription_status && ACTIVE_STATUSES.has(subscription_status)) return null;
+  if (await isMemberOfSubscribedProject(userId)) return null;
+  return new Response(
+    JSON.stringify({
+      error: "Subscription required",
+      detail: "Your plan isn't active. Open /upgrade to start or restart a plan.",
+    }),
+    { status: 402, headers: { "content-type": "application/json" } },
+  );
+}
