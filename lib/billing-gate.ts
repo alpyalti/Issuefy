@@ -34,6 +34,31 @@ export async function getSubscriptionStatus(userId: string): Promise<GateRow> {
 }
 
 /**
+ * Is this user an EDITOR / VIEWER of any project whose OWNER has an active
+ * subscription? Teams (migration 0009): invited members don't pay — they ride
+ * on the inviter's plan. So if the user is a non-owner member somewhere and
+ * the inviter is in good standing, let them in.
+ */
+async function isMemberOfSubscribedProject(userId: string): Promise<boolean> {
+  try {
+    const sql = requireSql();
+    const rows = (await sql`
+      SELECT 1
+        FROM project_members pm
+        JOIN projects p ON p.id = pm.project_id
+        JOIN users    u ON u.id = p.user_id
+       WHERE pm.user_id = ${userId}
+         AND pm.role IN ('editor','viewer')
+         AND u.subscription_status = ANY(${["trialing", "active", "past_due", "paused"]}::text[])
+       LIMIT 1
+    `) as Array<{ "?column?": number }>;
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Dashboard subscription gate. If Stripe is configured and the user doesn't
  * have an active subscription, redirect to /upgrade?required=1 — the
  * card-collection step that completes the trial signup.
@@ -41,6 +66,7 @@ export async function getSubscriptionStatus(userId: string): Promise<GateRow> {
  * Bypasses:
  *   - Stripe SDK not configured (dev / beta deploys without keys) → no gate
  *   - User is an admin → no gate
+ *   - User is an editor/viewer on an actively-subscribed project (teams) → no gate
  *   - `?upgraded=1` is in the URL → no gate (absorbs the small Stripe-webhook
  *     race after Checkout completion — Stripe redirects with this flag, so the
  *     user lands on /dashboard before the webhook has stamped subscription_status)
@@ -54,5 +80,6 @@ export async function requireActiveSubscription(
   const { subscription_status, role } = await getSubscriptionStatus(userId);
   if (role === "admin") return;
   if (subscription_status && ACTIVE_STATUSES.has(subscription_status)) return;
+  if (await isMemberOfSubscribedProject(userId)) return;
   redirect("/upgrade?required=1");
 }

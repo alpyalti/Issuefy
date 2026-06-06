@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/clerk-user";
 import { requireSql } from "@/lib/db";
-import { json, notFound, ownedKeyword, parseJson } from "@/lib/api";
+import { json, manageableKeyword, notFound, parseJson } from "@/lib/api";
 import { keywordUpdateSchema } from "@/lib/schemas/api";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const owned = await ownedKeyword(user.id, id);
+  const owned = await manageableKeyword(user.id, id);
   if (!owned) return notFound();
 
   const body = await parseJson(req, keywordUpdateSchema);
@@ -35,7 +35,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const owned = await ownedKeyword(user.id, id);
+  const owned = await manageableKeyword(user.id, id);
   if (!owned) return notFound();
   const sql = requireSql();
   await sql`DELETE FROM keywords WHERE id = ${id}`;

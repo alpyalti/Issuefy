@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/clerk-user";
 import { requireSql } from "@/lib/db";
-import { json, notFound, ownedProject, rateLimited } from "@/lib/api";
+import { json, manageableProject, notFound, rateLimited } from "@/lib/api";
 import { getLimits } from "@/lib/usage";
 import { processProject } from "@/lib/process-project";
 import { captureError } from "@/lib/sentry";
@@ -33,7 +33,8 @@ export async function POST(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id: projectId } = await params;
-  const proj = await ownedProject<{ id: string; last_manual_refresh_at: string | null }>(user.id, projectId);
+  // Editors + owners can burn a refresh; viewers can't trigger billable scrapes.
+  const proj = await manageableProject<{ id: string; last_manual_refresh_at: string | null }>(user.id, projectId);
   if (!proj) return notFound();
 
   const sql = requireSql();

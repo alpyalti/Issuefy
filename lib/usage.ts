@@ -11,6 +11,13 @@ export type PlanId = "starter" | "growth" | "agency" | "enterprise";
 export interface PlanLimits {
   // Customer-facing caps (PRD §21.1)
   projects: number;
+  /**
+   * Total team members across ALL projects this user owns, owner counted as 1.
+   * Starter = 1 (just the owner, no invitees). Growth = 3 (owner + 2). Agency = 10
+   * (owner + 9). Enforced in POST /api/projects/:id/invitations and on the Team
+   * card in settings.
+   */
+  seats: number;
   competitorsPerProject: number;
   keywordsPerProject: number;
   sourcesPerMonth: number;
@@ -38,6 +45,7 @@ export const HARD_CAPS = {
 const PLANS: Record<PlanId, PlanLimits> = {
   starter: {
     projects: 1,
+    seats: 1,
     competitorsPerProject: 3,
     keywordsPerProject: 15,
     sourcesPerMonth: 300,
@@ -51,6 +59,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
   },
   growth: {
     projects: 3,
+    seats: 3,
     competitorsPerProject: 5,
     keywordsPerProject: 20,
     sourcesPerMonth: 1_500,
@@ -64,6 +73,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
   },
   agency: {
     projects: 10,
+    seats: 10,
     competitorsPerProject: 5,
     keywordsPerProject: 20,
     sourcesPerMonth: 6_000,
@@ -77,6 +87,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
   },
   enterprise: {
     projects: 9_999,
+    seats: 9_999,
     competitorsPerProject: 5,
     keywordsPerProject: 20,
     sourcesPerMonth: 60_000,

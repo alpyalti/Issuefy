@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/clerk-user";
 import { requireSql } from "@/lib/db";
-import { json, notFound, ownedSignal, parseJson } from "@/lib/api";
+import { json, manageableSignal, notFound, parseJson } from "@/lib/api";
 
 export const runtime = "nodejs";
 
@@ -14,7 +14,8 @@ type Ctx = { params: Promise<{ id: string }> };
  *
  * These columns are the additive ones we added beyond PRD §14 to back the
  * prototype's "Saved" sidebar entry and per-card dismiss button.
- * Ownership joins through signals → projects.user_id.
+ * Access: owner + editor only. Viewers can't mutate signal state
+ * (bookmarks + notes are project-shared, not per-user; viewers stay passive).
  */
 const patchSchema = z.object({
   is_saved: z.boolean().optional(),
@@ -30,7 +31,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const owned = await ownedSignal(user.id, id);
+  const owned = await manageableSignal(user.id, id);
   if (!owned) return notFound();
 
   const body = await parseJson(req, patchSchema);

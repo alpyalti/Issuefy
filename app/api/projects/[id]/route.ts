@@ -1,13 +1,13 @@
 import { requireUser } from "@/lib/clerk-user";
 import { requireSql } from "@/lib/db";
-import { json, notFound, ownedProject, parseJson } from "@/lib/api";
+import { adminProject, json, manageableProject, notFound, ownedProject, parseJson } from "@/lib/api";
 import { projectUpdateSchema } from "@/lib/schemas/api";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// GET /api/projects/:id — project details.
+// GET /api/projects/:id — project details. Any member can read.
 export async function GET(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
@@ -17,12 +17,15 @@ export async function GET(_req: Request, { params }: Ctx) {
   return json({ project: proj });
 }
 
-// PATCH /api/projects/:id — update fields, including the company profile.
+// PATCH /api/projects/:id — update fields. Editors and owners can mutate;
+// viewers get a 404 (not a 403, to avoid leaking project existence).
+// TODO (Phase 5): split field-level — track_company + company_* should be
+// owner-only. For now an editor can change them too.
 export async function PATCH(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const proj = await ownedProject(user.id, id);
+  const proj = await manageableProject(user.id, id);
   if (!proj) return notFound();
 
   const body = await parseJson(req, projectUpdateSchema);
@@ -46,20 +49,20 @@ export async function PATCH(req: Request, { params }: Ctx) {
       description         = COALESCE(${body.description ?? null},         description),
       is_active           = COALESCE(${body.is_active ?? null},           is_active),
       updated_at          = now()
-    WHERE id = ${id} AND user_id = ${user.id}
+    WHERE id = ${id}
     RETURNING *
   `;
   return json({ project: rows[0] });
 }
 
-// DELETE /api/projects/:id — cascades to all child rows (FKs ON DELETE CASCADE).
+// DELETE /api/projects/:id — owner only. Cascades to all child rows (FKs ON DELETE CASCADE).
 export async function DELETE(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const proj = await ownedProject(user.id, id);
+  const proj = await adminProject(user.id, id);
   if (!proj) return notFound();
   const sql = requireSql();
-  await sql`DELETE FROM projects WHERE id = ${id} AND user_id = ${user.id}`;
+  await sql`DELETE FROM projects WHERE id = ${id}`;
   return new Response(null, { status: 204 });
 }

@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/clerk-user";
 import { requireSql } from "@/lib/db";
 import { getLimits, HARD_CAPS } from "@/lib/usage";
-import { json, notFound, ownedProject, parseJson, conflict } from "@/lib/api";
+import { conflict, json, manageableProject, notFound, parseJson } from "@/lib/api";
 import { competitorCreateSchema } from "@/lib/schemas/api";
 
 export const runtime = "nodejs";
@@ -14,7 +14,8 @@ export async function POST(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id: projectId } = await params;
-  const proj = await ownedProject(user.id, projectId);
+  // Editors + owners can manage watchlist; viewers get 404.
+  const proj = await manageableProject(user.id, projectId);
   if (!proj) return notFound();
 
   const body = await parseJson(req, competitorCreateSchema);

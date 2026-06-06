@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/clerk-user";
 import { requireSql } from "@/lib/db";
-import { json, notFound, ownedCompetitor, parseJson } from "@/lib/api";
+import { json, manageableCompetitor, notFound, parseJson } from "@/lib/api";
 import { competitorUpdateSchema } from "@/lib/schemas/api";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const owned = await ownedCompetitor(user.id, id);
+  const owned = await manageableCompetitor(user.id, id);
   if (!owned) return notFound();
 
   const body = await parseJson(req, competitorUpdateSchema);
@@ -40,7 +40,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id } = await params;
-  const owned = await ownedCompetitor(user.id, id);
+  const owned = await manageableCompetitor(user.id, id);
   if (!owned) return notFound();
   const sql = requireSql();
   await sql`DELETE FROM competitors WHERE id = ${id}`;

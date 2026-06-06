@@ -7,18 +7,22 @@ import { captureError } from "@/lib/sentry";
 
 export const runtime = "nodejs";
 
-// GET /api/projects — list the authenticated user's projects.
+// GET /api/projects — list every project this user can access (owned or
+// member). Each row also carries the caller's role so clients can render
+// a chip / disabled state.
 export async function GET() {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const sql = requireSql();
   try {
     const rows = await sql`
-      SELECT id, name, company_name, company_website, industry, business_type,
-             target_market, last_scraped_at, last_manual_refresh_at, created_at
-      FROM projects
-      WHERE user_id = ${user.id}
-      ORDER BY created_at DESC
+      SELECT p.id, p.name, p.company_name, p.company_website, p.industry, p.business_type,
+             p.target_market, p.last_scraped_at, p.last_manual_refresh_at, p.created_at,
+             pm.role AS current_user_role
+        FROM projects p
+        JOIN project_members pm ON pm.project_id = p.id
+       WHERE pm.user_id = ${user.id}
+       ORDER BY p.created_at DESC
     `;
     return json({ projects: rows });
   } catch (e) {
@@ -66,7 +70,17 @@ export async function POST(req: Request) {
       )
       RETURNING *
     `;
-    return json({ project: rows[0] }, { status: 201 });
+    const project = rows[0] as { id: string };
+    // Mirror the owner into project_members so the new project_members-based
+    // auth path (manageableProject, accessibleProject) works immediately.
+    // ON CONFLICT keeps this a no-op if the migration backfill already created
+    // the row for an existing project being recreated by some odd path.
+    await sql`
+      INSERT INTO project_members (project_id, user_id, role)
+      VALUES (${project.id}, ${user.id}, 'owner')
+      ON CONFLICT (project_id, user_id) DO NOTHING
+    `;
+    return json({ project }, { status: 201 });
   } catch (e) {
     captureError(e, { route: "POST /api/projects", userId: user.id });
     throw e;
