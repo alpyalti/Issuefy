@@ -606,6 +606,17 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .onb-list{ display:flex; flex-direction:column; gap:10px; margin-top:16px; max-height:260px; overflow-y:auto; }
 .onb-empty{ text-align:center; padding:22px; border:1px dashed var(--line-2); border-radius:12px; color:var(--ink-3); font-size:13.5px; }
 .onb-empty b{ color:var(--ink-2); font-family:var(--mono); font-size:12.5px; }
+
+/* AI-suggested competitors block (onboarding step 3) */
+.onb-suggest{ margin-top:16px; display:flex; flex-direction:column; gap:8px; padding:14px; border:1px solid var(--accent-bg-2); background:var(--accent-bg); border-radius:12px; }
+.onb-suggest-head{ display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-ink); }
+.onb-suggest-loading{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-2); padding:6px 2px; }
+.onb-suggest-item{ display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--surface); border:1px solid var(--line); border-radius:10px; }
+.onb-suggest-meta{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+.onb-suggest-name{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.onb-suggest-domain{ font-family:var(--mono); font-size:11px; font-weight:500; color:var(--ink-3); }
+.onb-suggest-reason{ font-size:12.5px; color:var(--ink-2); line-height:1.4; }
+.onb-suggest-add{ flex:none; }
 .onb-confirm{ display:flex; align-items:center; gap:8px; font-size:13px !important; color:var(--ink-2) !important; margin:14px 0 0 !important; }
 
 /* ---------- Your company (sidebar) ---------- */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { CompanyCard } from "./CompanyCard";
@@ -53,6 +53,8 @@ interface ServerProfile {
   status: "enriched" | "failed" | "manual";
 }
 
+interface Suggestion { name: string; website: string; reason: string; }
+
 function profileToCardData(profile: ServerProfile, fallbackUrl: string): CompanyData {
   const domain = domainFrom(profile.source_url || fallbackUrl);
   const initials = profile.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || domain.slice(0, 2).toUpperCase();
@@ -101,6 +103,11 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
   const [competitorUrl, setCompetitorUrl] = useState("");
   const [competitorEnriching, setCompetitorEnriching] = useState(false);
   const [competitors, setCompetitors] = useState<CompanyData[]>([]);
+  // Competitor suggestions (auto-fetched on the competitors step)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestTried, setSuggestTried] = useState(false);
+  const [addingDomain, setAddingDomain] = useState<string | null>(null);
   // Step 5 — keywords
   const [keywords, setKeywords] = useState<string[]>([]);
   // Step 6 — submitting
@@ -148,16 +155,66 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
     setStep(2);
   }
 
+  // Enrich a URL and add it to the competitor list (deduped). Shared by the
+  // manual "Find" button and the one-click suggestion cards.
+  async function addCompetitorByUrl(url: string): Promise<boolean> {
+    const profile = await enrichUrl(url);
+    if (!profile) return false;
+    const card = profileToCardData(profile, url);
+    setCompetitors((prev) => (prev.some((c) => c.domain === card.domain) ? prev : [...prev, card]));
+    return true;
+  }
+
   async function lookupCompetitor() {
     setCompetitorEnriching(true);
-    const profile = await enrichUrl(competitorUrl);
+    const ok = await addCompetitorByUrl(competitorUrl);
     setCompetitorEnriching(false);
-    if (!profile) return;
-    const card = profileToCardData(profile, competitorUrl);
-    setCompetitors((prev) => (prev.some((c) => c.domain === card.domain) ? prev : [...prev, card]));
-    setCompetitorUrl("");
-    competitorInputRef.current?.focus();
+    if (ok) { setCompetitorUrl(""); competitorInputRef.current?.focus(); }
   }
+
+  async function addSuggestion(s: Suggestion) {
+    setAddingDomain(s.website);
+    await addCompetitorByUrl(s.website);
+    setAddingDomain(null);
+  }
+
+  // Ask the model for 2-3 real competitors that fit the company profile.
+  // Pure LLM call (no scrape budget) — degrades to nothing on error.
+  async function fetchSuggestions() {
+    setSuggestLoading(true);
+    setSuggestTried(true);
+    try {
+      const res = await fetch("/api/recommend-competitors", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          company_name: companyData?.name || undefined,
+          company_website: companyData?.domain || undefined,
+          company_description: companyData?.tagline || undefined,
+          industry: industry.trim() || undefined,
+          business_type: businessType,
+          target_market: targetMarket.trim() || undefined,
+          exclude: competitors.map((c) => c.domain),
+        }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { competitors?: Suggestion[] };
+        setSuggestions(Array.isArray(data.competitors) ? data.competitors : []);
+      }
+    } catch {
+      /* leave suggestions empty */
+    }
+    setSuggestLoading(false);
+  }
+
+  // Auto-fetch suggestions the first time the user reaches the competitors step,
+  // as long as we have something to base them on.
+  useEffect(() => {
+    if (step === 3 && !suggestTried && (companyData || industry.trim() || targetMarket.trim())) {
+      fetchSuggestions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   function canAdvance(): boolean {
     if (step === 0) return true;
@@ -241,6 +298,9 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
   }
 
   const canNext = canAdvance();
+  // Hide suggestions the user already added.
+  const addedDomains = new Set(competitors.map((c) => c.domain));
+  const visibleSuggestions = suggestions.filter((s) => !addedDomains.has(s.website));
 
   return (
     <div className="modal-overlay onb-overlay" style={{ background: "var(--bg)" }}>
@@ -351,9 +411,43 @@ export default function OnboardingFlow({ userName }: { userName: string }) {
                 </button>
               </div>
               {enrichErr && <p className="modal-hint" style={{ color: "var(--neg)", marginTop: 8 }}>{enrichErr}</p>}
+
+              {/* AI-suggested competitors — fits the company profile, one click to add. */}
+              {(suggestLoading || visibleSuggestions.length > 0) && (
+                <div className="onb-suggest">
+                  <div className="onb-suggest-head">
+                    <Icon name="SparklesIcon" size={14} stroke={1.7} />
+                    <span>{suggestLoading ? "Finding competitors that fit…" : "Suggested for you"}</span>
+                  </div>
+                  {suggestLoading ? (
+                    <div className="onb-suggest-loading">
+                      <Icon name="Loading03Icon" size={16} stroke={2} className="spin" /> Looking at your market…
+                    </div>
+                  ) : (
+                    visibleSuggestions.map((s) => (
+                      <div className="onb-suggest-item" key={s.website}>
+                        <span className="onb-suggest-meta">
+                          <span className="onb-suggest-name">{s.name} <span className="onb-suggest-domain">{s.website}</span></span>
+                          <span className="onb-suggest-reason">{s.reason}</span>
+                        </span>
+                        <button
+                          className="btn btn-ghost btn-sm onb-suggest-add"
+                          onClick={() => addSuggestion(s)}
+                          disabled={addingDomain === s.website}
+                        >
+                          {addingDomain === s.website
+                            ? <><Icon name="Loading03Icon" size={14} stroke={2} className="spin" /> Adding…</>
+                            : <><Icon name="Add01Icon" size={14} stroke={2.2} /> Add</>}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
               <div className="onb-list">
-                {competitors.length === 0 && (
-                  <div className="onb-empty">No competitors yet. Try <b>northwind.io</b> or <b>vega.com</b>.</div>
+                {competitors.length === 0 && !suggestLoading && visibleSuggestions.length === 0 && (
+                  <div className="onb-empty">No competitors yet — paste a website above to add one.</div>
                 )}
                 {competitors.map((c, i) => (
                   <CompanyCard
