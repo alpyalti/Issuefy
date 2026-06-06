@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { SignalCard } from "@/components/signals/SignalCard";
 import { Favicon } from "@/components/signals/Favicon";
@@ -34,6 +35,11 @@ export interface ProjectDashboardProps {
   /** True when the project has never been scraped (last_scraped_at IS NULL),
    *  used to show the activation card instead of the passive empty state. */
   firstRun?: boolean;
+  /** True when a manual refresh is currently running on the server (derived
+   *  from last_manual_refresh_at vs last_scraped_at). Survives navigation so
+   *  the FirstRunCard / refresh button stay in their "Running…" state when
+   *  the user returns to the page. */
+  isRefreshing?: boolean;
 }
 
 const TABS = [
@@ -46,9 +52,10 @@ const DATE_RANGES: [string, string][] = [["7d", "7 days"], ["30d", "30 days"], [
 const RANGE_HOURS: Record<string, number> = { "7d": 168, "30d": 720, "90d": 2160 };
 
 export default function ProjectDashboard({
-  project, signals: initialSignals, summary, recentSources, competitorNames, firstRun,
+  project, signals: initialSignals, summary, recentSources, competitorNames, firstRun, isRefreshing,
 }: ProjectDashboardProps) {
   const { view, setView } = useDashboardView();
+  const router = useRouter();
 
   const [signals, setSignals] = useState<SignalItem[]>(initialSignals);
   const [tab, setTab] = useState("all");
@@ -66,6 +73,20 @@ export default function ProjectDashboard({
   // so optimistic save/dismiss/note edits aren't clobbered (and they're already
   // persisted server-side, so the refreshed data is canonical anyway).
   useEffect(() => { setSignals(initialSignals); }, [initialSignals]);
+
+  // While a manual refresh is in flight on the server, poll the server every
+  // 8 s so the dashboard rehydrates as soon as the worker finishes — the user
+  // doesn't have to know to refresh the page. Stops automatically when the
+  // server next reports isRefreshing=false (and as a safety net, after 5 min).
+  useEffect(() => {
+    if (!isRefreshing) return;
+    const startedPolling = Date.now();
+    const id = setInterval(() => {
+      if (Date.now() - startedPolling > 5 * 60_000) { clearInterval(id); return; }
+      router.refresh();
+    }, 8_000);
+    return () => clearInterval(id);
+  }, [isRefreshing, router]);
 
   // Reset feed-side state when the URL view changes.
   useEffect(() => { setTab("all"); }, [view]);
@@ -165,7 +186,11 @@ export default function ProjectDashboard({
             project has never been scraped — gives concrete timing + a CTA
             instead of the passive "awaiting" empty state. */}
         {view === "today" && firstRun && (
-          <FirstRunCard projectId={project.id} firstCompetitorName={competitorNames[0]} />
+          <FirstRunCard
+            projectId={project.id}
+            firstCompetitorName={competitorNames[0]}
+            isRefreshing={isRefreshing}
+          />
         )}
         {view === "today" && <SummaryCard summary={summary} />}
 

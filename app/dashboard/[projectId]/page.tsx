@@ -162,6 +162,22 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
   // re-show the activation card.)
   const firstRun = !project.last_scraped_at && signals.length === 0;
 
+  // Server-derived "refresh in progress" so the loading state survives
+  // navigation. The refresh route stamps last_manual_refresh_at BEFORE running
+  // processProject; processProject stamps last_scraped_at when it finishes.
+  // A refresh is therefore in flight when the manual stamp is newer than the
+  // scrape stamp, within a safety window (the route is capped at 5 min by
+  // maxDuration; we use 6 to leave a buffer before declaring it stuck).
+  const REFRESH_STALE_MS = 6 * 60 * 1_000;
+  const isRefreshing = (() => {
+    if (!project.last_manual_refresh_at) return false;
+    const startedAt = new Date(project.last_manual_refresh_at).getTime();
+    const finishedAt = project.last_scraped_at ? new Date(project.last_scraped_at).getTime() : 0;
+    if (finishedAt >= startedAt) return false;
+    if (Date.now() - startedAt > REFRESH_STALE_MS) return false;
+    return true;
+  })();
+
   return (
     <ProjectDashboard
       project={project}
@@ -176,6 +192,7 @@ export default async function ProjectDashboardPage({ params }: Ctx) {
       recentSources={recentSources}
       competitorNames={competitorsCached.map((c) => c.name)}
       firstRun={firstRun}
+      isRefreshing={isRefreshing}
     />
   );
 }
