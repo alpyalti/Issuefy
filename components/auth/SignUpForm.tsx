@@ -24,7 +24,17 @@ function friendlyError(err: ClerkAPIError | undefined): string {
 
 type Stage = "credentials" | "verify";
 
-export default function SignUpForm() {
+export default function SignUpForm({
+  inviteToken = null,
+  invitationEmail = null,
+}: {
+  /** When set (passed from the sign-up page wrapper after resolving
+   *  ?invite=<token>), the form pre-fills + disables the email field and,
+   *  on successful verification, claims the invitation and routes straight
+   *  to the project — skipping /onboarding and the Stripe trial gate. */
+  inviteToken?: string | null;
+  invitationEmail?: string | null;
+} = {}) {
   const { isLoaded, signUp, setActive } = useSignUp();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -32,7 +42,7 @@ export default function SignUpForm() {
   const billingParam = searchParams.get("billing");
 
   const [stage, setStage] = useState<Stage>("credentials");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(invitationEmail ?? "");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -64,8 +74,27 @@ export default function SignUpForm() {
       const attempt = await signUp.attemptEmailAddressVerification({ code: code.trim() });
       if (attempt.status === "complete") {
         await setActive({ session: attempt.createdSessionId });
-        // Redirect: if a plan was selected on the pricing page, send them to
-        // /upgrade afterward so they can finish onboarding → checkout.
+
+        // Invitation flow: claim the invite and route directly to the project
+        // dashboard. The trial gate lets this user in because they're a
+        // member of an actively-subscribed project (lib/billing-gate.ts).
+        if (inviteToken) {
+          try {
+            const res = await fetch(`/api/invitations/${encodeURIComponent(inviteToken)}/accept`, {
+              method: "POST",
+            });
+            if (res.ok) {
+              const { projectId } = (await res.json()) as { projectId: string };
+              router.push(`/dashboard/${projectId}`);
+              return;
+            }
+          } catch { /* fall through to /dashboard so the user is at least signed in */ }
+          router.push("/dashboard");
+          return;
+        }
+
+        // Pricing-page flow: keep the pre-selected plan + billing on the URL
+        // so onboarding can hand off to Checkout afterward.
         if (planParam) {
           const u = new URL("/onboarding", window.location.origin);
           u.searchParams.set("plan", planParam);
@@ -98,13 +127,23 @@ export default function SignUpForm() {
   return stage === "credentials" ? (
     <>
       <header className="auth-head">
-        <h1>Start your morning brief.</h1>
-        <p>Create your account — no card required to try Issuefy.</p>
+        {invitationEmail ? (
+          <>
+            <h1>Accept your invitation.</h1>
+            <p>Create your Issuefy account to join the project — no card required, you&apos;ll ride on the inviter&apos;s plan.</p>
+          </>
+        ) : (
+          <>
+            <h1>Start your morning brief.</h1>
+            <p>Create your account — no card required to try Issuefy.</p>
+          </>
+        )}
       </header>
 
-      <SocialProviders mode="sign-up" />
-
-      <div className="auth-divider">or with email</div>
+      {/* Hide social providers for invite flow — they'd route through Google
+          and bypass the email match-check that the accept endpoint enforces. */}
+      {!invitationEmail && <SocialProviders mode="sign-up" />}
+      {!invitationEmail && <div className="auth-divider">or with email</div>}
 
       <form onSubmit={handleCredentials} className="auth-fields" noValidate>
         {error && (
@@ -123,7 +162,7 @@ export default function SignUpForm() {
             className="auth-input"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={submitting}
+            disabled={submitting || !!invitationEmail}
           />
         </div>
         <div className="auth-field">
