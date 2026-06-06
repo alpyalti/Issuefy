@@ -7,6 +7,7 @@ import PlanCard from "@/components/account/PlanCard";
 import SecurityCard from "@/components/account/SecurityCard";
 import DangerZone from "@/components/account/DangerZone";
 import EmailPreferences from "@/components/settings/EmailPreferences";
+import SignOutButton from "@/components/auth/SignOutButton";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,9 +44,12 @@ export default async function AccountPage() {
           <h1 style={{ fontFamily: "var(--serif)", fontSize: 30 }}>Account</h1>
           <p className="muted" style={{ marginTop: 4 }}>Your identity, plan, and security.</p>
         </div>
-        <Link href="/dashboard" className="btn btn-ghost">
-          <Icon name="ArrowLeft01Icon" size={15} stroke={1.8} /> Back to dashboard
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link href="/dashboard" className="btn btn-ghost">
+            <Icon name="ArrowLeft01Icon" size={15} stroke={1.8} /> Back to dashboard
+          </Link>
+          <SignOutButton variant="ghost" />
+        </div>
       </header>
 
       <IdentityCard email={user.email} initialName={user.name} initialCompany={user.company_name} />

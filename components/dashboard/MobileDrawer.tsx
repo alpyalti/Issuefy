@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons/Icon";
+import SignOutButton from "@/components/auth/SignOutButton";
 
 /**
  * Mobile slide-in drawer holding the watchlist + profile.
@@ -79,13 +80,13 @@ export default function MobileDrawer({
         </div>
 
         <footer className="mobile-drawer-foot">
-          <Link href={`/dashboard/${projectId}/settings`} className="profile" onClick={onClose}>
+          <Link href="/account" className="profile" onClick={onClose}>
             <span className="avatar">{initials}</span>
             <span className="profile-meta">
               <span className="profile-name">{userName}</span>
               <span className="profile-role">{projectName}</span>
             </span>
-            <Icon name="Settings01Icon" size={17} stroke={1.6} />
+            <SignOutButton variant="icon" />
           </Link>
         </footer>
       </aside>

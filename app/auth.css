@@ -1,13 +1,24 @@
 /* Auth pages — editorial, mobile-first. Loaded only by /sign-in, /sign-up, /sign-in/forgot.
    Scoped via .auth-shell so rules don't leak. */
 
-.auth-shell{
+/* ── Split-pane container ─────────────────────────────────────────────── */
+.auth-grid{
   min-height:100vh;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
+  background:var(--bg);
+}
+@media (max-width: 880px){
+  .auth-grid{ grid-template-columns:1fr; }
+}
+
+.auth-shell{
   display:flex; flex-direction:column;
   background:
-    radial-gradient(60% 50% at 50% 0%, var(--accent-bg) 0%, transparent 50%),
+    radial-gradient(60% 60% at 50% -10%, var(--accent-bg) 0%, transparent 55%),
     var(--bg);
   padding:24px 20px 40px;
+  min-height:100vh;
 }
 
 .auth-top{
@@ -137,4 +148,114 @@
   .auth-head h1{ font-size:26px; }
   .auth-code-fields{ gap:6px; }
   .auth-code-input{ height:48px; font-size:20px; }
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   Right-side editorial panel (visible ≥880px)
+   ─────────────────────────────────────────────────────────────────── */
+.auth-side{
+  display:flex; flex-direction:column; justify-content:center;
+  padding:48px 56px;
+  background:
+    radial-gradient(45% 35% at 80% 25%, rgba(76,118,247,.22), transparent 65%),
+    radial-gradient(40% 35% at 20% 90%, rgba(45,91,227,.18), transparent 70%),
+    #15171A;
+  color:#FFFFFF;
+  position:relative; overflow:hidden;
+}
+@media (max-width: 880px){
+  .auth-side{ display:none; }
+}
+
+.auth-side-inner{
+  max-width:480px; margin:0 auto; width:100%;
+  display:flex; flex-direction:column; gap:28px;
+}
+
+.auth-side-quote{
+  font-family:var(--serif);
+  font-size:42px; line-height:1.1; font-weight:500;
+  letter-spacing:-0.025em; color:#FFFFFF;
+  text-wrap:balance;
+}
+.auth-side-quote em{ font-style:italic; color:#A9C4FF; }
+
+.auth-side-sub{
+  font-family:var(--sans);
+  font-size:16px; line-height:1.55; color:#c8ccd6;
+  max-width:420px;
+}
+
+.auth-side-card{
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:var(--r);
+  padding:20px 22px;
+  display:flex; flex-direction:column; gap:8px;
+  backdrop-filter:blur(8px);
+}
+.auth-side-card-eyebrow{
+  display:flex; align-items:center; gap:7px;
+  font-family:var(--mono); font-size:10px;
+  letter-spacing:.12em; text-transform:uppercase;
+  color:#9aa3b2;
+  margin-bottom:2px;
+}
+.auth-side-card-lead{
+  font-family:var(--serif); font-size:18px; color:#fff;
+  letter-spacing:-0.01em;
+}
+.auth-side-card-body{
+  font-family:var(--serif); font-size:14.5px; line-height:1.5;
+  color:#cfd3db; letter-spacing:-0.005em;
+}
+.auth-side-card-foot{
+  display:flex; align-items:center; gap:8px;
+  padding-top:10px; margin-top:4px;
+  border-top:1px solid rgba(255,255,255,.08);
+}
+.auth-side-stack{ display:flex; align-items:center; }
+.auth-side-favicon{
+  width:20px; height:20px; border-radius:6px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-family:var(--mono); font-size:9px; font-weight:600; color:#fff;
+  margin-left:-5px; border:2px solid #1c1f24;
+}
+.auth-side-favicon:first-child{ margin-left:0; }
+.auth-side-stack-label{
+  font-family:var(--mono); font-size:10.5px; color:#9aa3b2; margin-left:4px;
+}
+
+.auth-side-trust{
+  display:flex; flex-direction:column; gap:10px;
+  padding-top:8px; border-top:1px solid rgba(255,255,255,.06);
+}
+.auth-side-trust-label{
+  font-family:var(--mono); font-size:10.5px;
+  letter-spacing:.12em; text-transform:uppercase;
+  color:#69707f;
+}
+.auth-side-trust-logos{
+  display:flex; flex-wrap:wrap; gap:10px 18px;
+}
+.auth-side-trust-logos span{
+  font-family:var(--mono); font-size:12px; font-weight:500;
+  color:#aeb4c0; letter-spacing:.01em;
+}
+
+.auth-side-list{
+  list-style:none; padding:0; margin:0;
+  display:flex; flex-direction:column; gap:9px;
+}
+.auth-side-list li{
+  display:flex; align-items:center; gap:9px;
+  font-size:13.5px; color:#c4c9d4; line-height:1.45;
+}
+.auth-side-list .ic-wrap{ color:#A9C4FF; flex:none; }
+
+/* Narrow but still side-by-side (881–1080px) — tighten paddings. */
+@media (max-width: 1080px) and (min-width: 881px){
+  .auth-side{ padding:36px 40px; }
+  .auth-side-quote{ font-size:34px; }
+  .auth-side-sub{ font-size:15px; }
 }

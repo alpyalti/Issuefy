@@ -54,6 +54,7 @@ import {
   LinkSquare02Icon,
   Mail01Icon,
   Loading03Icon,
+  Logout01Icon,
   // sources / socials / providers
   Globe02Icon,
   NewTwitterIcon,
@@ -105,6 +106,7 @@ export const ICONS = {
   LinkSquare02Icon,
   Mail01Icon,
   Loading03Icon,
+  Logout01Icon,
   Globe02Icon,
   NewTwitterIcon,
   Linkedin01Icon,

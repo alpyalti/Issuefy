@@ -56,6 +56,23 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .profile-name{ font-size:13.5px; font-weight:600; color:var(--ink); }
 .profile-role{ font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
 
+/* Compact sign-out icon button used inside the profile chip (sidebar + drawer).
+   Sits at the right edge; click steals the event so the chip's Link doesn't
+   fire alongside it. */
+.signout-icon{
+  margin-left:auto; flex:none;
+  display:inline-flex; align-items:center; justify-content:center;
+  width:30px; height:30px; padding:0;
+  border-radius:var(--r-sm);
+  background:transparent; border:1px solid transparent;
+  color:var(--ink-3);
+  cursor:pointer;
+  transition:background .14s, color .14s, border-color .14s;
+}
+.signout-icon:hover{ background:var(--surface); border-color:var(--line); color:var(--neg); }
+.signout-icon:active{ transform:scale(.97); }
+.signout-icon:disabled{ opacity:.5; cursor:wait; }
+
 /* ---------- Main ---------- */
 .main{ display:flex; flex-direction:column; min-width:0; height:100vh; }
 .topbar{

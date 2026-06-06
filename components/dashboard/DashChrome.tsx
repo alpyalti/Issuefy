@@ -11,6 +11,7 @@ import MobileNav from "./MobileNav";
 import MobileDrawer from "./MobileDrawer";
 import ProjectSwitcher from "./ProjectSwitcher";
 import NotificationBell from "./NotificationBell";
+import SignOutButton from "@/components/auth/SignOutButton";
 
 interface OwnedProject { id: string; name: string; company_name: string | null; }
 
@@ -261,7 +262,7 @@ function DashChromeInner({
               <span className="profile-name">{user.name || user.email}</span>
               <span className="profile-role">{project.name}</span>
             </span>
-            <Icon name="Settings01Icon" size={17} stroke={1.6} />
+            <SignOutButton variant="icon" />
           </Link>
         </div>
       </aside>
