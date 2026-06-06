@@ -34,22 +34,32 @@ export default function FirstRunCard({
   }
 
   return (
-    <section className="card" style={{ padding: 28, display: "flex", flexDirection: "column", gap: 18, background: "var(--surface)", border: "1px solid var(--accent-bg-2)", borderRadius: "var(--r-lg)" }}>
-      <header style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-        <span style={{ width: 40, height: 40, borderRadius: 11, background: "var(--accent-bg)", color: "var(--accent-ink)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
-          <Icon name="SparklesIcon" size={20} stroke={1.6} />
+    <section
+      style={{
+        padding: "26px 26px 24px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        background: "var(--surface)",
+        border: "1px solid var(--line)",
+        borderRadius: "var(--r-lg)",
+        // Single restrained accent: a thin rule along the top edge.
+        boxShadow: "inset 0 2px 0 0 var(--accent)",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--ink-3)" }}>
+          Getting started
         </span>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
-          <h2 style={{ fontFamily: "var(--serif)", fontSize: 22, fontWeight: 500, letterSpacing: "-0.01em", color: "var(--ink)" }}>
-            Your project is live. Your first brief lands tomorrow morning.
-          </h2>
-          <p style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55 }}>
-            Issuefy will run its daily scan around 06:00 UTC and email you the summary{firstCompetitorName ? ` — starting with what's new at ${firstCompetitorName}` : ""}. Or trigger one now to see it sooner.
-          </p>
-        </div>
-      </header>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 22, fontWeight: 500, letterSpacing: "-0.01em", color: "var(--ink)", lineHeight: 1.2 }}>
+          Your project is live. Your first brief lands tomorrow morning.
+        </h2>
+        <p style={{ fontSize: 14.5, color: "var(--ink-2)", lineHeight: 1.55, maxWidth: 560 }}>
+          Issuefy runs its daily scan around 06:00 UTC and emails you the summary{firstCompetitorName ? ` — starting with what's new at ${firstCompetitorName}` : ""}. Or trigger one now to see it sooner.
+        </p>
+      </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <button
           className="btn btn-accent"
           onClick={refreshNow}

@@ -57,6 +57,16 @@ export default function ProjectDashboard({
   const [topic, setTopic] = useState<string | null>(null);
   const [flagged, setFlagged] = useState(false);
 
+  // Adopt fresh server data whenever a new `initialSignals` prop arrives —
+  // i.e. after router.refresh() (first-run scrape, manual refresh) or a route
+  // navigation re-renders the server component. Without this the feed keeps the
+  // array it was seeded with on mount, so signals only appear after a full page
+  // reload even though the brief (read straight from props) already updated.
+  // The effect fires on the PROP reference changing, not on local setSignals,
+  // so optimistic save/dismiss/note edits aren't clobbered (and they're already
+  // persisted server-side, so the refreshed data is canonical anyway).
+  useEffect(() => { setSignals(initialSignals); }, [initialSignals]);
+
   // Reset feed-side state when the URL view changes.
   useEffect(() => { setTab("all"); }, [view]);
 
