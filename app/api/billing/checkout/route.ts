@@ -13,9 +13,12 @@ const bodySchema = z.object({
 
 /**
  * POST /api/billing/checkout — start a Stripe Checkout session for the
- * selected plan + billing period. Card upfront, 14-day trial (Stripe handles
- * the $0-today UX). On success the user lands on /dashboard via
- * success_url; on cancel they return to /upgrade.
+ * selected plan + billing period. Card is always collected upfront.
+ *
+ * Trial policy: ONLY the Starter plan gets the 14-day free trial ($0 today,
+ * first charge on day 15). Growth and Agency are paid plans — Stripe charges
+ * the card immediately on checkout completion. On success the user lands on
+ * /dashboard via success_url; on cancel they return to /upgrade.
  *
  * Reuses the user's stripe_customer_id when present; otherwise creates one
  * on first checkout. Customer IDs are persisted via the webhook handler.
@@ -57,16 +60,20 @@ export async function POST(req: Request) {
     await sql`UPDATE users SET stripe_customer_id = ${customerId} WHERE id = ${user.id}`;
   }
 
+  // Starter only: 14-day trial. Growth/Agency charge immediately.
+  const trialDays = body.plan === "starter" ? 14 : undefined;
+
   const s = requireStripe();
   const session = await s.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
     subscription_data: {
-      trial_period_days: 14,
+      ...(trialDays ? { trial_period_days: trialDays } : {}),
       metadata: { clerk_user_id: user.clerk_user_id, app_user_id: user.id, plan: body.plan },
     },
-    // Customer enters card here even during trial → auto-charges on day 15.
+    // Always collect the card. On Starter it auto-charges on day 15; on paid
+    // plans Stripe charges immediately at checkout completion.
     payment_method_collection: "always",
     allow_promotion_codes: true,
     success_url: `${appUrl}/dashboard?upgraded=1`,

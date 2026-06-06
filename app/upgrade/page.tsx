@@ -20,7 +20,7 @@ export default async function UpgradePage() {
             Choose your plan.
           </h1>
           <p className="muted" style={{ marginTop: 8, fontSize: 16, lineHeight: 1.5 }}>
-            14 days free, then your plan kicks in. Card on file required, but you won&apos;t be charged until day 15. Cancel anytime.
+            Starter includes a 14-day free trial — no charge until day 15. Growth and Agency start today. Card required, cancel anytime.
           </p>
         </div>
         <Link href="/account" className="btn btn-ghost">

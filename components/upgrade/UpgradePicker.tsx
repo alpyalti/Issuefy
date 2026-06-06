@@ -101,10 +101,14 @@ export default function UpgradePicker({ currentPlan }: { currentPlan: string }) 
                 >
                   {busy === t.id ? <><Icon name="Loading03Icon" size={15} stroke={2} className="spin" />Opening…</>
                     : isCurrent ? "Current plan"
-                    : <>Start 14-day trial<Icon name="ArrowRight01Icon" size={15} stroke={2} /></>}
+                    : t.id === "starter"
+                      ? <>Start 14-day trial<Icon name="ArrowRight01Icon" size={15} stroke={2} /></>
+                      : <>Subscribe<Icon name="ArrowRight01Icon" size={15} stroke={2} /></>}
                 </button>
               </div>
-              <div className="tier-trial">No charge until day 15</div>
+              <div className="tier-trial">
+                {t.id === "starter" ? "No charge until day 15" : "Billed today · cancel anytime"}
+              </div>
               <ul className="tier-feats" style={{ marginTop: 18 }}>
                 {t.bullets.map((b) => (
                   <li key={b}><span className="fi"><Icon name="Tick02Icon" size={14} stroke={2} /></span>{b}</li>
