@@ -53,6 +53,13 @@ interface BatchSource {
   url: string;
   cleaned_text: string | null;
   content_snippet: string | null;
+  // Change detection (migration 0008). prior_cleaned_text holds the text
+  // from BEFORE the most recent change; last_changed_at is stamped when the
+  // hash flipped vs the previously stored hash. We treat a source as
+  // "freshly changed in this scrape cycle" when last_changed_at is within
+  // the last hour (cron + signals run back-to-back, so this is the cycle).
+  prior_cleaned_text: string | null;
+  last_changed_at: string | null;
 }
 
 export interface GenerateSignalsResult {
@@ -124,8 +131,11 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
 
   // Pull the most recent N sources that still have cleaned text — empty/blocked
   // pages are already filtered at scrape time (PRD §13.3), but we double-check.
+  // prior_cleaned_text + last_changed_at come from migration 0008 — used below
+  // to feed the model a before/after diff when a re-scrape changed the page.
   const sources = (await sql`
-    SELECT id, title, url, cleaned_text, content_snippet
+    SELECT id, title, url, cleaned_text, content_snippet,
+           prior_cleaned_text, last_changed_at
     FROM sources
     WHERE project_id = ${projectId}
       AND cleaned_text IS NOT NULL
@@ -138,15 +148,39 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     return { inserted: 0, rejected: 0, modelUsed: null, errors: ["no sources to analyze"] };
   }
 
+  // A source is "freshly changed in this scrape cycle" when last_changed_at
+  // is within the last hour. The cron + signals run back-to-back; for manual
+  // refreshes the gap is seconds. One hour is generous enough to absorb any
+  // re-queue while still avoiding re-emitting old change-signals on subsequent
+  // days when nothing has actually changed since.
+  const FRESH_CHANGE_WINDOW_MS = 60 * 60 * 1_000;
+  const cycleCutoff = Date.now() - FRESH_CHANGE_WINDOW_MS;
+  const isFreshlyChanged = (s: BatchSource): boolean =>
+    !!s.last_changed_at &&
+    !!s.prior_cleaned_text &&
+    new Date(s.last_changed_at).getTime() >= cycleCutoff;
+
   // Build the prompt. The model receives source_id explicitly so it can
   // attribute each signal back to a specific row — we use this to drop
-  // hallucinated/orphan signals on the way in.
-  const sourcesJson = sources.map((s) => ({
-    source_id: s.id,
-    title: s.title,
-    url: s.url,
-    text: (s.cleaned_text || s.content_snippet || "").slice(0, MAX_CHARS_PER_SOURCE),
-  }));
+  // hallucinated/orphan signals on the way in. Sources whose content changed
+  // since the last scrape also carry a before/after diff: text_before is the
+  // previous cleaned_text, text is the new one. The model is told (system
+  // rule 9) to compare them and emit a signal only when the change is
+  // materially business-relevant.
+  const sourcesJson = sources.map((s) => {
+    const text = (s.cleaned_text || s.content_snippet || "").slice(0, MAX_CHARS_PER_SOURCE);
+    const fresh = isFreshlyChanged(s);
+    return fresh
+      ? {
+          source_id: s.id,
+          title: s.title,
+          url: s.url,
+          text,
+          changed_since_last_scrape: true,
+          text_before: (s.prior_cleaned_text ?? "").slice(0, MAX_CHARS_PER_SOURCE),
+        }
+      : { source_id: s.id, title: s.title, url: s.url, text };
+  });
 
   const companyBlock = project.track_company || project.company_name
     ? `Your company (${project.company_name || "unnamed"}, ${project.company_website || "no website"}): ${project.company_description || "(no description)"}`
@@ -165,6 +199,7 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     "  6. Keep titles short (<= 120 chars). Keep descriptions short and business-focused.",
     "  7. Prefer signals that change a decision: pricing moves, demand shifts, recurring complaints, new entrants, regulation, must-attend events.",
     "  8. Assess opportunities and risks RELATIVE TO the user's own company when the company profile is provided.",
+    "  9. CHANGE DETECTION: when a source has changed_since_last_scrape=true, it carries text_before (the page's previous content) and text (its current content). Compare them and emit a signal ONLY when the change is materially business-relevant — e.g. new pricing, repositioning, new product/feature launch, dropped product, leadership change, layoff announcement, policy update, new geographic market, new partnership. SKIP micro-edits and noise: copy tweaks, rotating testimonials, blog post listings rotating, footer dates, image swaps, A/B test variants, cookie banners. Be conservative. When you do emit, write the title and description around what specifically changed (e.g. 'Acme raised pricing $29 → $39' or 'Acme rewrote homepage to target enterprise IT'), pick the most accurate category (usually Competitor Move or Pricing / Offer Change), and cite the source.",
   ].join("\n");
 
   const userPrompt = [
