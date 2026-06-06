@@ -2,6 +2,7 @@ import { checkCronSecret } from "@/lib/cron-auth";
 import { requireSql } from "@/lib/db";
 import { json } from "@/lib/api";
 import { captureError } from "@/lib/sentry";
+import { sendSubscriptionLapsedEmail } from "@/lib/mailer";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -31,6 +32,59 @@ async function handle(req: Request) {
   const errors: string[] = [];
   let sourcesDeleted = 0;
   let signalsDeleted = 0;
+  let lapsedUsers = 0;
+  let projectsPaused = 0;
+
+  // ── Lapsed subscriptions — downgrade to starter + auto-pause extras. ──
+  // Stripe webhooks flip subscription_status to 'canceled' at the moment of
+  // cancellation, but the user's plan tier sticks around forever otherwise —
+  // they keep Agency limits indefinitely. Sweep finds any canceled sub whose
+  // billing period has fully expired, drops them back to Starter, pauses
+  // every project beyond the Starter 1-project cap (keeping the OLDEST
+  // active so "the first project I ever made" is preserved), and emails the
+  // owner a "resume my projects" CTA.
+  //
+  // Idempotent — second run filters on `plan <> 'starter'`, so re-running
+  // is a no-op. Safe to land mid-traffic.
+  try {
+    const lapsed = (await sql`
+      SELECT id, email, name, plan
+        FROM users
+       WHERE subscription_status = 'canceled'
+         AND (current_period_end IS NULL OR current_period_end < now())
+         AND plan <> 'starter'
+    `) as { id: string; email: string; name: string | null; plan: string }[];
+
+    for (const u of lapsed) {
+      await sql`UPDATE users SET plan = 'starter' WHERE id = ${u.id}`;
+      // Starter cap = 1 project. Keep the oldest active (created_at ASC),
+      // pause everything else. OFFSET 1 skips that first row.
+      const extras = (await sql`
+        SELECT id FROM projects
+         WHERE user_id = ${u.id} AND is_active = true
+         ORDER BY created_at ASC
+         OFFSET 1
+      `) as { id: string }[];
+      if (extras.length > 0) {
+        const ids = extras.map(e => e.id);
+        await sql`UPDATE projects SET is_active = false WHERE id = ANY(${ids}::uuid[])`;
+        projectsPaused += extras.length;
+      }
+      // Email — failure here doesn't roll back the downgrade.
+      const emailResult = await sendSubscriptionLapsedEmail(u.email, {
+        userName: u.name,
+        previousPlan: u.plan,
+        pausedProjectCount: extras.length,
+      });
+      if (!emailResult.ok) {
+        errors.push(`lapse-email[${u.id}]: ${emailResult.error || "failed"}`);
+      }
+      lapsedUsers++;
+    }
+  } catch (e) {
+    captureError(e, { stage: "cleanup.lapsed" });
+    errors.push(`lapsed: ${e instanceof Error ? e.message : "failed"}`);
+  }
 
   // ── Sources — plan-aware window. ──────────────────────────────────────
   // Each user's plan determines their cutoff. We compute the cutoff per
@@ -82,7 +136,7 @@ async function handle(req: Request) {
   // signal_sources / daily_summary_sources / scrape_jobs on parent deletion,
   // so no separate cleanup is needed for them.
 
-  return json({ sourcesDeleted, signalsDeleted, errors });
+  return json({ sourcesDeleted, signalsDeleted, lapsedUsers, projectsPaused, errors });
 }
 
 export { handle as GET, handle as POST };

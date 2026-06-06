@@ -30,12 +30,14 @@ export default async function UpgradePage({ searchParams }: { searchParams: Sear
   const hasActive = subscription_status === "trialing" || subscription_status === "active" || subscription_status === "past_due" || subscription_status === "paused";
   const required = sp.required === "1" || !hasActive;
   const canceled = sp.canceled === "1";
-  const reason = sp.reason; // "project_cap" | "seat_cap" | undefined
+  const reason = sp.reason; // "project_cap" | "seat_cap" | "lapse" | undefined
   const limits = getLimits(user.plan);
 
   // The page header copy. When the user is subscribed but at a plan cap,
   // show a focused "upgrade for more X" message instead of the generic
-  // "start your subscription" copy.
+  // "start your subscription" copy. The "lapse" path is reached from the
+  // subscription-ended email after the cleanup cron downgraded the account
+  // to Starter and auto-paused extra projects.
   let title = "Choose your plan.";
   let body = "Starter includes a 14-day free trial — no charge until day 15. Growth and Agency start today. Card required, cancel anytime.";
   if (reason === "project_cap") {
@@ -44,6 +46,9 @@ export default async function UpgradePage({ searchParams }: { searchParams: Sear
   } else if (reason === "seat_cap") {
     title = `You're at your team-seat limit.`;
     body = `Your current plan allows ${limits.seats} seat${limits.seats === 1 ? "" : "s"} (you plus invitees). Upgrade for more.`;
+  } else if (reason === "lapse") {
+    title = "Resume where you left off.";
+    body = "Your subscription ended and your account is back on Starter. Pick a plan to reactivate your paused projects — your data and signals are all preserved.";
   } else if (required) {
     title = "Start your subscription.";
     body = "Pick a plan to unlock your dashboard. Starter is free for 14 days — no charge until day 15. Card required, cancel anytime.";

@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { buildDailyBriefEmail, type DailyBriefEmailInput } from "./daily-brief-email";
 import { buildInvitationEmail, type InvitationEmailInput } from "./invitation-email";
+import { buildLapseEmail, type LapseEmailInput } from "./lapse-email";
 import {
   buildSupportAdminReplyEmail,
   buildSupportInboundEmail,
@@ -94,6 +95,18 @@ export async function sendDailyBriefEmail(to: string, input: DailyBriefEmailInpu
  */
 export async function sendInvitationEmail(to: string, input: InvitationEmailInput) {
   const { subject, html, text } = buildInvitationEmail(input);
+  return send({ to, subject, html, text });
+}
+
+/**
+ * Subscription-lapsed notification. Sent by the cleanup cron when it detects
+ * a canceled + expired subscription, downgrades the user to Starter, and
+ * auto-pauses projects beyond the Starter 1-project cap. The CTA points at
+ * /upgrade?required=1&reason=lapse — the resume flow.
+ */
+export async function sendSubscriptionLapsedEmail(to: string, input: Omit<LapseEmailInput, "appUrl">) {
+  const appUrl = (process.env.APP_URL || "https://issuefy.app").replace(/\/+$/, "");
+  const { subject, html, text } = buildLapseEmail({ ...input, appUrl });
   return send({ to, subject, html, text });
 }
 
