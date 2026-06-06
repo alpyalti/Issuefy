@@ -58,6 +58,65 @@ async function isMemberOfSubscribedProject(userId: string): Promise<boolean> {
   }
 }
 
+/** Full billing picture for a user — drives the Plan card on /account and the
+ *  "Manage subscription" entry in the profile menu. Combines the user's own
+ *  Stripe state with the list of projects they ride on as editor/viewer when
+ *  the project owner has an active subscription. */
+export interface RidingMembership {
+  project_id: string;
+  project_name: string;
+  role: "editor" | "viewer";
+  owner_name: string | null;
+  owner_email: string;
+  owner_plan: string;
+}
+
+export interface BillingContext {
+  /** True when this user has their own active Stripe subscription. */
+  hasOwnActiveSub: boolean;
+  /** Projects where they're editor/viewer AND the owner has an active sub. */
+  memberships: RidingMembership[];
+  /** Convenience: true when the user has NO own sub but is a rider on
+   *  someone else's plan. Drives the "rider mode" UI everywhere. */
+  isRiderOnly: boolean;
+}
+
+export async function getBillingContext(userId: string): Promise<BillingContext> {
+  const sql = requireSql();
+  let hasOwnActiveSub = false;
+  let memberships: RidingMembership[] = [];
+  try {
+    const selfRows = (await sql`
+      SELECT subscription_status FROM users WHERE id = ${userId} LIMIT 1
+    `) as Array<{ subscription_status: string | null }>;
+    const status = selfRows[0]?.subscription_status ?? null;
+    hasOwnActiveSub = !!status && ACTIVE_STATUSES.has(status);
+
+    const rows = (await sql`
+      SELECT p.id AS project_id, p.name AS project_name, pm.role,
+             u.name AS owner_name, u.email AS owner_email, u.plan AS owner_plan
+        FROM project_members pm
+        JOIN projects p ON p.id = pm.project_id
+        JOIN users    u ON u.id = p.user_id
+       WHERE pm.user_id = ${userId}
+         AND pm.role IN ('editor','viewer')
+         AND u.subscription_status = ANY(${["trialing", "active", "past_due", "paused"]}::text[])
+       ORDER BY pm.created_at ASC
+    `) as Array<{
+      project_id: string; project_name: string; role: "editor" | "viewer";
+      owner_name: string | null; owner_email: string; owner_plan: string;
+    }>;
+    memberships = rows;
+  } catch {
+    /* swallow — caller treats empty context as "self with no extras" */
+  }
+  return {
+    hasOwnActiveSub,
+    memberships,
+    isRiderOnly: !hasOwnActiveSub && memberships.length > 0,
+  };
+}
+
 /**
  * Dashboard subscription gate. If Stripe is configured and the user doesn't
  * have an active subscription, redirect to /upgrade?required=1 — the

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getOrCreateUser } from "@/lib/clerk-user";
-import { requireActiveSubscription } from "@/lib/billing-gate";
+import { getBillingContext, requireActiveSubscription } from "@/lib/billing-gate";
 import {
   getProject, getCompetitors, getKeywords, getSavedCount,
   getNewSignalCount, getOwnedProjects,
@@ -31,18 +31,30 @@ export default async function ProjectLayout({ children, params, searchParams }: 
   const user = await getOrCreateUser();
   await requireActiveSubscription(user.id, { allowUpgradedHint: sp.upgraded === "1" });
 
-  const [project, competitors, keywords, savedCount, newSignalCount, ownedProjects] = await Promise.all([
+  const [project, competitors, keywords, savedCount, newSignalCount, ownedProjects, billing] = await Promise.all([
     getProject(projectId, user.id),
     getCompetitors(projectId),
     getKeywords(projectId),
     getSavedCount(projectId),
     getNewSignalCount(projectId),
     getOwnedProjects(user.id),
+    getBillingContext(user.id),
   ]);
   if (!project) notFound();
 
   const initials =
     ((user.name || user.email).split(/\s|@/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("") || "U").toUpperCase();
+
+  // Rider-billing info for the profile menu's "Manage subscription" action.
+  // Picks the highest-tier inviter (Starter < Growth < Agency < Enterprise)
+  // as the primary contact when the user is on multiple owners' plans.
+  const TIER_RANK: Record<string, number> = { starter: 1, growth: 2, agency: 3, enterprise: 4 };
+  const primary = billing.isRiderOnly
+    ? [...billing.memberships].sort((a, b) => (TIER_RANK[b.owner_plan] ?? 0) - (TIER_RANK[a.owner_plan] ?? 0))[0]
+    : null;
+  const rider = billing.isRiderOnly && primary
+    ? { isRiderOnly: true, primaryOwnerName: primary.owner_name, primaryOwnerEmail: primary.owner_email }
+    : undefined;
 
   return (
     <DashChrome
@@ -54,6 +66,7 @@ export default async function ProjectLayout({ children, params, searchParams }: 
       newSignalCount={newSignalCount}
       ownedProjects={ownedProjects}
       role={project.current_user_role}
+      rider={rider}
     >
       {children}
     </DashChrome>

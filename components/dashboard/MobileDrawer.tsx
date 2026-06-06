@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons/Icon";
-import { useAccountActions } from "./ProfileMenu";
+import { useAccountActions, type AccountRiderInfo } from "./ProfileMenu";
 
 /**
  * Mobile slide-in drawer holding the watchlist + profile.
@@ -24,7 +24,7 @@ interface AccessibleProject {
 
 export default function MobileDrawer({
   open, onClose, projectId, projectName, userName, competitors, keywords, initials,
-  projects = [],
+  projects = [], rider,
 }: {
   open: boolean;
   onClose: () => void;
@@ -37,8 +37,11 @@ export default function MobileDrawer({
   /** Every project the user can access — owned + member. Drives the
    *  drawer's project switcher (Teams Phase 2). */
   projects?: AccessibleProject[];
+  /** Rider-billing info — pass-through so "Manage subscription" alerts
+   *  rider-only users instead of trying to open the Stripe portal. */
+  rider?: AccountRiderInfo;
 }) {
-  const { manageSubscription, signOut, helpHref, busy } = useAccountActions();
+  const { manageSubscription, signOut, helpHref, busy } = useAccountActions(rider);
 
   useEffect(() => {
     if (!open) return;

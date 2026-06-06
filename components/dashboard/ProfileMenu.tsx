@@ -9,20 +9,41 @@ const HELP_HREF = "mailto:hello@issuefy.app?subject=Issuefy%20support";
 
 interface MenuUser { name: string | null; email: string; initials: string }
 
+export interface AccountRiderInfo {
+  /** The user has no own subscription but is on someone else's plan. */
+  isRiderOnly: boolean;
+  /** Primary inviter to point billing questions at when isRiderOnly is true. */
+  primaryOwnerName: string | null;
+  primaryOwnerEmail: string | null;
+}
+
 /**
  * Shared account actions, reused by the sidebar popover (ProfileMenu) and the
  * mobile drawer rows so the logout / billing logic lives in one place.
  *
  *  - manageSubscription → Stripe Customer Portal; falls back to /upgrade when
  *    the user has no customer yet (portal returns 409) or billing is off (501).
+ *    When `rider` is passed and isRiderOnly is true, we don't try to open the
+ *    portal at all — the user has no Stripe customer of their own. Instead an
+ *    alert tells them who to contact (the project owner who invited them).
  *  - signOut → clears the Clerk session and returns to the landing page.
  */
-export function useAccountActions() {
+export function useAccountActions(rider?: AccountRiderInfo) {
   const clerk = useClerk();
   const [busy, setBusy] = useState(false);
 
   const manageSubscription = useCallback(async () => {
     if (busy) return;
+    // Rider mode: no portal to open. Surface the inviter's email so the user
+    // knows where to direct billing questions.
+    if (rider?.isRiderOnly) {
+      const label = rider.primaryOwnerName?.trim() || rider.primaryOwnerEmail || "the project owner";
+      const contact = rider.primaryOwnerEmail ? ` (${rider.primaryOwnerEmail})` : "";
+      alert(
+        `You're using Issuefy through ${label}'s subscription${contact}.\n\nContact them to change the plan, update the card, or cancel.\n\nIf you'd like your own subscription, go to Account → Plan → "Start your own subscription".`,
+      );
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/billing/portal", { method: "POST" });
@@ -34,7 +55,7 @@ export function useAccountActions() {
       /* fall through to the plan picker */
     }
     window.location.href = "/upgrade";
-  }, [busy]);
+  }, [busy, rider]);
 
   const signOut = useCallback(() => {
     clerk.signOut({ redirectUrl: "/" });
@@ -49,14 +70,18 @@ export function useAccountActions() {
  * chip + scattered sign-out icon. Closes on outside-click and Escape.
  */
 export default function ProfileMenu({
-  projectId, user,
+  projectId, user, rider,
 }: {
   projectId: string;
   user: MenuUser;
+  /** Threaded down from the dashboard layout via DashChrome. When the user
+   *  is a rider-only member, "Manage subscription" alerts instead of trying
+   *  to open the Stripe portal (they have no customer of their own). */
+  rider?: AccountRiderInfo;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { manageSubscription, signOut, helpHref, busy } = useAccountActions();
+  const { manageSubscription, signOut, helpHref, busy } = useAccountActions(rider);
 
   useEffect(() => {
     if (!open) return;

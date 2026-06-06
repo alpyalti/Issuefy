@@ -12,7 +12,7 @@ import MobileNav from "./MobileNav";
 import MobileDrawer from "./MobileDrawer";
 import ProjectSwitcher from "./ProjectSwitcher";
 import NotificationBell from "./NotificationBell";
-import ProfileMenu from "./ProfileMenu";
+import ProfileMenu, { type AccountRiderInfo } from "./ProfileMenu";
 
 interface OwnedProject {
   id: string;
@@ -71,6 +71,10 @@ export default function DashChrome(props: {
   /** Caller's role on the currently-open project (Teams Phase 5). Threaded
    *  to every client component below via DashboardRoleProvider. */
   role: DashboardRole;
+  /** Optional rider-billing info — set when this user has no own subscription
+   *  but is a member of someone else's actively-subscribed project. Drives
+   *  the "Manage subscription" → contact-owner alert in ProfileMenu. */
+  rider?: AccountRiderInfo;
   children: React.ReactNode;
 }) {
   return (
@@ -83,7 +87,7 @@ export default function DashChrome(props: {
 }
 
 function DashChromeInner({
-  project, user, competitors, keywords, savedCount, newSignalCount, ownedProjects, children,
+  project, user, competitors, keywords, savedCount, newSignalCount, ownedProjects, rider, children,
 }: {
   project: Project;
   user: User;
@@ -92,6 +96,7 @@ function DashChromeInner({
   savedCount: number;
   newSignalCount: number;
   ownedProjects: OwnedProject[];
+  rider?: AccountRiderInfo;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -278,7 +283,7 @@ function DashChromeInner({
         </div>
 
         <div className="side-foot">
-          <ProfileMenu projectId={project.id} user={user} />
+          <ProfileMenu projectId={project.id} user={user} rider={rider} />
         </div>
       </aside>
 
@@ -347,6 +352,7 @@ function DashChromeInner({
         keywords={keywords}
         initials={user.initials}
         projects={ownedProjects}
+        rider={rider}
       />
 
       <CommandPalette

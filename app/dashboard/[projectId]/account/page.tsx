@@ -1,5 +1,6 @@
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
+import { getBillingContext } from "@/lib/billing-gate";
 import IdentityCard from "@/components/account/IdentityCard";
 import PlanCard from "@/components/account/PlanCard";
 import SecurityCard from "@/components/account/SecurityCard";
@@ -42,6 +43,10 @@ export default async function AccountPage() {
     /* columns may not exist yet — safe fallback */
   }
 
+  // Teams: an invited member with no own subscription rides on the inviter's
+  // plan. Show that on the Plan card and gate billing actions.
+  const billing = await getBillingContext(user.id);
+
   return (
     <div className="page-wrap" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <IdentityCard email={user.email} initialName={user.name} initialCompany={user.company_name} />
@@ -52,6 +57,8 @@ export default async function AccountPage() {
         subscriptionStatus={extra.subscription_status}
         currentPeriodEnd={extra.current_period_end}
         cancelAtPeriodEnd={!!extra.cancel_at_period_end}
+        hasOwnActiveSub={billing.hasOwnActiveSub}
+        memberships={billing.memberships}
       />
 
       <EmailPreferences initialEnabled={user.email_brief_enabled} />
