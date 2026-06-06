@@ -13,11 +13,16 @@ const CATEGORIES = [
 ] as const;
 
 /**
- * New-ticket form. Validates client-side, posts to /api/support/tickets, then
- * routes to the ticket detail page so the user sees the thread they just
- * created. Emails are sent server-side as part of the POST.
+ * Open-a-ticket form. Validates client-side, POSTs to /api/support/tickets,
+ * then routes to the ticket detail page. Styling lives in support.css so the
+ * inputs match the rest of the dashboard surface (no auth-page borrowed CSS).
+ *
+ * `basePath` is the URL prefix to navigate to on success — passed in by the
+ * page wrapper so the form works both inside the dashboard shell
+ * (/dashboard/[projectId]/support) and from any other entry point that might
+ * mount it later.
  */
-export default function NewTicketForm() {
+export default function NewTicketForm({ basePath }: { basePath: string }) {
   const router = useRouter();
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState<typeof CATEGORIES[number]["value"]>("general");
@@ -31,7 +36,7 @@ export default function NewTicketForm() {
     setErr(null);
     const cleanSubject = subject.trim();
     const cleanBody = body.trim();
-    if (cleanSubject.length < 3) { setErr("Give the ticket a short subject (≥ 3 chars)."); return; }
+    if (cleanSubject.length < 3) { setErr("Give the ticket a short subject (≥ 3 characters)."); return; }
     if (cleanBody.length < 10) { setErr("Tell us a bit more — at least 10 characters."); return; }
 
     setSubmitting(true);
@@ -44,7 +49,7 @@ export default function NewTicketForm() {
       if (res.status === 429) { setErr("You're submitting too fast — give it a moment."); return; }
       if (!res.ok) { setErr("Couldn't open the ticket. Try again."); return; }
       const { ticketId } = (await res.json()) as { ticketId: string };
-      router.push(`/support/tickets/${ticketId}`);
+      router.push(`${basePath}/tickets/${ticketId}`);
     } catch {
       setErr("Couldn't reach the server. Try again.");
     } finally {
@@ -53,70 +58,67 @@ export default function NewTicketForm() {
   }
 
   return (
-    <form onSubmit={submit} className="card" style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
-      <header style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18 }}>Open a ticket</h2>
-        <p className="muted" style={{ fontSize: 13.5, maxWidth: 560 }}>
-          Tell us what&apos;s going on — we&apos;ll reply by email and you can track the thread on this page.
-        </p>
-      </header>
-
+    <form onSubmit={submit} className="support-form" noValidate>
       {err && (
-        <div className="auth-error">
+        <div className="support-error">
           <Icon name="Alert02Icon" size={14} stroke={1.7} color="var(--neg)" />
           <span>{err}</span>
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: 12 }}>
-        <div className="auth-field">
-          <label className="auth-label" htmlFor="ticket-subject">Subject</label>
+      <div className="support-form-row">
+        <div className="support-field">
+          <label className="support-label" htmlFor="ticket-subject">Subject</label>
           <input
             id="ticket-subject"
-            className="auth-input"
+            className="support-input"
             placeholder="Short summary of the issue"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             disabled={submitting}
             maxLength={200}
+            autoComplete="off"
           />
         </div>
-        <div className="auth-field">
-          <label className="auth-label" htmlFor="ticket-category">Category</label>
+        <div className="support-field">
+          <label className="support-label" htmlFor="ticket-category">Category</label>
           <select
             id="ticket-category"
-            className="auth-input"
+            className="support-select"
             value={category}
             onChange={(e) => setCategory(e.target.value as typeof CATEGORIES[number]["value"])}
             disabled={submitting}
-            style={{ paddingRight: 18, cursor: "pointer" }}
           >
             {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="auth-field">
-        <label className="auth-label" htmlFor="ticket-body">Details</label>
+      <div className="support-field">
+        <label className="support-label" htmlFor="ticket-body">Details</label>
         <textarea
           id="ticket-body"
-          className="auth-input"
+          className="support-textarea"
           placeholder="What were you trying to do? What happened instead? Anything we should know — error message, URL, steps to reproduce — helps."
           value={body}
           onChange={(e) => setBody(e.target.value)}
           disabled={submitting}
           rows={6}
-          style={{ height: "auto", padding: "12px 14px", lineHeight: 1.5, fontFamily: "var(--sans)", fontSize: 14, resize: "vertical" }}
           maxLength={10_000}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(e); }
+          }}
         />
-        <p className="mono" style={{ fontSize: 10.5, color: "var(--ink-4)", letterSpacing: ".04em", marginTop: 4 }}>
-          {body.length} / 10,000
-        </p>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+      <div className="support-form-foot">
+        <span className="support-counter">⌘/Ctrl + Enter to send · {body.length} / 10,000</span>
         <button type="submit" className="btn btn-accent" disabled={submitting}>
-          {submitting ? (<><Icon name="Loading03Icon" size={16} stroke={2} className="spin" />Sending…</>) : "Send ticket"}
+          {submitting ? (
+            <><Icon name="Loading03Icon" size={16} stroke={2} className="spin" /> Sending…</>
+          ) : (
+            <><Icon name="Mail01Icon" size={15} stroke={1.8} /> Send ticket</>
+          )}
         </button>
       </div>
     </form>
