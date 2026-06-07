@@ -33,6 +33,15 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
   background:var(--accent-bg); color:var(--accent-ink); padding:2px 7px; border-radius:var(--r-pill); }
 .side-item.on .side-badge{ background:rgba(255,255,255,.16); color:#fff; }
 
+/* Tiny inline keyboard hint shown on each sidebar nav item. Sits flush right,
+   fades in only on hover or when the item is the active view so it doesn't
+   compete visually with the icon + label on idle. */
+.kbd-mini{ margin-left:auto; font-family:var(--mono); font-size:10px; letter-spacing:.05em;
+  color:var(--ink-4); padding:1px 5px; border:1px solid var(--line); border-radius:5px;
+  background:transparent; flex:none; opacity:0; transition:opacity .14s; pointer-events:none; }
+.side-item:hover .kbd-mini, .side-item.on .kbd-mini{ opacity:.85; }
+.side-item.on .kbd-mini{ color:rgba(255,255,255,.7); border-color:rgba(255,255,255,.18); }
+
 .watchlist{ display:flex; flex-direction:column; gap:1px; }
 .watch-item{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px; transition:background .14s; text-decoration:none; color:inherit; cursor:pointer; }
 .watch-item:hover{ background:var(--surface-2); }

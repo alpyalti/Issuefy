@@ -38,13 +38,13 @@ interface User { name: string | null; email: string; initials: string; }
 interface Competitor { id: string; name: string; is_active: boolean; }
 interface Keyword { id: string; keyword: string; is_active: boolean; }
 
-const FEED_VIEWS: { id: DashboardView; label: string; icon: IconName }[] = [
-  { id: "today", label: "Today", icon: "DashboardSquare01Icon" },
-  { id: "signals", label: "All signals", icon: "FlashIcon" },
-  { id: "competitor", label: "Competitors", icon: "Target01Icon" },
-  { id: "opportunity", label: "Opportunities", icon: "BulbIcon" },
-  { id: "threat", label: "Risks", icon: "Alert02Icon" },
-  { id: "saved", label: "Saved", icon: "Bookmark01Icon" },
+const FEED_VIEWS: { id: DashboardView; label: string; icon: IconName; kbd: string }[] = [
+  { id: "today", label: "Today", icon: "DashboardSquare01Icon", kbd: "1" },
+  { id: "signals", label: "All signals", icon: "FlashIcon", kbd: "2" },
+  { id: "competitor", label: "Competitors", icon: "Target01Icon", kbd: "3" },
+  { id: "opportunity", label: "Opportunities", icon: "BulbIcon", kbd: "4" },
+  { id: "threat", label: "Risks", icon: "Alert02Icon", kbd: "5" },
+  { id: "saved", label: "Saved", icon: "Bookmark01Icon", kbd: "6" },
 ];
 
 const VIEW_TITLES: Record<string, { title: string; sub: string }> = {
@@ -122,20 +122,83 @@ function DashChromeInner({
   const isDashboardIndex = !realRoute; // true on /dashboard/[id]
   const activeView: string = realRoute ?? view;
 
-  // Keyboard shortcuts. ⌘K opens the palette; r runs a refresh; ? toggles
-  // the shortcuts overlay. Single-letter shortcuts are ignored when focus is
-  // in a text input (so "r" while typing a note doesn't fire a refresh).
+  // Keyboard shortcuts. The map:
+  //   Cmd/Ctrl + K       open the command palette
+  //   Cmd/Ctrl + Shift+P open the palette (works as a project quick-switch too)
+  //   1..6               jump to the six feed views (Today / Signals / etc.)
+  //   g then s/a/e/p     real-route navigation (Sources / Archive / sEttings /
+  //                       Profile/account). 1.5s window after pressing "g".
+  //   R                  refresh data
+  //   ?                  toggle the shortcuts help overlay
+  //   Esc                close any open dialog
+  // Single-letter and "g"-prefixed shortcuts are ignored while focus is in a
+  // text input — so "r" while typing a note doesn't run a scrape, and "g"
+  // inside the cmdk search doesn't swallow keystrokes.
+  const gPending = useRef(false);
+  const gTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    function clearGPending() {
+      gPending.current = false;
+      if (gTimer.current) { clearTimeout(gTimer.current); gTimer.current = null; }
+    }
+    function viewForNumber(n: string): DashboardView | null {
+      switch (n) {
+        case "1": return "today";
+        case "2": return "signals";
+        case "3": return "competitor";
+        case "4": return "opportunity";
+        case "5": return "threat";
+        case "6": return "saved";
+        default: return null;
+      }
+    }
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      // Cmd/Ctrl + K → palette toggle.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+        return;
+      }
+      // Cmd/Ctrl + Shift + P → palette (project quick-switch surface).
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setPaletteOpen(true);
         return;
       }
       // Ignore single-letter shortcuts while typing into an input or modal.
       const tag = (e.target as HTMLElement)?.tagName;
       const editable = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
-      if (editable || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (editable || e.metaKey || e.ctrlKey || e.altKey) {
+        // Modifier keystrokes inside fields should ALSO cancel any pending "g".
+        if (gPending.current) clearGPending();
+        return;
+      }
+
+      // "g" prefix mode — sets a 1.5s window; next key picks the route.
+      if (gPending.current) {
+        const key = e.key.toLowerCase();
+        clearGPending();
+        if (key === "s")      { e.preventDefault(); router.push(`/dashboard/${project.id}/sources`); return; }
+        if (key === "a")      { e.preventDefault(); router.push(`/dashboard/${project.id}/archive`); return; }
+        if (key === "e")      { e.preventDefault(); router.push(`/dashboard/${project.id}/settings`); return; }
+        if (key === "p")      { e.preventDefault(); router.push(`/dashboard/${project.id}/account`); return; }
+        // Any other key while in g-mode falls through to its normal handler,
+        // which is fine — we already cleared the pending state.
+      }
+      if (e.key === "g" || e.key === "G") {
+        e.preventDefault();
+        gPending.current = true;
+        gTimer.current = setTimeout(clearGPending, 1500);
+        return;
+      }
+
+      // Number row → feed view jump.
+      const viewKey = viewForNumber(e.key);
+      if (viewKey) {
+        e.preventDefault();
+        switchToView(viewKey);
+        return;
+      }
 
       if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
         e.preventDefault();
@@ -144,14 +207,20 @@ function DashChromeInner({
         e.preventDefault();
         if (canEdit) runRefresh();
       } else if (e.key === "Escape") {
+        clearGPending();
         if (shortcutsOpen) setShortcutsOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // runRefresh is stable per render; including it would re-bind on every state change.
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (gTimer.current) clearTimeout(gTimer.current);
+    };
+    // runRefresh + switchToView are stable per render; switchToView is defined
+    // below and captures `view` / `router` from closure — re-binding on every
+    // state change would thrash the listener for no behavior change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shortcutsOpen]);
+  }, [shortcutsOpen, project.id, router]);
 
   // When the user is on a real route (sources / settings), warm Next's router
   // cache for the dashboard index. By the time they click a feed-view button,
@@ -237,6 +306,7 @@ function DashChromeInner({
                   <Icon name={n.icon} size={19} stroke={isActive ? 1.9 : 1.6} />
                   <span>{n.label}</span>
                   {badge ? <span className="side-badge">{badge}</span> : null}
+                  <span className="kbd-mini">{n.kbd}</span>
                 </button>
               );
             })}
@@ -247,6 +317,7 @@ function DashChromeInner({
             >
               <Icon name="News01Icon" size={19} stroke={activeView === "sources" ? 1.9 : 1.6} />
               <span>Sources</span>
+              <span className="kbd-mini">G S</span>
             </Link>
             <Link
               href={`/dashboard/${project.id}/archive`}
@@ -255,6 +326,7 @@ function DashChromeInner({
             >
               <Icon name="LinkSquare02Icon" size={19} stroke={activeView === "archive" ? 1.9 : 1.6} />
               <span>Archive</span>
+              <span className="kbd-mini">G A</span>
             </Link>
             <Link
               href={`/dashboard/${project.id}/settings`}
@@ -263,6 +335,7 @@ function DashChromeInner({
             >
               <Icon name="Settings01Icon" size={19} stroke={activeView === "settings" ? 1.9 : 1.6} />
               <span>Settings</span>
+              <span className="kbd-mini">G E</span>
             </Link>
           </nav>
         </div>
@@ -380,6 +453,7 @@ function DashChromeInner({
         projectId={project.id}
         competitors={competitors}
         keywords={keywords}
+        projects={ownedProjects}
         onJump={(v) => { switchToView(v); setPaletteOpen(false); }}
       />
 
@@ -392,11 +466,43 @@ function DashChromeInner({
 
 function ShortcutsOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
-  const items: Array<{ keys: string[]; label: string }> = [
-    { keys: ["⌘", "K"], label: "Open the command palette" },
-    { keys: ["R"], label: "Refresh data" },
-    { keys: ["?"], label: "Show / hide this overlay" },
-    { keys: ["Esc"], label: "Close any open dialog" },
+  // Grouped so users can scan by intent (jump around, run an action, get help).
+  const sections: Array<{ heading: string; items: Array<{ keys: string[]; label: string }> }> = [
+    {
+      heading: "Search & switch",
+      items: [
+        { keys: ["⌘", "K"], label: "Open the command palette" },
+        { keys: ["⌘", "⇧", "P"], label: "Quick switch project" },
+      ],
+    },
+    {
+      heading: "Jump to a view",
+      items: [
+        { keys: ["1"], label: "Today" },
+        { keys: ["2"], label: "All signals" },
+        { keys: ["3"], label: "Competitors" },
+        { keys: ["4"], label: "Opportunities" },
+        { keys: ["5"], label: "Risks" },
+        { keys: ["6"], label: "Saved" },
+      ],
+    },
+    {
+      heading: "Jump to a page",
+      items: [
+        { keys: ["G", "S"], label: "Sources" },
+        { keys: ["G", "A"], label: "Archive" },
+        { keys: ["G", "E"], label: "Settings" },
+        { keys: ["G", "P"], label: "Account / profile" },
+      ],
+    },
+    {
+      heading: "Actions",
+      items: [
+        { keys: ["R"], label: "Refresh data" },
+        { keys: ["?"], label: "Show / hide this overlay" },
+        { keys: ["Esc"], label: "Close any open dialog" },
+      ],
+    },
   ];
   return (
     <div className="cmdk-overlay" onClick={onClose}>
@@ -405,15 +511,22 @@ function ShortcutsOverlay({ open, onClose }: { open: boolean; onClose: () => voi
           <h3 style={{ fontFamily: "var(--serif)", fontSize: 18, fontWeight: 500 }}>Keyboard shortcuts</h3>
           <span className="esc" style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--ink-3)", border: "1px solid var(--line-2)", borderRadius: 6, padding: "3px 7px" }}>ESC</span>
         </header>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {items.map((it) => (
-            <div key={it.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderRadius: 10, background: "var(--surface-2)" }}>
-              <span style={{ fontSize: 13.5, color: "var(--ink-2)" }}>{it.label}</span>
-              <span style={{ display: "flex", gap: 4 }}>
-                {it.keys.map((k) => (
-                  <span key={k} className="kbd" style={{ background: "var(--surface)", border: "1px solid var(--line-2)", padding: "3px 8px", fontSize: 11.5, fontWeight: 600 }}>{k}</span>
-                ))}
-              </span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxHeight: "60vh", overflowY: "auto" }}>
+          {sections.map((sec) => (
+            <div key={sec.heading} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--ink-4)", padding: "0 2px 4px" }}>
+                {sec.heading}
+              </div>
+              {sec.items.map((it) => (
+                <div key={it.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "9px 12px", borderRadius: 10, background: "var(--surface-2)" }}>
+                  <span style={{ fontSize: 13.5, color: "var(--ink-2)" }}>{it.label}</span>
+                  <span style={{ display: "flex", gap: 4 }}>
+                    {it.keys.map((k, i) => (
+                      <span key={`${k}-${i}`} className="kbd" style={{ background: "var(--surface)", border: "1px solid var(--line-2)", padding: "3px 8px", fontSize: 11.5, fontWeight: 600 }}>{k}</span>
+                    ))}
+                  </span>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -443,13 +556,17 @@ interface WatchEntity {
 }
 
 function CommandPalette({
-  open, onClose, projectId, competitors, keywords, onJump,
+  open, onClose, projectId, competitors, keywords, projects, onJump,
 }: {
   open: boolean;
   onClose: () => void;
   projectId: string;
   competitors: Competitor[];
   keywords: Keyword[];
+  /** Accessible projects for cross-project quick-switch. The current project
+   *  is filtered out at render time so the only entries that show up are
+   *  "switch to" candidates. */
+  projects: OwnedProject[];
   onJump: (v: DashboardView) => void;
 }) {
   const router = useRouter();
@@ -503,6 +620,17 @@ function CommandPalette({
     ? ALL_NAV
     : ALL_NAV.filter((n) => n.label.toLowerCase().includes(ql) || n.sub.toLowerCase().includes(ql));
 
+  // Project quick-switch — every project the user can access except the
+  // current one. Default state shows up to 4 (typical user owns 1-3); when
+  // searching, no cap so all matches show.
+  const otherProjects = projects.filter((p) => p.id !== projectId);
+  const projItems = ql
+    ? otherProjects.filter((p) =>
+        p.name.toLowerCase().includes(ql) ||
+        (p.company_name ?? "").toLowerCase().includes(ql),
+      )
+    : otherProjects.slice(0, 4);
+
   // Watchlist entities (competitors + keywords) — search by name only.
   const watch: WatchEntity[] = [
     ...competitors.map<WatchEntity>((c) => ({ kind: "competitor", id: c.id, label: c.name })),
@@ -524,12 +652,13 @@ function CommandPalette({
       ).slice(0, 10)
     : signals.slice(0, 8);
 
-  const groups: { label: string; kind: "nav" | "signal" | "watch"; items: (NavOpt | SignalHit | WatchEntity)[] }[] = [];
+  const groups: { label: string; kind: "nav" | "signal" | "watch" | "project"; items: (NavOpt | SignalHit | WatchEntity | OwnedProject)[] }[] = [];
+  if (projItems.length) groups.push({ label: ql ? "Projects" : "Switch project", kind: "project", items: projItems });
   if (navItems.length) groups.push({ label: "Navigate", kind: "nav", items: navItems });
   if (watchItems.length) groups.push({ label: "Watchlist", kind: "watch", items: watchItems });
   if (sigItems.length) groups.push({ label: ql ? "Signals" : "Recent signals", kind: "signal", items: sigItems });
 
-  const flat: { kind: "nav" | "signal" | "watch"; data: NavOpt | SignalHit | WatchEntity }[] = [];
+  const flat: { kind: "nav" | "signal" | "watch" | "project"; data: NavOpt | SignalHit | WatchEntity | OwnedProject }[] = [];
   groups.forEach((g) => g.items.forEach((item) => flat.push({ kind: g.kind, data: item })));
 
   function activate(idx: number) {
@@ -540,6 +669,10 @@ function CommandPalette({
       if (opt.id === "sources") router.push(`/dashboard/${projectId}/sources`);
       else if (opt.id === "settings") router.push(`/dashboard/${projectId}/settings`);
       else onJump(opt.id);
+    } else if (item.kind === "project") {
+      const p = item.data as OwnedProject;
+      router.push(`/dashboard/${p.id}`);
+      onClose();
     } else if (item.kind === "watch") {
       // Competitor / keyword → drop into project settings where it can be
       // edited; the deep-link to a specific row is implicit (Settings shows
@@ -597,6 +730,11 @@ function CommandPalette({
                   title = w.label;
                   sub = w.kind === "competitor" ? "Competitor in your watchlist" : "Keyword in your watchlist";
                   icName = w.kind === "competitor" ? "Target01Icon" : "Tag01Icon";
+                } else if (g.kind === "project") {
+                  const p = item as OwnedProject;
+                  title = p.name;
+                  sub = p.company_name || (p.role !== "owner" ? `Shared with you · ${p.role}` : "Switch to this project");
+                  icName = "DashboardSquare01Icon";
                 } else {
                   const opt = item as NavOpt;
                   title = opt.label;
