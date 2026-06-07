@@ -18,6 +18,7 @@
 import { requireSql, withTx } from "./db";
 import { chatJson } from "./openrouter";
 import { captureError } from "./sentry";
+import { resolveMarket } from "./markets";
 import {
   dailySummaryResponseSchema,
   type DailySummaryResponse,
@@ -165,6 +166,10 @@ export async function generateDailySummaryForProject(projectId: string): Promise
     snippet: (s.content_snippet || "").slice(0, 400),
   }));
 
+  // Resolve once so the prompt sees the canonical label ("Turkey", "Global",
+  // "Latin America") rather than the dropdown code ("TR", "REGION_LATAM").
+  const market = resolveMarket(project.target_market);
+
   const systemPrompt = [
     "You are Issuefy, writing the daily AI market briefing for one user's project.",
     "Output strict JSON ONLY — no prose, no markdown.",
@@ -176,13 +181,15 @@ export async function generateDailySummaryForProject(projectId: string): Promise
     "  5. source_ids: include 2-5 source_id values from the sources block that DIRECTLY support claims in the summary.",
     "  6. If there's not enough data, say so clearly — do not fabricate context.",
     "  7. When a company profile is provided, frame opportunities and risks RELATIVE TO that company.",
+    "  8. TARGET MARKET PRIORITY: lead with signals and developments most relevant to the user's target market. Local-market context (regulations, competitors, customers, news in that region) outranks generic global commentary.",
   ].join("\n");
 
   const baseUser = [
     `Project: ${project.name}`,
     `Industry: ${project.industry}`,
     `Business type: ${project.business_type}`,
-    `Target market: ${project.target_market}`,
+    `Target market: ${market.canonicalName}`,
+    `Prioritize content most relevant to "${market.canonicalName}". Local-market signals outrank generic global ones.`,
     companyBlock,
     "",
     "Recent signals:",

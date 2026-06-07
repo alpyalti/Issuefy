@@ -17,6 +17,7 @@ import { chatJson } from "./openrouter";
 import { reserveCalls } from "./usage-counters";
 import { getLimits } from "./usage";
 import { captureError } from "./sentry";
+import { resolveMarket } from "./markets";
 import {
   signalExtractionResponseSchema,
   SIGNAL_CATEGORIES,
@@ -186,6 +187,10 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     ? `Your company (${project.company_name || "unnamed"}, ${project.company_website || "no website"}): ${project.company_description || "(no description)"}`
     : "(No company profile — run on competitors and keywords only.)";
 
+  // Resolve once so the prompt sees the canonical label ("Turkey", "Global",
+  // "Latin America") rather than the dropdown code ("TR", "REGION_LATAM").
+  const market = resolveMarket(project.target_market);
+
   const systemPrompt = [
     "You are Issuefy, a market-intelligence analyst that extracts actionable business signals from public web sources.",
     "Output strict JSON only — no prose, no markdown.",
@@ -200,13 +205,15 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     "  7. Prefer signals that change a decision: pricing moves, demand shifts, recurring complaints, new entrants, regulation, must-attend events.",
     "  8. Assess opportunities and risks RELATIVE TO the user's own company when the company profile is provided.",
     "  9. CHANGE DETECTION: when a source has changed_since_last_scrape=true, it carries text_before (the page's previous content) and text (its current content). Compare them and emit a signal ONLY when the change is materially business-relevant — e.g. new pricing, repositioning, new product/feature launch, dropped product, leadership change, layoff announcement, policy update, new geographic market, new partnership. SKIP micro-edits and noise: copy tweaks, rotating testimonials, blog post listings rotating, footer dates, image swaps, A/B test variants, cookie banners. Be conservative. When you do emit, write the title and description around what specifically changed (e.g. 'Acme raised pricing $29 → $39' or 'Acme rewrote homepage to target enterprise IT'), pick the most accurate category (usually Competitor Move or Pricing / Offer Change), and cite the source.",
+    "  10. TARGET MARKET PRIORITY: signals about events, regulations, competitors, customers, or news in the user's target market outrank generic global signals. When ranking importance, treat local-market relevance as a bump (e.g. a regulatory change in the target country → at least Medium importance; a generic global trend with no local angle → Low unless it directly threatens the user's company).",
   ].join("\n");
 
   const userPrompt = [
     `Project: ${project.name}`,
     `Industry: ${project.industry}`,
     `Business type: ${project.business_type}`,
-    `Target market: ${project.target_market}`,
+    `Target market: ${market.canonicalName}`,
+    `Prioritize signals relevant to "${market.canonicalName}". Local regulations, competitors, customers, and news in that region outrank generic global signals.`,
     companyBlock,
     `Competitors: ${competitors.map((c) => `${c.name} (${c.website_url})`).join("; ") || "(none yet)"}`,
     `Keywords: ${keywords.map((k) => k.keyword).join(", ") || "(none yet)"}`,

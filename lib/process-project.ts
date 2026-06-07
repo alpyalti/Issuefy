@@ -27,11 +27,14 @@ import { captureBreadcrumb, captureError } from "./sentry";
 import { generateSignalsForProject } from "./signals";
 import { generateDailySummaryForProject } from "./daily-summary";
 import { pickSocialScrapeTargets, ingestRedditActivity } from "./social-monitor";
+import { resolveMarket } from "./markets";
+import { translateKeyword } from "./translation";
 
 interface ProjectRow {
   id: string;
   user_id: string;
   name: string;
+  target_market: string | null;
 }
 interface UserRow {
   id: string;
@@ -81,7 +84,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
   let serpCallsUsed = 0;
   let scrapeCallsUsed = 0;
 
-  const projRows = (await sql`SELECT id, user_id, name, is_active FROM projects WHERE id = ${projectId} LIMIT 1`) as Array<ProjectRow & { is_active: boolean }>;
+  const projRows = (await sql`SELECT id, user_id, name, target_market, is_active FROM projects WHERE id = ${projectId} LIMIT 1`) as Array<ProjectRow & { is_active: boolean }>;
   const project = projRows[0];
   if (!project) {
     throw new Error(`processProject: project ${projectId} not found`);
@@ -106,6 +109,21 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
 
   const limits = getLimits(user.plan);
 
+  // Resolve the project's target market once per run. Drives:
+  //   - SERP geography (country_code + tld + hl)
+  //   - Bilingual / trilingual SERP variants for non-English markets
+  //   - Canonical name passed to the signal + summary LLM prompts
+  // Legacy free-text values (pre-dropdown rows) fall back to DEFAULT_MARKET
+  // and the worker silently runs English-only — captured as a breadcrumb so
+  // we can later backfill common misses.
+  const market = resolveMarket(project.target_market);
+  if (!market.matched && project.target_market?.trim()) {
+    captureBreadcrumb("market: legacy target_market, falling back to Global/en", {
+      projectId,
+      targetMarket: project.target_market,
+    });
+  }
+
   // Open a scrape_jobs row up front so the run is traceable end-to-end (PRD §13.10).
   const jobRows = (await sql`
     INSERT INTO scrape_jobs (project_id, status, job_type, started_at)
@@ -125,35 +143,86 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
         AND (last_discovered_at IS NULL OR last_discovered_at < ${new Date(Date.now() - WEEKLY_MS).toISOString()})
     `) as KeywordRow[];
 
+    // Per-keyword SERP loop. For each market lang, we run a separate SERP
+    // call, then merge + dedup by URL, and cap at TOP_N stored sources.
+    //   - English-only markets (langs=["en"])     → 1 call per keyword
+    //   - Most non-English (langs=["en","X"])     → 2 calls per keyword
+    //   - Belgium-class (langs=["en","nl","fr"])  → 3 calls per keyword
+    // Budget reservation is per call, not per keyword, so a starter-tier user
+    // with a tight cap won't overshoot even at trilingual.
+    const TOP_N = 3;
+    let serpBudgetExhausted = false;
     for (const kw of dueKeywords) {
-      // Reserve a SERP call BEFORE issuing — if we'd go over budget, pause
-      // discovery for the rest of the cycle (PRD §21.4 — keep cheap competitor
-      // scraping running, pause the expensive part).
-      const afterReserve = await reserveCalls(user.id, "serp_calls");
-      serpCallsUsed++;
-      if (afterReserve > limits.serpCallsPerCycle) {
-        await maybeSendCapNotice(user, "budget");
-        captureBreadcrumb("serp budget reached, pausing discovery", { userId: user.id });
-        break;
-      }
-      try {
-        const results = await serpDiscover({ query: kw.keyword, topN: 3 });
-        // Persist URLs as Article sources tagged with this keyword — actual
-        // scraping happens in Stage 2, sharing the known-URL re-scrape pass.
-        for (const r of results) {
-          await upsertSource({
-            projectId,
-            keywordId: kw.id,
-            title: r.title || r.url,
-            url: r.url,
-            sourceType: "Article",
-            contentSnippet: r.snippet,
-          });
+      if (serpBudgetExhausted) break;
+
+      // Build the query variants for this keyword. langs[0] is always "en"
+      // (we use the raw keyword as typed); each subsequent lang gets the
+      // translated form. translateKeyword is fail-soft → it returns the
+      // raw keyword on any failure, which the dedup check below catches.
+      const variants: { query: string; label: string }[] = [];
+      for (const lang of market.langs) {
+        if (lang === "en") {
+          variants.push({ query: kw.keyword, label: "en" });
+          continue;
         }
+        const localized = await translateKeyword(kw.keyword, lang);
+        if (
+          localized?.trim() &&
+          localized.toLowerCase() !== kw.keyword.toLowerCase()
+        ) {
+          variants.push({ query: localized, label: lang });
+        }
+      }
+
+      const merged: { title: string; url: string; snippet: string }[] = [];
+      const seen = new Set<string>();
+
+      for (const v of variants) {
+        const afterReserve = await reserveCalls(user.id, "serp_calls");
+        serpCallsUsed++;
+        if (afterReserve > limits.serpCallsPerCycle) {
+          await maybeSendCapNotice(user, "budget");
+          captureBreadcrumb("serp budget reached, pausing discovery", { userId: user.id });
+          serpBudgetExhausted = true;
+          break;
+        }
+        try {
+          const results = await serpDiscover({
+            query: v.query,
+            countryCode: market.countryCode ?? undefined,
+            tld: market.tld,
+            hl: v.label,
+            topN: TOP_N,
+          });
+          for (const r of results) {
+            if (seen.has(r.url)) continue;
+            seen.add(r.url);
+            merged.push({ title: r.title || r.url, url: r.url, snippet: r.snippet });
+          }
+        } catch (e) {
+          errors.push(`serp:${kw.keyword} (${v.label}): ${e instanceof Error ? e.message : "failed"}`);
+          captureError(e, { stage: "serp", projectId, keyword: kw.keyword, lang: v.label });
+        }
+      }
+
+      // Cap merged results to TOP_N — keeps downstream Stage 2 scrape +
+      // Stage 3 LLM cost flat regardless of how many variants we ran.
+      const capped = merged.slice(0, TOP_N);
+      for (const r of capped) {
+        await upsertSource({
+          projectId,
+          keywordId: kw.id,
+          title: r.title,
+          url: r.url,
+          sourceType: "Article",
+          contentSnippet: r.snippet,
+        });
+      }
+      // Only stamp last_discovered_at when at least one variant landed real
+      // results — if the very first variant exhausted the budget with zero
+      // results, leave the keyword due so the next cycle picks it back up.
+      if (!serpBudgetExhausted || merged.length > 0) {
         await sql`UPDATE keywords SET last_discovered_at = now() WHERE id = ${kw.id}`;
-      } catch (e) {
-        errors.push(`serp:${kw.keyword}: ${e instanceof Error ? e.message : "failed"}`);
-        captureError(e, { stage: "serp", projectId, keyword: kw.keyword });
       }
     }
 

@@ -4,6 +4,7 @@ import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import { chatJson } from "@/lib/openrouter";
 import { json, parseJson, rateLimited } from "@/lib/api";
 import { captureError } from "@/lib/sentry";
+import { resolveMarket } from "@/lib/markets";
 
 export const runtime = "nodejs";
 
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
     body.company_description ? `What they do: ${body.company_description}` : null,
     body.industry ? `Industry: ${body.industry}` : null,
     body.business_type ? `Business type: ${body.business_type}` : null,
-    body.target_market ? `Target market: ${body.target_market}` : null,
+    body.target_market ? `Target market: ${resolveMarket(body.target_market).canonicalName}` : null,
   ].filter(Boolean).join("\n");
 
   // Nothing to go on — return empty rather than guessing blindly.
