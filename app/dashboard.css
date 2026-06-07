@@ -15,6 +15,19 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
   background:var(--surface); border-right:1px solid var(--line);
   display:flex; flex-direction:column; padding:18px 16px; gap:6px; min-height:0; overflow-y:auto;
 }
+/* Top dock — logo on the left, hairline divider at the bottom that aligns with
+   the topbar's bottom border so the page has a single horizontal "header line"
+   across both columns. Negative margins extend it edge-to-edge across the
+   sidebar so the divider runs the full width of the column. */
+.side-top{
+  display:flex; align-items:center;
+  margin:-18px -16px 8px;
+  padding:0 22px;
+  min-height:89px;
+  border-bottom:1px solid var(--line);
+}
+.side-top .side-brand{ padding:0; }
+.side-top .brand-logo{ height:28px; display:block; }
 .side-brand{ padding:8px 8px 16px; }
 .side-section{ padding:10px 0 4px; }
 .side-label{ font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
@@ -57,11 +70,12 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
   font-family:var(--sans); font-size:13px; font-weight:500; transition:.14s; }
 .watch-add:hover{ border-color:var(--accent); color:var(--accent-ink); }
 
-/* Sidebar bottom dock. Soft upward shadow gives a hint of the watchlist
-   scrolling underneath, and visually separates the profile chip from the
-   list above without needing a hard 1px border. */
+/* Sidebar bottom dock. Sharp 1px hairline at the very top edge plus a soft
+   upward glow above it — the hairline lands exactly at the watchlist's last
+   visible row (no gap), and the glow tells the eye that content scrolls
+   underneath. */
 .side-foot{ margin-top:auto; padding-top:14px;
-  box-shadow: 0 -16px 18px -18px rgba(21,23,26,.18), 0 -1px 0 rgba(21,23,26,.04); }
+  box-shadow: 0 -1px 0 rgba(21,23,26,.07), 0 -10px 14px -10px rgba(21,23,26,.16); }
 
 /* The profile chip is a dropdown trigger; .profile-wrap anchors the popover. */
 .profile-wrap{ position:relative; }
@@ -673,9 +687,12 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 /* Minimalist scrollbar — only visible on hover/scroll. The default UA bar in
    the screenshot was a heavy ~14px chrome strip; this version reads as one
    thin track that fades to the page background. Firefox uses scrollbar-width;
-   WebKit gets the explicit ::-webkit-* rules. */
+   WebKit gets the explicit ::-webkit-* rules. Also flex:1 + min-height:0 so
+   the scroll viewport fills its parent — last visible row hits the bottom
+   shadow with no empty gap. */
 .side-watch .watchlist{
   overflow-y:auto;
+  flex:1; min-height:0;
   scrollbar-width:thin;
   scrollbar-color:var(--line-strong) transparent;
 }

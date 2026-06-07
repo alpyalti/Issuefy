@@ -280,10 +280,12 @@ function DashChromeInner({
   return (
     <div className="dash">
       <aside className="sidebar">
-        <Link href="/dashboard" className="brand side-brand" aria-label="Issuefy dashboard">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/logo-ink.svg" className="brand-logo" alt="Issuefy" />
-        </Link>
+        <div className="side-top">
+          <Link href="/dashboard" className="brand side-brand" aria-label="Issuefy dashboard">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/logo-ink.svg" className="brand-logo" alt="Issuefy" />
+          </Link>
+        </div>
 
         <ProjectSwitcher
           current={project}
