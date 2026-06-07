@@ -517,7 +517,7 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
   background:var(--surface-2); color:var(--ink-2); font-family:var(--mono); font-size:10px; font-weight:600; }
 .cmdk-item.sel{ background:var(--surface-2); }
 .cmdk-item.sel .cmdk-ic{ background:var(--ink); color:#fff; }
-.cmdk-tx{ min-width:0; flex:1; }
+.cmdk-tx{ min-width:0; flex:1; display:flex; flex-direction:column; }
 .cmdk-t{ font-size:14px; font-weight:500; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .cmdk-s{ font-family:var(--mono); font-size:10.5px; color:var(--ink-3); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .cmdk-enter{ font-family:var(--mono); font-size:10px; color:var(--ink-3); opacity:0; flex:none; }
