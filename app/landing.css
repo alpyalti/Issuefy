@@ -167,6 +167,8 @@ section{ position:relative; }
 .quote-card b{ color:#fff; font-weight:600; }
 .quote-card .hl{ background:rgba(76,118,247,.28); padding:1px 4px; border-radius:4px; }
 .quote-card .qfoot{ display:flex; align-items:center; gap:8px; margin-top:22px; padding-top:18px; border-top:1px solid rgba(255,255,255,.1); }
+.quote-card .src-stack{ display:flex; align-items:center; }
+.quote-card .src-stack .favicon + .favicon{ margin-left:-6px; }
 .quote-card .favicon{ width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center;
   font-family:var(--mono); font-size:10px; font-weight:600; color:#fff; border:2px solid #1c1f24; }
 
