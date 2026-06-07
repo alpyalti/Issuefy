@@ -284,6 +284,7 @@ function DashChromeInner({
           <Link href="/dashboard" className="brand side-brand" aria-label="Issuefy dashboard">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/logo-ink.svg" className="brand-logo" alt="Issuefy" />
+            <span className="brand-beta">Beta</span>
           </Link>
         </div>
 

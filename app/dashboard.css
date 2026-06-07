@@ -13,21 +13,33 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 /* ---------- Sidebar ---------- */
 .sidebar{
   background:var(--surface); border-right:1px solid var(--line);
-  display:flex; flex-direction:column; padding:18px 16px; gap:6px; min-height:0; overflow-y:auto;
+  display:flex; flex-direction:column; padding:18px 16px; min-height:0;
+  overflow-y:auto; overflow-x:hidden;
 }
 /* Top dock — logo on the left, hairline divider at the bottom that aligns with
    the topbar's bottom border so the page has a single horizontal "header line"
    across both columns. Negative margins extend it edge-to-edge across the
-   sidebar so the divider runs the full width of the column. */
+   sidebar so the divider runs the full width of the column. Match the
+   sidebar's actual padding values (refresh override below at line ~510 sets
+   the sidebar to padding:20px 14px) — otherwise the side-top extends past
+   the column edge and produces a horizontal scrollbar. */
 .side-top{
-  display:flex; align-items:center;
+  display:flex; align-items:center; gap:8px;
   margin:-18px -16px 8px;
   padding:0 22px;
   min-height:89px;
   border-bottom:1px solid var(--line);
 }
-.side-top .side-brand{ padding:0; }
-.side-top .brand-logo{ height:28px; display:block; }
+.side-top .side-brand{ padding:0; display:flex; align-items:center; gap:8px; text-decoration:none; }
+.side-top .brand-logo{ height:30px; display:block; }
+/* Tiny BETA tag next to the logo — minimal, monospace, doesn't compete with
+   the wordmark. */
+.brand-beta{
+  font-family:var(--mono); font-size:9.5px; font-weight:500;
+  letter-spacing:.12em; text-transform:uppercase;
+  color:var(--ink-3); border:1px solid var(--line-2); border-radius:4px;
+  padding:1px 5px; background:var(--surface-2);
+}
 .side-brand{ padding:8px 8px 16px; }
 .side-section{ padding:10px 0 4px; }
 .side-label{ font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
@@ -71,9 +83,9 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .watch-add:hover{ border-color:var(--accent); color:var(--accent-ink); }
 
 /* Sidebar bottom dock. Sharp 1px hairline at the very top edge plus a soft
-   upward glow above it — the hairline lands exactly at the watchlist's last
-   visible row (no gap), and the glow tells the eye that content scrolls
-   underneath. */
+   upward glow above it. The dock sits flush against the watchlist (no gap
+   from sidebar flex-gap — that was removed) so the hairline lands EXACTLY
+   at the last visible watchlist row. */
 .side-foot{ margin-top:auto; padding-top:14px;
   box-shadow: 0 -1px 0 rgba(21,23,26,.07), 0 -10px 14px -10px rgba(21,23,26,.16); }
 
@@ -500,6 +512,10 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .main-grid{ padding:34px 34px 76px; gap:32px; }
 .feed{ gap:22px; }
 .sidebar{ padding:20px 14px; background:var(--surface); }
+/* Re-align side-top's negative margins with the refreshed sidebar padding
+   (20px top, 14px sides) so the divider lands EXACTLY where the topbar's
+   bottom border does and no horizontal overflow is created. */
+.side-top{ margin:-20px -14px 8px; min-height:90px; }
 .side-brand{ padding:8px 8px 18px; }
 .side-label{ font-size:10px; letter-spacing:.14em; padding:0 8px 10px; }
 .side-item{ font-size:14px; padding:10px 11px; border-radius:10px;
