@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { CompanyCard } from "./CompanyCard";
 import { ChipInput } from "./ChipInput";
+import { MarketSelect } from "./MarketSelect";
 import { domainFrom, type CompanyData, type Social } from "./enrich";
 import type { IconName } from "@/components/icons/registry";
 
@@ -428,7 +429,7 @@ export default function OnboardingFlow({
                 <select className="modal-input" value={businessType} onChange={(e) => setBusinessType(e.target.value as (typeof BUSINESS_TYPES)[number])} style={{ paddingRight: 18, cursor: "pointer" }}>
                   {BUSINESS_TYPES.map((b) => <option key={b}>{b}</option>)}
                 </select>
-                <input className="modal-input" placeholder="Target market or region (e.g. EU mid-market)" value={targetMarket} onChange={(e) => setTargetMarket(e.target.value)} />
+                <MarketSelect value={targetMarket} onChange={setTargetMarket} required />
               </div>
               {!skipCompany && companyData && (
                 <div style={{ marginTop: 16 }}>

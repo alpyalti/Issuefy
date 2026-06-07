@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { ErrorState, ERROR_MESSAGES } from "@/components/ui/ErrorState";
 import { useDashboardRole, canManage } from "@/components/dashboard/dashboard-role-context";
+import { MarketSelect } from "@/components/onboarding/MarketSelect";
+import { isKnownMarketValue } from "@/lib/markets";
 
 interface Project {
   id: string;
@@ -221,7 +223,12 @@ export default function SettingsClient({
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={labelStyle}>Target market</label>
-            <input className="modal-input" value={targetMarket} onChange={(e) => setTargetMarket(e.target.value)} />
+            <MarketSelect value={targetMarket} onChange={setTargetMarket} />
+            {!isKnownMarketValue(targetMarket) && targetMarket && (
+              <p className="modal-hint" style={{ marginTop: 8, color: "var(--ink-2)" }}>
+                This project&apos;s target market predates our regional dropdown. Pick one to unlock local-language sources.
+              </p>
+            )}
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
