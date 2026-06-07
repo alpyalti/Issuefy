@@ -1,6 +1,8 @@
-/* Skeleton shown immediately while the dashboard page fetches its signals,
-   summary and sources. Streams in via Next's loading.tsx convention so the
-   user gets instant feedback after clicking. */
+import { Skeleton } from "@/components/ui/Skeleton";
+
+/* Skeleton shown immediately while the project dashboard fetches its
+   signals, summary and sources. Streams in via Next's loading.tsx
+   convention so the user gets instant feedback after clicking. */
 export default function DashboardLoading() {
   return (
     <div className="main-grid">
@@ -19,15 +21,13 @@ export default function DashboardLoading() {
   );
 }
 
-function pulse(extra: React.CSSProperties = {}): React.CSSProperties {
-  return {
-    background: "linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2))",
-    backgroundSize: "200% 100%",
-    animation: "shimmer 1.4s ease-in-out infinite",
-    borderRadius: 6,
-    ...extra,
-  };
-}
+/* The summary card sits on a dark hero panel — using the rail's lighter
+   shimmer would be invisible. Use a per-line white-overlay style instead. */
+const DARK_SHIMMER: React.CSSProperties = {
+  background: "rgba(255,255,255,.06)",
+  borderRadius: 6,
+  display: "block",
+};
 
 function SkeletonSummary() {
   return (
@@ -41,10 +41,10 @@ function SkeletonSummary() {
         </div>
       </div>
       <div style={{ marginTop: 22, display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={pulse({ height: 18, width: "60%", background: "rgba(255,255,255,.06)" })} />
-        <div style={pulse({ height: 14, width: "92%", background: "rgba(255,255,255,.06)" })} />
-        <div style={pulse({ height: 14, width: "88%", background: "rgba(255,255,255,.06)" })} />
-        <div style={pulse({ height: 14, width: "76%", background: "rgba(255,255,255,.06)" })} />
+        <span style={{ ...DARK_SHIMMER, height: 18, width: "60%" }} aria-hidden="true" />
+        <span style={{ ...DARK_SHIMMER, height: 14, width: "92%" }} aria-hidden="true" />
+        <span style={{ ...DARK_SHIMMER, height: 14, width: "88%" }} aria-hidden="true" />
+        <span style={{ ...DARK_SHIMMER, height: 14, width: "76%" }} aria-hidden="true" />
       </div>
     </section>
   );
@@ -53,8 +53,8 @@ function SkeletonSummary() {
 function SkeletonFeedHead() {
   return (
     <div className="feed-head">
-      <div style={pulse({ width: 360, height: 38, borderRadius: 10 })} />
-      <div style={pulse({ width: 140, height: 18 })} />
+      <Skeleton width={360} height={38} radius={10} />
+      <Skeleton width={140} height={18} />
     </div>
   );
 }
@@ -68,18 +68,18 @@ function SkeletonSignal() {
       <div className="signal-body">
         <div className="signal-top">
           <div className="signal-tags">
-            <span style={pulse({ width: 90, height: 20, borderRadius: 999 })} />
-            <span style={pulse({ width: 50, height: 16 })} />
+            <Skeleton width={90} height={20} radius={999} />
+            <Skeleton width={50} height={16} />
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
-          <div style={pulse({ height: 18, width: "85%" })} />
-          <div style={pulse({ height: 14, width: "100%" })} />
-          <div style={pulse({ height: 14, width: "92%" })} />
+          <Skeleton height={18} width="85%" />
+          <Skeleton height={14} width="100%" />
+          <Skeleton height={14} width="92%" />
         </div>
         <div className="signal-foot" style={{ marginTop: 18 }}>
-          <div style={pulse({ width: 120, height: 22, borderRadius: 999 })} />
-          <div style={pulse({ width: 90, height: 14 })} />
+          <Skeleton width={120} height={22} radius={999} />
+          <Skeleton width={90} height={14} />
         </div>
       </div>
     </article>
@@ -96,10 +96,10 @@ function SkeletonRail({ title, rows }: { title: string; rows: number }) {
       <div className="rail-sources">
         {Array.from({ length: rows }).map((_, i) => (
           <div className="rail-source" key={i} style={{ pointerEvents: "none" }}>
-            <span className="favicon" style={{ ...pulse(), width: 26, height: 26, borderRadius: 6 }} />
+            <Skeleton width={26} height={26} radius={6} />
             <span className="rail-src-meta" style={{ flex: 1, gap: 6 }}>
-              <span style={pulse({ height: 12, width: "85%" })} />
-              <span style={pulse({ height: 10, width: "60%" })} />
+              <Skeleton height={12} width="85%" />
+              <Skeleton height={10} width="60%" />
             </span>
           </div>
         ))}
@@ -113,8 +113,8 @@ function SkeletonSaved() {
     <section className="rail-card mini">
       <div className="rail-head"><h3>Saved</h3></div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
-        <span style={pulse({ height: 32, width: 40 })} />
-        <span style={pulse({ height: 14, width: 140 })} />
+        <Skeleton height={32} width={40} />
+        <Skeleton height={14} width={140} />
       </div>
     </section>
   );
