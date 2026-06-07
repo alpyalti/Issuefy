@@ -60,7 +60,7 @@ export default function MobileDrawer({
     <div className="mobile-drawer-overlay" onClick={onClose}>
       <aside className="mobile-drawer" onClick={(e) => e.stopPropagation()} aria-label="Project menu">
         <header className="mobile-drawer-head">
-          <Link href="/" className="brand" onClick={onClose} aria-label="Issuefy home">
+          <Link href="/dashboard" className="brand" onClick={onClose} aria-label="Issuefy dashboard">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/logo-ink.svg" className="brand-logo" alt="Issuefy" />
           </Link>
