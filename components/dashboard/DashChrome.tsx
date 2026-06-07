@@ -256,6 +256,14 @@ function DashChromeInner({
               <Icon name="LinkSquare02Icon" size={19} stroke={activeView === "archive" ? 1.9 : 1.6} />
               <span>Archive</span>
             </Link>
+            <Link
+              href={`/dashboard/${project.id}/settings`}
+              prefetch
+              className={"side-item " + (activeView === "settings" ? "on" : "")}
+            >
+              <Icon name="Settings01Icon" size={19} stroke={activeView === "settings" ? 1.9 : 1.6} />
+              <span>Settings</span>
+            </Link>
           </nav>
         </div>
 
@@ -290,9 +298,6 @@ function DashChromeInner({
                 <span className="watch-label">{k.keyword}</span>
               </Link>
             ))}
-            <Link href={`/dashboard/${project.id}/settings`} prefetch className="watch-add">
-              <Icon name="Settings01Icon" size={15} stroke={1.8} /> Project settings
-            </Link>
           </div>
         </div>
 
