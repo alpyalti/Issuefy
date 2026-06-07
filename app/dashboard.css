@@ -519,10 +519,8 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
    bottom border does and no horizontal overflow is created. The min-height
    here mirrors the topbar's actual rendered height: padding-block 20px each
    side + h1 (29px line-height:1) + 6px margin + date (11.5px × 1.55 body
-   line-height ≈ 18px) + 1px border ≈ 94px. Use a touch more (100px) so
-   font-rendering variance can't make the side-top divider land above the
-   topbar's. */
-.side-top{ margin:-20px -14px 8px; min-height:100px; }
+   line-height ≈ 18px) + 1px border ≈ 94px. */
+.side-top{ margin:-20px -14px 8px; min-height:94px; }
 .side-brand{ padding:8px 8px 18px; }
 .side-label{ font-size:10px; letter-spacing:.14em; padding:0 8px 10px; }
 .side-item{ font-size:14px; padding:10px 11px; border-radius:10px;
