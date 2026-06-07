@@ -37,7 +37,10 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .watch-item{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px; transition:background .14s; text-decoration:none; color:inherit; cursor:pointer; }
 .watch-item:hover{ background:var(--surface-2); }
 .watch-live{ width:7px; height:7px; border-radius:50%; background:var(--ink-4); flex:none; }
+/* Active dot — green by default (keywords). Competitors get the warn/amber
+   token so the two categories read apart at a glance in a long watchlist. */
 .watch-live.on{ background:var(--pos); box-shadow:0 0 0 3px var(--pos-bg); }
+.watch-item.is-comp .watch-live.on{ background:var(--warn); box-shadow:0 0 0 3px var(--warn-bg); }
 .watch-label{ font-size:13.5px; font-weight:500; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
 .watch-type{ margin-left:auto; font-family:var(--mono); font-size:10px; color:var(--ink-4); text-transform:uppercase; letter-spacing:.05em; }
 .watch-add{ display:flex; align-items:center; gap:7px; margin-top:6px; padding:8px; border-radius:8px;
@@ -45,7 +48,11 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
   font-family:var(--sans); font-size:13px; font-weight:500; transition:.14s; }
 .watch-add:hover{ border-color:var(--accent); color:var(--accent-ink); }
 
-.side-foot{ margin-top:auto; padding-top:12px; }
+/* Sidebar bottom dock. Soft upward shadow gives a hint of the watchlist
+   scrolling underneath, and visually separates the profile chip from the
+   list above without needing a hard 1px border. */
+.side-foot{ margin-top:auto; padding-top:14px;
+  box-shadow: 0 -16px 18px -18px rgba(21,23,26,.18), 0 -1px 0 rgba(21,23,26,.04); }
 
 /* The profile chip is a dropdown trigger; .profile-wrap anchors the popover. */
 .profile-wrap{ position:relative; }
@@ -654,7 +661,21 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .watch-item:hover .watch-del{ opacity:1; }
 .watch-del:hover{ background:var(--neg-bg); color:var(--neg); }
 .side-watch{ flex:1; min-height:0; display:flex; flex-direction:column; }
-.side-watch .watchlist{ overflow-y:auto; }
+/* Minimalist scrollbar — only visible on hover/scroll. The default UA bar in
+   the screenshot was a heavy ~14px chrome strip; this version reads as one
+   thin track that fades to the page background. Firefox uses scrollbar-width;
+   WebKit gets the explicit ::-webkit-* rules. */
+.side-watch .watchlist{
+  overflow-y:auto;
+  scrollbar-width:thin;
+  scrollbar-color:var(--line-strong) transparent;
+}
+.side-watch .watchlist::-webkit-scrollbar{ width:6px; }
+.side-watch .watchlist::-webkit-scrollbar-track{ background:transparent; }
+.side-watch .watchlist::-webkit-scrollbar-thumb{
+  background:var(--line-strong); border-radius:999px; border:1px solid transparent; background-clip:padding-box;
+}
+.side-watch .watchlist::-webkit-scrollbar-thumb:hover{ background:var(--ink-4); background-clip:padding-box; }
 
 @media(max-width:760px){
   .main-grid{ padding:22px 18px 60px; gap:22px; }

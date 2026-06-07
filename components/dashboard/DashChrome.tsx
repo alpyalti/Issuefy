@@ -277,7 +277,7 @@ function DashChromeInner({
               <Link
                 href={`/dashboard/${project.id}/settings`}
                 prefetch
-                className="watch-item"
+                className="watch-item is-comp"
                 key={"c-" + c.id}
                 title={`Edit ${c.name} in project settings`}
               >
@@ -290,7 +290,7 @@ function DashChromeInner({
               <Link
                 href={`/dashboard/${project.id}/settings`}
                 prefetch
-                className="watch-item"
+                className="watch-item is-kw"
                 key={"k-" + k.id}
                 title={`Edit ${k.keyword} in project settings`}
               >
