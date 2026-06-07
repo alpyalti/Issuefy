@@ -79,6 +79,34 @@ export default function ProjectDashboard({
   // persisted server-side, so the refreshed data is canonical anyway).
   useEffect(() => { setSignals(initialSignals); }, [initialSignals]);
 
+  // ⌘K palette → "jump to a specific signal" support. The palette writes
+  // `#sig-<id>` to the URL after switching to the right view; here we listen
+  // for that hash, scroll the card into view, add a temporary highlight ring
+  // for ~2s, then clear the hash. Runs on mount + on every hash change.
+  useEffect(() => {
+    function handleHash() {
+      if (typeof window === "undefined") return;
+      const h = window.location.hash;
+      if (!h.startsWith("#sig-")) return;
+      const id = h.slice(5);
+      // Wait one paint so the target view has rendered the matching card.
+      const t = setTimeout(() => {
+        const el = document.getElementById(`sig-${id}`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("highlight");
+        const clear = setTimeout(() => el.classList.remove("highlight"), 2200);
+        // Strip the hash so a back-tap doesn't re-trigger and the URL stays clean.
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+        return () => clearTimeout(clear);
+      }, 80);
+      return () => clearTimeout(t);
+    }
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, [view, signals]);
+
   // While a manual refresh is in flight on the server, poll the server every
   // 8 s so the dashboard rehydrates as soon as the worker finishes — the user
   // doesn't have to know to refresh the page. Stops automatically when the

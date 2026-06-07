@@ -491,6 +491,16 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .signal:hover{ transform:translateY(-2px); box-shadow:var(--shadow); border-color:var(--line-2); }
 .signal.leaving{ animation:fall .24s ease forwards; pointer-events:none; }
 @keyframes fall{ to{ opacity:0; transform:translateY(-8px) scale(.985); margin-bottom:-12px; } }
+
+/* ⌘K palette → "jump to a signal" highlight. Brief accent ring + glow that
+   fades over ~2 s so the user's eye lands on the right card after the
+   palette closes. Added by ProjectDashboard's hashchange handler. */
+.signal.highlight{ animation:signalHighlight 2.2s ease-out; }
+@keyframes signalHighlight{
+  0%   { box-shadow:0 0 0 0 rgba(45,91,227,.55), 0 0 0 0 rgba(45,91,227,.0); border-color:var(--accent); }
+  20%  { box-shadow:0 0 0 6px rgba(45,91,227,.22), 0 14px 28px rgba(45,91,227,.18); border-color:var(--accent); }
+  100% { box-shadow:0 0 0 0 rgba(45,91,227,0), 0 0 0 0 rgba(45,91,227,0); border-color:var(--line); }
+}
 .rail-card{ transition:box-shadow .2s, border-color .2s; }
 .rail-card:hover{ border-color:var(--line-2); }
 .tab{ transition:background .16s, color .16s, box-shadow .16s; }

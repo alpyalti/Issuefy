@@ -378,6 +378,8 @@ function DashChromeInner({
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         projectId={project.id}
+        competitors={competitors}
+        keywords={keywords}
         onJump={(v) => { switchToView(v); setPaletteOpen(false); }}
       />
 
@@ -422,14 +424,32 @@ function ShortcutsOverlay({ open, onClose }: { open: boolean; onClose: () => voi
 
 /* ───────────── ⌘K Command Palette ───────────── */
 
-interface SignalHit { id: string; title: string; category: string; }
+/** Full signal row returned by /api/projects/:id/signals. Includes description
+ *  + importance so we can match on those AND show a richer subtitle than just
+ *  the category. */
+interface SignalHit {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  importance: "High" | "Medium" | "Low";
+}
+
+/** Watchlist row passed in from DashChrome for entity-style search. */
+interface WatchEntity {
+  kind: "competitor" | "keyword";
+  id: string;
+  label: string;
+}
 
 function CommandPalette({
-  open, onClose, projectId, onJump,
+  open, onClose, projectId, competitors, keywords, onJump,
 }: {
   open: boolean;
   onClose: () => void;
   projectId: string;
+  competitors: Competitor[];
+  keywords: Keyword[];
   onJump: (v: DashboardView) => void;
 }) {
   const router = useRouter();
@@ -442,7 +462,8 @@ function CommandPalette({
     if (open) {
       setQ("");
       setSel(0);
-      setSignals([]);
+      // Don't clear signals on open — keeps the empty-query "Recent signals"
+      // group warm across reopens within a session.
       const t = setTimeout(() => inputRef.current?.focus(), 30);
       return () => clearTimeout(t);
     }
@@ -453,7 +474,8 @@ function CommandPalette({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    fetch(`/api/projects/${projectId}/signals?limit=40`)
+    // Pull up to the API's max so we can search across a wide window.
+    fetch(`/api/projects/${projectId}/signals?limit=200`)
       .then((r) => r.ok ? r.json() : { signals: [] })
       .then((j: { signals: SignalHit[] }) => { if (!cancelled) setSignals(j.signals || []); })
       .catch(() => {});
@@ -474,17 +496,40 @@ function CommandPalette({
     { id: "sources", label: "Sources", icon: "News01Icon", sub: "All sources" },
     { id: "settings", label: "Settings", icon: "Settings01Icon", sub: "Watchlist, plan and usage" },
   ];
-  const navItems: NavOpt[] = ALL_NAV.filter((n) => !ql || n.label.toLowerCase().includes(ql));
+  // Only show nav items when there's no query (it's the default state) OR when
+  // the query matches a nav label / sub. Hiding the full Navigate group on
+  // every keystroke makes signal results way more visible.
+  const navItems: NavOpt[] = !ql
+    ? ALL_NAV
+    : ALL_NAV.filter((n) => n.label.toLowerCase().includes(ql) || n.sub.toLowerCase().includes(ql));
 
-  const sigItems = ql
-    ? signals.filter((s) => s.title.toLowerCase().includes(ql) || s.category.toLowerCase().includes(ql)).slice(0, 5)
+  // Watchlist entities (competitors + keywords) — search by name only.
+  const watch: WatchEntity[] = [
+    ...competitors.map<WatchEntity>((c) => ({ kind: "competitor", id: c.id, label: c.name })),
+    ...keywords.map<WatchEntity>((k) => ({ kind: "keyword", id: k.id, label: k.keyword })),
+  ];
+  const watchItems = ql
+    ? watch.filter((w) => w.label.toLowerCase().includes(ql)).slice(0, 8)
     : [];
 
-  const groups: { label: string; kind: "nav" | "signal"; items: (NavOpt | SignalHit)[] }[] = [];
-  if (navItems.length) groups.push({ label: "Navigate", kind: "nav", items: navItems });
-  if (sigItems.length) groups.push({ label: "Signals", kind: "signal", items: sigItems });
+  // Signals — broad match across title + description + category + importance.
+  // Default state (no query): show the 8 most recent so the palette is useful
+  // immediately, not just as a search box.
+  const sigItems = ql
+    ? signals.filter((s) =>
+        s.title.toLowerCase().includes(ql) ||
+        (s.description ?? "").toLowerCase().includes(ql) ||
+        s.category.toLowerCase().includes(ql) ||
+        (s.importance ?? "").toLowerCase().includes(ql),
+      ).slice(0, 10)
+    : signals.slice(0, 8);
 
-  const flat: { kind: "nav" | "signal"; data: NavOpt | SignalHit }[] = [];
+  const groups: { label: string; kind: "nav" | "signal" | "watch"; items: (NavOpt | SignalHit | WatchEntity)[] }[] = [];
+  if (navItems.length) groups.push({ label: "Navigate", kind: "nav", items: navItems });
+  if (watchItems.length) groups.push({ label: "Watchlist", kind: "watch", items: watchItems });
+  if (sigItems.length) groups.push({ label: ql ? "Signals" : "Recent signals", kind: "signal", items: sigItems });
+
+  const flat: { kind: "nav" | "signal" | "watch"; data: NavOpt | SignalHit | WatchEntity }[] = [];
   groups.forEach((g) => g.items.forEach((item) => flat.push({ kind: g.kind, data: item })));
 
   function activate(idx: number) {
@@ -495,9 +540,23 @@ function CommandPalette({
       if (opt.id === "sources") router.push(`/dashboard/${projectId}/sources`);
       else if (opt.id === "settings") router.push(`/dashboard/${projectId}/settings`);
       else onJump(opt.id);
+    } else if (item.kind === "watch") {
+      // Competitor / keyword → drop into project settings where it can be
+      // edited; the deep-link to a specific row is implicit (Settings shows
+      // them all).
+      router.push(`/dashboard/${projectId}/settings`);
+      onClose();
     } else {
       const s = item.data as SignalHit;
+      // Jump to the matching view AND set a hash so ProjectDashboard can
+      // scroll to / highlight the specific signal card.
       onJump(mapDbCategoryToView(s.category));
+      // Defer the hash write so the view-switch state lands first.
+      setTimeout(() => {
+        if (typeof window !== "undefined") {
+          window.location.hash = `sig-${s.id}`;
+        }
+      }, 30);
     }
   }
 
@@ -525,13 +584,29 @@ function CommandPalette({
               {g.items.map((item) => {
                 idx++;
                 const cur = idx;
-                const isSig = g.kind === "signal";
-                const title = isSig ? (item as SignalHit).title : (item as NavOpt).label;
-                const sub = isSig ? (item as SignalHit).category : (item as NavOpt).sub;
-                const icName = isSig ? ("FlashIcon" as IconName) : (item as NavOpt).icon;
+                let title: string;
+                let sub: string;
+                let icName: IconName;
+                if (g.kind === "signal") {
+                  const s = item as SignalHit;
+                  title = s.title;
+                  sub = `${s.importance ?? "—"} · ${s.category}`;
+                  icName = "FlashIcon";
+                } else if (g.kind === "watch") {
+                  const w = item as WatchEntity;
+                  title = w.label;
+                  sub = w.kind === "competitor" ? "Competitor in your watchlist" : "Keyword in your watchlist";
+                  icName = w.kind === "competitor" ? "Target01Icon" : "Tag01Icon";
+                } else {
+                  const opt = item as NavOpt;
+                  title = opt.label;
+                  sub = opt.sub;
+                  icName = opt.icon;
+                }
+                const key = (item as { id?: string }).id ?? cur;
                 return (
                   <div
-                    key={(item as { id?: string }).id ?? cur}
+                    key={key}
                     className={"cmdk-item " + (cur === sel ? "sel" : "")}
                     onMouseEnter={() => setSel(cur)}
                     onClick={() => activate(cur)}

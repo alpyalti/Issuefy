@@ -59,7 +59,10 @@ export function SignalCard({
   }
 
   return (
-    <article className={"signal " + (sig.isNew ? "is-new " : "") + (leaving ? "leaving" : "")}>
+    <article
+      id={`sig-${sig.id}`}
+      className={"signal " + (sig.isNew ? "is-new " : "") + (leaving ? "leaving" : "")}
+    >
       <div className="signal-rail">
         <span className={"sev-bar cat-" + sig.category} />
       </div>
