@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TARGET_MARKET_VALUES } from "@/lib/markets";
 
 /* Zod schemas for API request bodies. Strict — reject unknown fields. */
 
@@ -34,7 +35,11 @@ export const projectCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   industry: z.string().trim().min(1).max(120),
   business_type: z.enum(BUSINESS_TYPES),
-  target_market: z.string().trim().min(1).max(160),
+  // target_market is now a curated dropdown enum (see lib/markets.ts).
+  // Legacy free-text rows in the DB stay readable — the worker falls back to
+  // DEFAULT_MARKET — but new writes must pick a registered value. Default
+  // "GLOBAL" preserves "submitting an empty form picks a sane default".
+  target_market: z.enum(TARGET_MARKET_VALUES).default("GLOBAL"),
   description: z.string().trim().max(600).optional(),
   // Optional company profile (PRD §12.2, §13.11): present when the user did NOT
   // skip "Your company".

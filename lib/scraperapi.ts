@@ -99,8 +99,13 @@ export interface SerpResult {
 
 export interface SerpDiscoverOptions {
   query: string;
-  /** Geo, default "us". */
+  /** Geo, ISO 3166-1 alpha-2 lowercase. When omitted (Global / continents),
+   *  the country_code param is left off so ScraperAPI does a non-geo search. */
   countryCode?: string;
+  /** Google TLD (no leading dot), e.g. "com", "de", "com.tr". Default "com". */
+  tld?: string;
+  /** UI/result language, ISO 639-1. Default "en". */
+  hl?: string;
   /** Max organic results to keep (top N). Default 3 per PRD §13.3. */
   topN?: number;
 }
@@ -110,8 +115,10 @@ export async function serpDiscover(opts: SerpDiscoverOptions): Promise<SerpResul
   const params = new URLSearchParams({
     api_key: key,
     query: opts.query,
-    country_code: opts.countryCode ?? "us",
   });
+  if (opts.countryCode) params.set("country_code", opts.countryCode);
+  if (opts.tld) params.set("tld", opts.tld);
+  if (opts.hl) params.set("hl", opts.hl);
 
   const res = await fetchWithTimeout(
     `https://api.scraperapi.com/structured/google/search?${params.toString()}`,
