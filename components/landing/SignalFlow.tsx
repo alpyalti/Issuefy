@@ -355,7 +355,7 @@ export default function SignalFlow() {
       <canvas id="signal-flow" aria-hidden="true" />
       <div className="flow-icons">
         <span className="si" data-srci="0"><Icon name="Globe02Icon" size={19} stroke={1.6} /></span>
-        <span className="si" data-srci="1"><Icon name="NewTwitterIcon" size={19} stroke={1.6} /></span>
+        <span className="si" data-srci="1"><Icon name="YoutubeIcon" size={19} stroke={1.6} /></span>
         <span className="si" data-srci="2"><Icon name="GoogleIcon" size={19} stroke={1.6} /></span>
         <span className="si" data-srci="3"><Icon name="RedditIcon" size={19} stroke={1.6} /></span>
         <span className="si" data-out="0"><Icon name="AiMagicIcon" size={19} stroke={1.6} /></span>

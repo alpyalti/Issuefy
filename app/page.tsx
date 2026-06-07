@@ -70,7 +70,7 @@ export default function LandingPage() {
           <div className="hero-trust">
             <div className="label">Reads 40,000+ public sources, including</div>
             <div className="logos">
-              <span>TechCrunch</span><span>Hacker News</span><span>G2</span><span>Reddit</span><span>Crunchbase</span><span>The{" "}Information</span>
+              <span>TechCrunch</span><span>Hacker News</span><span>G2</span><span>Reddit</span><span>YouTube</span><span>LinkedIn</span><span>Crunchbase</span>
             </div>
           </div>
         </div>
@@ -150,19 +150,19 @@ export default function LandingPage() {
       <section className="sec" id="cases">
         <div className="wrap">
           <div className="sec-head center">
-            <h2>One brief, four ways to stay sharp.</h2>
+            <h2>One brief, every angle covered.</h2>
             <p>Founders, product, marketing and strategy teams use Issuefy to replace a dozen open tabs with a single trusted read.</p>
           </div>
           <div className="cases">
             <div className="bg-card"><span className="bg-edge" /><div className="bg-inner usecase">
               <div className="uc-ic"><Icon name="Target01Icon" size={22} /></div>
               <h3>Competitive intelligence</h3>
-              <p>Catch launches, pricing changes and positioning shifts the moment they surface, not three weeks later in a sales call.</p>
+              <p>Catch launches, pricing changes and positioning shifts the moment they surface — Issuefy re-reads competitor pages and flags what changed, not three weeks later in a sales call.</p>
             </div></div>
             <div className="bg-card"><span className="bg-edge" /><div className="bg-inner usecase">
               <div className="uc-ic"><Icon name="Megaphone01Icon" size={22} /></div>
               <h3>Customer pain points</h3>
-              <p>Surface recurring complaints and unmet needs from reviews, forums and social, then turn them into roadmap and messaging.</p>
+              <p>Surface recurring complaints and unmet needs from reviews, forums, YouTube and Reddit, then turn them into roadmap and messaging.</p>
             </div></div>
             <div className="bg-card"><span className="bg-edge" /><div className="bg-inner usecase">
               <div className="uc-ic"><Icon name="ChartIncreaseIcon" size={22} /></div>
@@ -173,6 +173,16 @@ export default function LandingPage() {
               <div className="uc-ic"><Icon name="Alert02Icon" size={22} /></div>
               <h3>Risk &amp; threat monitoring</h3>
               <p>Get early warning on new entrants, regulatory moves and reputation risks before they become a fire drill.</p>
+            </div></div>
+            <div className="bg-card"><span className="bg-edge" /><div className="bg-inner usecase">
+              <div className="uc-ic"><Icon name="Flag02Icon" size={22} /></div>
+              <h3>Industry events</h3>
+              <p>Catch conferences, summits, trade shows and webinars worth attending, sponsoring or watching — with dates, locations and why they matter, all in one card.</p>
+            </div></div>
+            <div className="bg-card"><span className="bg-edge" /><div className="bg-inner usecase">
+              <div className="uc-ic"><Icon name="Globe02Icon" size={22} /></div>
+              <h3>Local-market coverage</h3>
+              <p>Selling outside the US? Issuefy reads in your market&apos;s local language alongside English across 50+ countries — so news, competitors and reviews from your region land in the same brief.</p>
             </div></div>
           </div>
         </div>
@@ -213,8 +223,10 @@ export default function LandingPage() {
               </ul>
               <ul className="tier-feats">
                 <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Daily AI summary</li>
-                <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Competitor tracking</li>
+                <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Competitor tracking + change detection</li>
                 <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Keyword monitoring</li>
+                <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Industry-event tracking</li>
+                <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Local-language sources (50+ markets)</li>
               </ul>
             </div>
 
@@ -241,6 +253,7 @@ export default function LandingPage() {
               </ul>
               <ul className="tier-feats">
                 <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span><b>Everything in Starter</b></li>
+                <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Team workspaces (invite Editors &amp; Viewers)</li>
                 <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Source filters</li>
                 <li><span className="fi"><Icon name="Tick02Icon" size={15} /></span>Priority processing</li>
               </ul>
@@ -300,7 +313,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="pricing-note">Every plan includes the daily AI brief, source verification, and the full dashboard.</div>
+          <div className="pricing-note">Every plan includes the daily AI brief, source verification, change detection, industry-event tracking, and local-language coverage in 50+ markets.</div>
         </div>
       </section>
 
@@ -314,10 +327,13 @@ export default function LandingPage() {
             </div>
             <div className="faq-list">
               {[
-                ["Where do the signals come from?", "Issuefy continuously reads thousands of public sources — news, forums, product reviews, social posts and filings — and surfaces what's relevant to the competitors, keywords and markets on your watchlist."],
+                ["Where do the signals come from?", "Issuefy continuously reads thousands of public sources — news, forums, product reviews, YouTube, Reddit, LinkedIn and filings — and surfaces what's relevant to the competitors, keywords and markets on your watchlist."],
+                ["Does Issuefy work for non-English markets?", "Yes. Pick your market from a curated list of 50+ countries and regions when you set up a project, and Issuefy reads in the local language alongside English. News, competitors and reviews from your region land in the same brief, in their original language."],
                 ["Can I trust what the AI tells me?", "Every signal links straight to its original public sources. Nothing is a black box — one click takes you to the article, thread or review so you can verify each claim yourself."],
                 ["How is the daily brief generated?", "Each morning, Issuefy reads overnight activity across your sources and condenses it into one short summary plus a handful of categorized signal cards — what changed, and why it matters to you."],
-                ["Can I choose what to monitor?", "Yes. Set the competitors, keywords and markets you care about in your watchlist, and adjust them anytime. Your brief adapts the next morning."],
+                ["Can my team work on the same project?", "Yes — Growth and Agency plans include team workspaces. Invite teammates as Editors (add competitors, edit settings) or Viewers (read-only access to the brief and signals). Billing stays with the owner."],
+                ["Does Issuefy track industry events?", "Yes. Conferences, summits, trade shows and notable webinars are detected as their own 'Industry Event' signal category, with the date and location pulled out so you can decide whether to attend, sponsor or watch."],
+                ["Can I choose what to monitor?", "Yes. Set the competitors, keywords and target market you care about in your watchlist, and adjust them anytime. Your brief adapts the next morning."],
                 ["Is my data secure?", "Issuefy only reads public sources — never your private systems. Your watchlist and workspace stay private to your team, and SSO with white-label is available on Enterprise."],
                 ["Do you offer a free trial?", "Yes — Starter comes with a 14-day free trial. We collect a card upfront, but you won't be charged until day 15. Cancel anytime before then and you pay nothing."],
               ].map(([q, a]) => (
@@ -413,6 +429,8 @@ export default function LandingPage() {
               <a href="#cases">Customer signals</a>
               <a href="#cases">Market signals</a>
               <a href="#cases">Risk monitoring</a>
+              <a href="#cases">Industry events</a>
+              <a href="#cases">Local-market coverage</a>
             </div>
             <div className="foot-col">
               <h4>Company</h4>
@@ -469,6 +487,6 @@ export default function LandingPage() {
 
 export const metadata = {
   title: "Daily AI market intelligence",
-  description: "Issuefy reads the open web — competitors, customer signals, emerging risks — and hands you one short, sourced brief every morning. Built for teams that read the room.",
+  description: "Issuefy reads the open web in your market's language — competitors, customer signals, industry events and emerging risks — and hands you one short, sourced brief every morning. Built for teams that read the room.",
   alternates: { canonical: "/" },
 };
