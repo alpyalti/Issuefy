@@ -528,7 +528,8 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .modal-overlay{ position:fixed; inset:0; z-index:210; display:flex; align-items:center; justify-content:center; padding:24px;
   background:rgba(21,23,26,.42); -webkit-backdrop-filter:blur(5px); backdrop-filter:blur(5px); opacity:0; animation:cmdkFade .18s ease forwards; }
 .modal{ width:min(560px,100%); background:var(--surface); border:1px solid var(--line-2); border-radius:20px; box-shadow:var(--shadow-lg);
-  display:flex; flex-direction:column; overflow:hidden; transform:translateY(-10px) scale(.98); animation:cmdkPop .22s cubic-bezier(.2,.7,.3,1) forwards; }
+  display:flex; flex-direction:column; overflow:hidden; max-height:calc(100vh - 48px);
+  transform:translateY(-10px) scale(.98); animation:cmdkPop .22s cubic-bezier(.2,.7,.3,1) forwards; }
 .modal-sm{ width:min(440px,100%); }
 .modal-head{ display:flex; align-items:center; justify-content:space-between; padding:20px 22px 0; }
 .modal-head h3{ font-family:var(--serif); font-size:20px; font-weight:500; color:var(--ink); }
@@ -565,7 +566,7 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .onb-dots{ display:flex; gap:6px; }
 .onb-dot{ width:26px; height:4px; border-radius:999px; background:var(--line-2); transition:background .25s; }
 .onb-dot.on{ background:var(--accent); }
-.onb-body{ padding:18px 38px 8px; min-height:236px; }
+.onb-body{ padding:18px 38px 8px; min-height:236px; overflow-y:auto; flex:1 1 auto; }
 .onb-step{ display:flex; flex-direction:column; animation:rise .3s ease both; }
 .onb-mark{ color:var(--accent); display:flex; margin-bottom:18px; }
 .onb-kicker{ font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-ink); margin-bottom:12px; }
@@ -613,7 +614,7 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .co-social.off .co-social-toggle{ color:var(--ink-4); }
 .co-social-toggle:hover{ background:var(--surface-2); }
 
-.onb-list{ display:flex; flex-direction:column; gap:10px; margin-top:16px; max-height:260px; overflow-y:auto; }
+.onb-list{ display:flex; flex-direction:column; gap:10px; margin-top:16px; }
 .onb-empty{ text-align:center; padding:22px; border:1px dashed var(--line-2); border-radius:12px; color:var(--ink-3); font-size:13.5px; }
 .onb-empty b{ color:var(--ink-2); font-family:var(--mono); font-size:12.5px; }
 
