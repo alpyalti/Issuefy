@@ -30,15 +30,17 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
   min-height:89px;
   border-bottom:1px solid var(--line);
 }
-.side-top .side-brand{ padding:0; display:flex; align-items:center; gap:8px; text-decoration:none; }
+.side-top .side-brand{
+  padding:0; display:flex; align-items:baseline; gap:5px; text-decoration:none;
+}
 .side-top .brand-logo{ height:30px; display:block; }
-/* Tiny BETA tag next to the logo — minimal, monospace, doesn't compete with
-   the wordmark. */
+/* Tiny BETA tag next to the logo — minimal text only, no chip background, no
+   border. Aligned to the wordmark's baseline so it reads as a quiet suffix
+   to "Issuefy" rather than a competing badge. */
 .brand-beta{
-  font-family:var(--mono); font-size:9.5px; font-weight:500;
-  letter-spacing:.12em; text-transform:uppercase;
-  color:var(--ink-3); border:1px solid var(--line-2); border-radius:4px;
-  padding:1px 5px; background:var(--surface-2);
+  font-family:var(--mono); font-size:8.5px; font-weight:500; line-height:1;
+  letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-4);
 }
 .side-brand{ padding:8px 8px 16px; }
 .side-section{ padding:10px 0 4px; }
@@ -514,8 +516,13 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
 .sidebar{ padding:20px 14px; background:var(--surface); }
 /* Re-align side-top's negative margins with the refreshed sidebar padding
    (20px top, 14px sides) so the divider lands EXACTLY where the topbar's
-   bottom border does and no horizontal overflow is created. */
-.side-top{ margin:-20px -14px 8px; min-height:90px; }
+   bottom border does and no horizontal overflow is created. The min-height
+   here mirrors the topbar's actual rendered height: padding-block 20px each
+   side + h1 (29px line-height:1) + 6px margin + date (11.5px × 1.55 body
+   line-height ≈ 18px) + 1px border ≈ 94px. Use a touch more (100px) so
+   font-rendering variance can't make the side-top divider land above the
+   topbar's. */
+.side-top{ margin:-20px -14px 8px; min-height:100px; }
 .side-brand{ padding:8px 8px 18px; }
 .side-label{ font-size:10px; letter-spacing:.14em; padding:0 8px 10px; }
 .side-item{ font-size:14px; padding:10px 11px; border-radius:10px;
