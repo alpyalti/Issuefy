@@ -58,6 +58,7 @@ const VIEW_TITLES: Record<string, { title: string; sub: string }> = {
   settings: { title: "Settings", sub: "Project, watchlist and plan usage" },
   archive: { title: "Archive", sub: "Past daily briefs" },
   account: { title: "Account", sub: "Your identity, plan, billing and security" },
+  competitorHub: { title: "Competitor profile", sub: "Social presence, stats and AI insights" },
 };
 
 export default function DashChrome(props: {
@@ -118,6 +119,7 @@ function DashChromeInner({
     pathname?.endsWith("/settings") ? "settings" :
     pathname?.endsWith("/account") ? "account" :
     pathname?.includes("/archive") ? "archive" :
+    pathname?.includes("/competitors/") ? "competitorHub" :
     null;
   const isDashboardIndex = !realRoute; // true on /dashboard/[id]
   const activeView: string = realRoute ?? view;
@@ -346,16 +348,16 @@ function DashChromeInner({
         <div className="side-section side-watch">
           <div className="side-label">Watchlist</div>
           <div className="watchlist">
-            {/* Each competitor / keyword is a Link to the project settings
-                page — clicking jumps the user to where they can edit it. */}
+            {/* Competitors open their hub page (stats, posts, AI insight);
+                keywords still deep-link into Settings where they're edited. */}
             {competitors.length > 0 && <div className="watch-group">Competitors</div>}
             {competitors.map((c) => (
               <Link
-                href={`/dashboard/${project.id}/settings`}
+                href={`/dashboard/${project.id}/competitors/${c.id}`}
                 prefetch
                 className="watch-item is-comp"
                 key={"c-" + c.id}
-                title={`Edit ${c.name} in project settings`}
+                title={`View ${c.name}'s profile`}
               >
                 <span className={"watch-live " + (c.is_active ? "on" : "")} />
                 <span className="watch-label">{c.name}</span>
@@ -677,10 +679,14 @@ function CommandPalette({
       router.push(`/dashboard/${p.id}`);
       onClose();
     } else if (item.kind === "watch") {
-      // Competitor / keyword → drop into project settings where it can be
-      // edited; the deep-link to a specific row is implicit (Settings shows
-      // them all).
-      router.push(`/dashboard/${projectId}/settings`);
+      const w = item.data as WatchEntity;
+      // Competitors open their hub page; keywords still land on Settings
+      // (that's where they're edited).
+      if (w.kind === "competitor") {
+        router.push(`/dashboard/${projectId}/competitors/${w.id}`);
+      } else {
+        router.push(`/dashboard/${projectId}/settings`);
+      }
       onClose();
     } else {
       const s = item.data as SignalHit;

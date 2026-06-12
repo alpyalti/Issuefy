@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { ErrorState, ERROR_MESSAGES } from "@/components/ui/ErrorState";
@@ -258,6 +259,7 @@ export default function SettingsClient({
             <CompetitorRow
               key={c.id}
               competitor={c}
+              profileHref={`/dashboard/${project.id}/competitors/${c.id}`}
               onToggle={() => toggleCompetitor(c)}
               onRemove={() => removeCompetitor(c)}
               onSaveSocials={(socials) => saveCompetitorSocials(c, socials)}
@@ -516,9 +518,11 @@ const SOCIAL_PLATFORMS: { key: string; label: string; icon: "Globe02Icon" | "Lin
 ];
 
 function CompetitorRow({
-  competitor, onToggle, onRemove, onSaveSocials,
+  competitor, profileHref, onToggle, onRemove, onSaveSocials,
 }: {
   competitor: Competitor;
+  /** Competitor Hub page for this competitor — stats, posts, AI insight. */
+  profileHref: string;
   onToggle: () => void;
   onRemove: () => void;
   onSaveSocials: (socials: Record<string, string>) => Promise<void> | void;
@@ -553,6 +557,9 @@ function CompetitorRow({
           <span>{competitor.name}</span>
           <span className="mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>{competitor.website_url}</span>
         </span>
+        <Link href={profileHref} prefetch className="icon-btn" title={`View ${competitor.name}'s profile`}>
+          <Icon name="ArrowUpRight01Icon" size={15} stroke={1.8} />
+        </Link>
         <button
           className="icon-btn"
           title={open ? "Hide socials" : "Edit socials"}
@@ -574,7 +581,7 @@ function CompetitorRow({
       {open && (
         <div style={{ padding: "12px 14px 14px", background: "var(--surface-2)", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 8 }}>
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 4 }}>
-            These links are saved on the competitor for your reference. Issuefy doesn&apos;t scrape social posts at this time — only the main website.
+            Instagram, YouTube, Reddit and LinkedIn links are tracked daily — stats, posts and trends land on the competitor&apos;s profile page. TikTok and Facebook are saved for reference only.
           </p>
           <SocialsFields draft={draft} setDraft={setDraft} />
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>
