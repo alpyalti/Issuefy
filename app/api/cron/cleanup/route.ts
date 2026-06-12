@@ -132,11 +132,35 @@ async function handle(req: Request) {
     errors.push(`signals: ${e instanceof Error ? e.message : "failed"}`);
   }
 
+  // ── Competitor Hub retention. ─────────────────────────────────────────
+  // Snapshots feed the follower-growth graphs — keep ~13 months so a
+  // year-over-year view stays possible. Posts older than 180 days have no
+  // surface in the hub (it shows the latest 12) and only bloat the table.
+  let socialSnapshotsDeleted = 0;
+  let socialPostsDeleted = 0;
+  try {
+    const snaps = (await sql`
+      DELETE FROM social_profile_snapshots
+      WHERE captured_on < CURRENT_DATE - 400
+      RETURNING id
+    `) as { id: string }[];
+    socialSnapshotsDeleted = snaps.length;
+    const posts = (await sql`
+      DELETE FROM social_posts
+      WHERE posted_at IS NOT NULL AND posted_at < now() - interval '180 days'
+      RETURNING id
+    `) as { id: string }[];
+    socialPostsDeleted = posts.length;
+  } catch (e) {
+    captureError(e, { stage: "cleanup.social" });
+    errors.push(`social: ${e instanceof Error ? e.message : "failed"}`);
+  }
+
   // daily_summaries are kept forever per PRD §23. Cascading FKs already drop
   // signal_sources / daily_summary_sources / scrape_jobs on parent deletion,
   // so no separate cleanup is needed for them.
 
-  return json({ sourcesDeleted, signalsDeleted, lapsedUsers, projectsPaused, errors });
+  return json({ sourcesDeleted, signalsDeleted, lapsedUsers, projectsPaused, socialSnapshotsDeleted, socialPostsDeleted, errors });
 }
 
 export { handle as GET, handle as POST };

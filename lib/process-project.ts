@@ -233,10 +233,15 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
       WHERE project_id = ${projectId} AND is_active = true
     `) as CompetitorRow[];
 
+    // instagram.com is excluded: those rows are signal citations created by
+    // the Competitor Hub (lib/social-profile.ts). ScraperAPI can't read IG's
+    // JS shell anyway — re-scraping them would burn a budget tick per day
+    // per profile just to fail the content gate.
     const discoveredSources = (await sql`
       SELECT id, url, competitor_id, keyword_id
       FROM sources
       WHERE project_id = ${projectId}
+        AND domain <> 'instagram.com'
     `) as { id: string; url: string; competitor_id: string | null; keyword_id: string | null }[];
 
     type ScrapeTarget = {
