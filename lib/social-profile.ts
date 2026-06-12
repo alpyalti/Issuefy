@@ -37,6 +37,7 @@ import {
   parseLinkedInFollowers,
 } from "./social-stats";
 import { standardScrape } from "./scraperapi";
+import { cleanForStorage } from "./cleaner";
 import { upsertSource } from "./sources";
 import { chatJson } from "./openrouter";
 import { reserveCalls } from "./usage-counters";
@@ -383,19 +384,59 @@ export async function refreshSocialProfiles(
     }
   }
 
-  // ── Step 5: LinkedIn — parse from the already-stored weekly scrape ──
+  // ── Step 5: LinkedIn — fresh premium scrape on demand, else weekly scan ──
+  // The daily cron relies on the weekly LinkedIn scrape stored in `sources`
+  // (LinkedIn needs premium+render, ~5× cost — too pricey to hit daily). But
+  // a MANUAL "Refresh social data" click, or any admin run, scrapes a fresh
+  // page right now so the number isn't blank while waiting for the weekly
+  // cadence. Admins skip the scrape budget.
+  const freshLinkedIn = !!opts?.onlyCompetitorId || ownerIsAdmin;
   for (const p of byPlatform("linkedin")) {
     try {
-      const rows = (await sql`
-        SELECT cleaned_text FROM sources
-        WHERE project_id = ${projectId} AND competitor_id = ${p.competitor_id}
-          AND domain = 'linkedin.com' AND cleaned_text IS NOT NULL
-        ORDER BY scraped_at DESC LIMIT 1
-      `) as { cleaned_text: string }[];
-      if (rows.length === 0) continue; // weekly scrape hasn't run yet — stay pending
-      const followers = parseLinkedInFollowers(rows[0].cleaned_text);
+      let text: string | null = null;
+
+      if (freshLinkedIn) {
+        const after = await reserveCalls(project.user_id, "scrape_calls");
+        if (ownerIsAdmin || after <= limits.scrapeCallsPerCycle) {
+          try {
+            const { html } = await standardScrape({ url: p.url, premium: true, render: true });
+            const cleaned = cleanForStorage(html);
+            if (cleaned.ok) {
+              const name = competitors.find((c) => c.id === p.competitor_id)?.name ?? "Competitor";
+              await upsertSource({
+                projectId,
+                competitorId: p.competitor_id,
+                title: cleaned.title || `${name} on LinkedIn`,
+                url: p.url,
+                sourceType: "Competitor Website",
+                cleanedText: cleaned.snippet,
+                contentSnippet: cleaned.snippet.slice(0, 280),
+              });
+              text = cleaned.snippet;
+            }
+          } catch (e) {
+            captureBreadcrumb("social: LinkedIn fresh scrape failed, falling back to stored", {
+              projectId, competitorId: p.competitor_id, msg: e instanceof Error ? e.message : "?",
+            });
+          }
+        }
+      }
+
+      // Fall back to the most recent stored LinkedIn scrape (weekly cadence).
+      if (!text) {
+        const rows = (await sql`
+          SELECT cleaned_text FROM sources
+          WHERE project_id = ${projectId} AND competitor_id = ${p.competitor_id}
+            AND domain = 'linkedin.com' AND cleaned_text IS NOT NULL
+          ORDER BY scraped_at DESC LIMIT 1
+        `) as { cleaned_text: string }[];
+        if (rows.length === 0) continue; // nothing scraped yet — stay pending
+        text = rows[0].cleaned_text;
+      }
+
+      const followers = parseLinkedInFollowers(text);
       if (followers === null) {
-        await markFailed(p.id, "No follower count found in the latest weekly scan");
+        await markFailed(p.id, "Couldn't read a follower count from LinkedIn (the page may be login-gated)");
         continue;
       }
       await sql`
@@ -407,7 +448,7 @@ export async function refreshSocialProfiles(
       t.profilesFetched++;
       updatedCompetitors.add(p.competitor_id);
     } catch (e) {
-      await markFailed(p.id, e instanceof Error ? e.message : "LinkedIn parse failed");
+      await markFailed(p.id, e instanceof Error ? e.message : "LinkedIn fetch failed");
     }
   }
 

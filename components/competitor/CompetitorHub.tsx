@@ -100,6 +100,17 @@ function ext(url: string): string {
   return url.startsWith("http") ? url : `https://${url}`;
 }
 
+/** Instagram CDN images (scontent-*.cdninstagram.com) block browser
+ *  hotlinking, so we serve them through our server-side proxy. Non-IG/FB
+ *  URLs pass straight through (the proxy would reject them anyway). */
+function socialImg(url: string | null): string | null {
+  if (!url) return null;
+  if (/(cdninstagram\.com|fbcdn\.net)/i.test(url)) {
+    return `/api/social-image?u=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 /** Latest follower value vs the closest snapshot ≥6 days older — the same
  *  week-over-week definition the signal emitter uses. */
 function weekDelta(snaps: HubSnapshot[]): { delta: number; pct: number } | null {
@@ -302,9 +313,9 @@ export default function CompetitorHub({
             {ig && (
               <section className="card hub-card">
                 <div className="hub-ig-head">
-                  {ig.profile_pic_url
+                  {socialImg(ig.profile_pic_url)
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={ig.profile_pic_url} alt="" className="hub-avatar" referrerPolicy="no-referrer"
+                    ? <img src={socialImg(ig.profile_pic_url) as string} alt="" className="hub-avatar" referrerPolicy="no-referrer"
                         onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
                     : <span className="hub-avatar hub-avatar-fallback"><Icon name="InstagramIcon" size={18} stroke={1.6} /></span>}
                   <div className="hub-ig-meta">
@@ -444,13 +455,14 @@ export default function CompetitorHub({
  *  branded placeholder instead of the browser's broken-image glyph. */
 function PostCard({ post }: { post: HubPost }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const showImg = post.display_url && !imgFailed;
+  const thumb = socialImg(post.display_url);
+  const showImg = thumb && !imgFailed;
   return (
     <a href={post.url} target="_blank" rel="noopener noreferrer" className="hub-post">
       <span className="hub-post-thumb">
         {showImg
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={post.display_url as string} alt="" loading="lazy" referrerPolicy="no-referrer"
+          ? <img src={thumb as string} alt="" loading="lazy" referrerPolicy="no-referrer"
               onError={() => setImgFailed(true)} />
           : <Icon name={post.post_type === "Video" ? "PlayIcon" : "InstagramIcon"} size={22} stroke={1.5} />}
         {post.post_type && <span className="hub-post-type">{post.post_type}</span>}
