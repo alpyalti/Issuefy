@@ -30,7 +30,10 @@ import { apifyEnabled, fetchInstagramProfiles, type IgProfileResult } from "./ap
 import {
   parseInstagramHandle,
   parseYouTubeSubscribers,
+  fetchYouTubeSubscribersDirect,
   fetchRedditMembers,
+  redditAboutUrl,
+  parseRedditAbout,
   parseLinkedInFollowers,
 } from "./social-stats";
 import { standardScrape } from "./scraperapi";
@@ -221,6 +224,14 @@ export async function refreshSocialProfiles(
 
   // ── Step 2: Instagram via Apify — ONE batched call for all due handles ──
   const igProfiles = byPlatform("instagram");
+  if (igProfiles.length > 0 && !apifyEnabled()) {
+    // Be honest on the hub instead of leaving the row "pending" forever —
+    // the operator needs to know the token is the missing piece.
+    for (const p of igProfiles) {
+      await markFailed(p.id, "Instagram fetching isn't configured yet (APIFY_TOKEN not set)");
+    }
+    t.errors.push("instagram: APIFY_TOKEN not set — Instagram tier skipped");
+  }
   if (igProfiles.length > 0 && apifyEnabled()) {
     const after = await reserveCalls(project.user_id, "social_fetches", igProfiles.length);
     if (after > limits.socialFetchesPerCycle) {
@@ -294,18 +305,28 @@ export async function refreshSocialProfiles(
     }
   }
 
-  // ── Step 3: YouTube — standard scrape + subscriber parse (budget-ticked) ──
+  // ── Step 3: YouTube — direct fetch first ($0), ScraperAPI fallback ──
+  // Channel pages answer plain GETs with a browser UA, and ScraperAPI 403s
+  // youtube.com on some plans — so the free path is also the reliable one.
+  // The fallback only burns a scrape tick when the direct path failed.
   for (const p of byPlatform("youtube")) {
     try {
-      const after = await reserveCalls(project.user_id, "scrape_calls");
-      if (after > limits.scrapeCallsPerCycle) {
-        t.errors.push("scrape budget reached — YouTube stats skipped");
-        break;
-      }
-      const { html } = await standardScrape({ url: p.url });
-      const subs = parseYouTubeSubscribers(html);
+      let subs = await fetchYouTubeSubscribersDirect(p.url);
       if (subs === null) {
-        await markFailed(p.id, "No subscriber count found on the channel page");
+        const after = await reserveCalls(project.user_id, "scrape_calls");
+        if (after > limits.scrapeCallsPerCycle) {
+          t.errors.push("scrape budget reached — YouTube fallback skipped");
+        } else {
+          try {
+            const { html } = await standardScrape({ url: p.url });
+            subs = parseYouTubeSubscribers(html);
+          } catch {
+            /* fall through with subs = null */
+          }
+        }
+      }
+      if (subs === null) {
+        await markFailed(p.id, "No subscriber count found — the channel link may be outdated");
         continue;
       }
       await sql`
@@ -321,12 +342,30 @@ export async function refreshSocialProfiles(
     }
   }
 
-  // ── Step 4: Reddit — free about.json ──
+  // ── Step 4: Reddit — free about.json, ScraperAPI fallback for blocked IPs ──
   for (const p of byPlatform("reddit")) {
     try {
-      const members = await fetchRedditMembers(p.url);
+      let members = await fetchRedditMembers(p.url);
       if (members === null) {
-        await markFailed(p.id, "No member count in about.json");
+        // Reddit serves an HTML interstitial to some IP ranges; the same JSON
+        // usually comes through fine via ScraperAPI's proxy pool.
+        const aboutUrl = redditAboutUrl(p.url);
+        if (aboutUrl) {
+          const after = await reserveCalls(project.user_id, "scrape_calls");
+          if (after > limits.scrapeCallsPerCycle) {
+            t.errors.push("scrape budget reached — Reddit fallback skipped");
+          } else {
+            try {
+              const { html } = await standardScrape({ url: aboutUrl });
+              members = parseRedditAbout(JSON.parse(html));
+            } catch {
+              /* fall through with members = null */
+            }
+          }
+        }
+      }
+      if (members === null) {
+        await markFailed(p.id, "No member count returned — Reddit may be blocking requests");
         continue;
       }
       await sql`

@@ -1099,3 +1099,11 @@ body:has(.dash){ background:var(--bg); overflow:hidden; }
   .hub-actions{ width:100%; }
   .hub-actions .btn{ width:100%; justify-content:center; }
 }
+
+/* Hub — Instagram-missing hint card (keeps the main column purposeful when
+   only stats-tier platforms are linked). */
+.hub-ig-missing{ flex-direction:row; align-items:center; gap:14px; }
+.hub-ig-missing-ic{ width:40px; height:40px; border-radius:12px; background:var(--surface-2);
+  display:flex; align-items:center; justify-content:center; color:var(--ink-3); flex:none; }
+.hub-ig-missing-tx{ display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; font-size:14px; color:var(--ink); }
+@media(max-width:560px){ .hub-ig-missing{ flex-direction:column; align-items:flex-start; } }

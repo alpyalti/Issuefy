@@ -94,6 +94,12 @@ function shortDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+/** Stored social links are user/enrichment input — some lack a protocol,
+ *  which the browser would treat as a relative path. */
+function ext(url: string): string {
+  return url.startsWith("http") ? url : `https://${url}`;
+}
+
 /** Latest follower value vs the closest snapshot ≥6 days older — the same
  *  week-over-week definition the signal emitter uses. */
 function weekDelta(snaps: HubSnapshot[]): { delta: number; pct: number } | null {
@@ -227,7 +233,7 @@ export default function CompetitorHub({
             </div>
             <div className="hub-chips">
               {profiles.map((p) => (
-                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="hub-chip">
+                <a key={p.id} href={ext(p.url)} target="_blank" rel="noopener noreferrer" className="hub-chip">
                   <Icon name={PLATFORM_META[p.platform].icon} size={13} stroke={1.7} />
                   {PLATFORM_META[p.platform].label}
                 </a>
@@ -280,6 +286,18 @@ export default function CompetitorHub({
         <div className="hub-grid">
           {/* ── Main column ── */}
           <div className="hub-main">
+            {/* No Instagram linked — keep the main column purposeful instead
+                of hollow, and point at the unlock. */}
+            {!ig && (
+              <section className="card hub-card hub-ig-missing">
+                <span className="hub-ig-missing-ic"><Icon name="InstagramIcon" size={20} stroke={1.5} /></span>
+                <div className="hub-ig-missing-tx">
+                  <span>Instagram isn&apos;t linked for {competitor.name}.</span>
+                  <span className="hub-empty-sub">Add their Instagram in settings to unlock follower graphs, recent posts and richer AI insights here.</span>
+                </div>
+                <Link href={`/dashboard/${projectId}/settings`} className="btn btn-ghost btn-sm">Add Instagram</Link>
+              </section>
+            )}
             {/* Instagram deep-dive */}
             {ig && (
               <section className="card hub-card">
@@ -363,7 +381,7 @@ export default function CompetitorHub({
                       .slice(-30)
                       .map((s) => s.followers as number);
                     return (
-                      <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="hub-plat">
+                      <a key={p.id} href={ext(p.url)} target="_blank" rel="noopener noreferrer" className="hub-plat">
                         <span className="hub-plat-ic"><Icon name={meta.icon} size={17} stroke={1.6} /></span>
                         <span className="hub-plat-meta">
                           <span className="hub-plat-name">{meta.label}</span>
@@ -389,7 +407,7 @@ export default function CompetitorHub({
                 <h3 className="hub-h3" style={{ marginTop: 0 }}>Also on</h3>
                 <div className="hub-chips">
                   {linkOnly.map((p) => (
-                    <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="hub-chip">
+                    <a key={p.id} href={ext(p.url)} target="_blank" rel="noopener noreferrer" className="hub-chip">
                       <Icon name={PLATFORM_META[p.platform].icon} size={13} stroke={1.7} />
                       {PLATFORM_META[p.platform].label}
                     </a>

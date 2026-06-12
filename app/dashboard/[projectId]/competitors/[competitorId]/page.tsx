@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
 import { getProject } from "@/lib/project-data";
+import { parseInstagramHandle } from "@/lib/social-stats";
 import CompetitorHub, {
   type HubCompetitor, type HubProfile, type HubSnapshot, type HubPost, type HubInsight, type HubSignal,
 } from "@/components/competitor/CompetitorHub";
@@ -38,7 +39,7 @@ export default async function CompetitorHubPage({ params }: Ctx) {
   const competitor = compRows[0];
   if (!competitor) notFound();
 
-  const profiles = (await sql`
+  const stored = (await sql`
     SELECT id, platform, handle, url, full_name, biography, profile_pic_url,
            is_verified, followers, following, posts_count, external_url,
            last_fetched_at::text AS last_fetched_at, fetch_status, fetch_error
@@ -47,7 +48,15 @@ export default async function CompetitorHubPage({ params }: Ctx) {
     ORDER BY platform
   `) as HubProfile[];
 
-  const profileIds = profiles.map((p) => p.id);
+  // social_profiles rows are created by the refresh pipeline (daily cron /
+  // manual refresh) — a competitor whose links were just added in Settings,
+  // or a project the worker hasn't visited yet, has links in
+  // competitors.socials but no rows. Synthesize pending placeholders so the
+  // hub reflects Settings truthfully (and the Refresh button shows) instead
+  // of claiming "no social accounts linked".
+  const profiles = mergeSyntheticProfiles(stored, competitor.socials ?? {});
+
+  const profileIds = stored.map((p) => p.id);
 
   const [snapshots, posts, insightRows, signals] = await Promise.all([
     profileIds.length
@@ -101,4 +110,39 @@ export default async function CompetitorHubPage({ params }: Ctx) {
       signals={signals}
     />
   );
+}
+
+function mergeSyntheticProfiles(
+  stored: HubProfile[],
+  socials: Partial<Record<string, string>>,
+): HubProfile[] {
+  const have = new Set(stored.map((p) => p.platform));
+  const synth: HubProfile[] = [];
+
+  const push = (platform: HubProfile["platform"], handle: string, url: string, linkOnly: boolean) => {
+    if (have.has(platform)) return;
+    synth.push({
+      id: `pending-${platform}`,
+      platform, handle,
+      url: url.startsWith("http") ? url : `https://${url}`,
+      full_name: null, biography: null, profile_pic_url: null, is_verified: null,
+      followers: null, following: null, posts_count: null, external_url: null,
+      last_fetched_at: null,
+      fetch_status: linkOnly ? "link_only" : "pending",
+      fetch_error: null,
+    });
+  };
+
+  const ig = socials.instagram?.trim();
+  if (ig) {
+    const handle = parseInstagramHandle(ig);
+    if (handle) push("instagram", handle, `https://www.instagram.com/${handle}/`, false);
+  }
+  if (socials.youtube?.trim()) push("youtube", socials.youtube.trim(), socials.youtube.trim(), false);
+  if (socials.reddit?.trim()) push("reddit", socials.reddit.trim(), socials.reddit.trim(), false);
+  if (socials.linkedin?.trim()) push("linkedin", socials.linkedin.trim(), socials.linkedin.trim(), false);
+  if (socials.tiktok?.trim()) push("tiktok", socials.tiktok.trim(), socials.tiktok.trim(), true);
+  if (socials.facebook?.trim()) push("facebook", socials.facebook.trim(), socials.facebook.trim(), true);
+
+  return [...stored, ...synth];
 }
