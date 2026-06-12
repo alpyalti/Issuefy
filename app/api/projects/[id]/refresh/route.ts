@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/clerk-user";
 import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { isAdmin } from "@/lib/admin";
 import { requireSql } from "@/lib/db";
 import { json, manageableProject, notFound, rateLimited } from "@/lib/api";
 import { getLimits } from "@/lib/usage";
@@ -43,26 +44,30 @@ export async function POST(_req: Request, { params }: Ctx) {
   const sql = requireSql();
   const limits = getLimits(user.plan);
 
-  // Per-hour floor: simply check projects.last_manual_refresh_at.
-  if (proj.last_manual_refresh_at) {
-    const last = new Date(proj.last_manual_refresh_at).getTime();
-    if (Date.now() - last < HOUR_MS) {
-      return rateLimited("You can refresh this project once per hour.");
+  // Admins bypass the refresh limits entirely (testing convenience).
+  const admin = await isAdmin(user.id);
+  if (!admin) {
+    // Per-hour floor: simply check projects.last_manual_refresh_at.
+    if (proj.last_manual_refresh_at) {
+      const last = new Date(proj.last_manual_refresh_at).getTime();
+      if (Date.now() - last < HOUR_MS) {
+        return rateLimited("You can refresh this project once per hour.");
+      }
     }
-  }
 
-  // Daily plan quota: count today's MANUAL scrape_jobs for this user across
-  // all their projects (limits are account-wide, PRD §21.1).
-  const todayCountRows = (await sql`
-    SELECT COUNT(*)::int AS n
-    FROM scrape_jobs sj
-    JOIN projects p ON p.id = sj.project_id
-    WHERE p.user_id = ${user.id}
-      AND sj.job_type = 'manual'
-      AND sj.created_at >= ${new Date(Date.now() - DAY_MS).toISOString()}
-  `) as { n: number }[];
-  if ((todayCountRows[0]?.n ?? 0) >= limits.manualRefreshesPerDay) {
-    return rateLimited("You've used all your refreshes for today.");
+    // Daily plan quota: count today's MANUAL scrape_jobs for this user across
+    // all their projects (limits are account-wide, PRD §21.1).
+    const todayCountRows = (await sql`
+      SELECT COUNT(*)::int AS n
+      FROM scrape_jobs sj
+      JOIN projects p ON p.id = sj.project_id
+      WHERE p.user_id = ${user.id}
+        AND sj.job_type = 'manual'
+        AND sj.created_at >= ${new Date(Date.now() - DAY_MS).toISOString()}
+    `) as { n: number }[];
+    if ((todayCountRows[0]?.n ?? 0) >= limits.manualRefreshesPerDay) {
+      return rateLimited("You've used all your refreshes for today.");
+    }
   }
 
   // Stamp last_manual_refresh_at BEFORE running so concurrent clicks don't

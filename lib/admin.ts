@@ -25,6 +25,22 @@ export async function requireAdmin(): Promise<AdminUserRow> {
   return { ...user, role };
 }
 
+/**
+ * Lightweight boolean admin check by user id. Used to lift testing limits
+ * (refresh cooldowns, fetch budgets) for admins without changing any
+ * customer-facing behavior. Reads users.role (migration 0006). Fails closed
+ * (returns false) on any error.
+ */
+export async function isAdmin(userId: string): Promise<boolean> {
+  try {
+    const sql = requireSql();
+    const rows = (await sql`SELECT role FROM users WHERE id = ${userId} LIMIT 1`) as Array<{ role: string }>;
+    return (rows[0]?.role ?? "user") === "admin";
+  } catch {
+    return false;
+  }
+}
+
 /** Same as requireAdmin but returns a 404 Response (for API routes). */
 export async function requireAdminApi(): Promise<AdminUserRow | Response> {
   try {

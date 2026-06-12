@@ -122,8 +122,10 @@ export async function refreshSocialProfiles(
     return t;
   }
 
-  const planRows = (await sql`SELECT plan FROM users WHERE id = ${project.user_id} LIMIT 1`) as { plan: string }[];
-  const limits = getLimits(planRows[0]?.plan);
+  const ownerRows = (await sql`SELECT plan, role FROM users WHERE id = ${project.user_id} LIMIT 1`) as { plan: string; role: string }[];
+  const limits = getLimits(ownerRows[0]?.plan);
+  // Admins skip the per-cycle social-fetch budget so they can hammer-test.
+  const ownerIsAdmin = (ownerRows[0]?.role ?? "user") === "admin";
 
   const competitors = (await sql`
     SELECT id, name, website_url, socials
@@ -234,7 +236,7 @@ export async function refreshSocialProfiles(
   }
   if (igProfiles.length > 0 && apifyEnabled()) {
     const after = await reserveCalls(project.user_id, "social_fetches", igProfiles.length);
-    if (after > limits.socialFetchesPerCycle) {
+    if (!ownerIsAdmin && after > limits.socialFetchesPerCycle) {
       t.errors.push("social fetch budget reached — Instagram skipped this cycle");
       captureBreadcrumb("social: fetch budget reached", { projectId, userId: project.user_id });
     } else {

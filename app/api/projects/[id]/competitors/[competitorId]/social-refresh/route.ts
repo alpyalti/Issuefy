@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/clerk-user";
 import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { isAdmin } from "@/lib/admin";
 import { requireSql } from "@/lib/db";
 import { json, manageableProject, notFound, rateLimited } from "@/lib/api";
 import { refreshSocialProfiles } from "@/lib/social-profile";
@@ -40,14 +41,18 @@ export async function POST(_req: Request, { params }: Ctx) {
   if (compRows.length === 0) return notFound();
 
   // Hourly cooldown — any fetch attempt (ok or failed) within the last hour
-  // blocks another. Covers double-clicks and refresh-spam alike.
-  const lastRows = (await sql`
-    SELECT MAX(last_fetched_at) AS last FROM social_profiles
-    WHERE competitor_id = ${competitorId}
-  `) as { last: string | null }[];
-  const last = lastRows[0]?.last;
-  if (last && Date.now() - new Date(last).getTime() < HOUR_MS) {
-    return rateLimited("Social data refreshes once per hour per competitor.");
+  // blocks another. Covers double-clicks and refresh-spam alike. Admins are
+  // exempt so they can hammer-test the Apify/social pipeline freely.
+  const admin = await isAdmin(user.id);
+  if (!admin) {
+    const lastRows = (await sql`
+      SELECT MAX(last_fetched_at) AS last FROM social_profiles
+      WHERE competitor_id = ${competitorId}
+    `) as { last: string | null }[];
+    const last = lastRows[0]?.last;
+    if (last && Date.now() - new Date(last).getTime() < HOUR_MS) {
+      return rateLimited("Social data refreshes once per hour per competitor.");
+    }
   }
 
   try {
