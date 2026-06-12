@@ -28,6 +28,9 @@ export interface PlanLimits {
   // Per-cycle API-call budgets — the real cost ceiling (PRD §21.3)
   serpCallsPerCycle: number;
   scrapeCallsPerCycle: number;
+  /** Apify Instagram profile results per cycle (Competitor Hub). Generous —
+   *  the structural bound is competitorsPerProject × daily snapshots. */
+  socialFetchesPerCycle: number;
 
   // Per-project/day safety rail (PRD §21.3)
   maxSourcesPerProjectPerDay: number;
@@ -54,6 +57,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     manualRefreshesPerDay: 1,
     serpCallsPerCycle: 80,
     scrapeCallsPerCycle: 1_200,
+    socialFetchesPerCycle: 200,
     maxSourcesPerProjectPerDay: 50,
     maxSignalsPerProjectPerDay: 20,
   },
@@ -68,6 +72,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     manualRefreshesPerDay: 3,
     serpCallsPerCycle: 250,
     scrapeCallsPerCycle: 4_000,
+    socialFetchesPerCycle: 800,
     maxSourcesPerProjectPerDay: 50,
     maxSignalsPerProjectPerDay: 20,
   },
@@ -82,6 +87,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     manualRefreshesPerDay: 10,
     serpCallsPerCycle: 700,
     scrapeCallsPerCycle: 12_000,
+    socialFetchesPerCycle: 2_500,
     maxSourcesPerProjectPerDay: 50,
     maxSignalsPerProjectPerDay: 20,
   },
@@ -96,6 +102,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     manualRefreshesPerDay: 100,
     serpCallsPerCycle: 7_000,
     scrapeCallsPerCycle: 120_000,
+    socialFetchesPerCycle: 25_000,
     maxSourcesPerProjectPerDay: 50,
     maxSignalsPerProjectPerDay: 20,
   },

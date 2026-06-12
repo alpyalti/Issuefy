@@ -12,6 +12,7 @@
  *   - scrape_calls       : standard scrape AND enrichment fetches
  *   - sources_stored     : after dedup upsert, only when a NEW row was created
  *   - signals_generated  : per signal row inserted
+ *   - social_fetches     : Apify Instagram profile results (Competitor Hub)
  *
  * `cap_notice_sent_at` lets the worker send the Resend usage email exactly
  * once per cycle (PRD §21.4 — never silently keep spending after a cap).
@@ -19,13 +20,14 @@
 import { sql, requireSql } from "./db";
 import { currentPeriodStart } from "./usage";
 
-export type CounterName = "serp_calls" | "scrape_calls" | "sources_stored" | "signals_generated";
+export type CounterName = "serp_calls" | "scrape_calls" | "sources_stored" | "signals_generated" | "social_fetches";
 
 export interface UsageRow {
   serp_calls: number;
   scrape_calls: number;
   sources_stored: number;
   signals_generated: number;
+  social_fetches: number;
   cap_notice_sent_at: string | null;
 }
 
@@ -33,13 +35,13 @@ export interface UsageRow {
 export async function getUsage(userId: string, periodStart = currentPeriodStart()): Promise<UsageRow> {
   if (!sql) throw new Error("DATABASE_URL is not configured");
   const rows = (await sql`
-    SELECT serp_calls, scrape_calls, sources_stored, signals_generated, cap_notice_sent_at
+    SELECT serp_calls, scrape_calls, sources_stored, signals_generated, social_fetches, cap_notice_sent_at
     FROM usage_counters
     WHERE user_id = ${userId} AND period_start = ${periodStart}
     LIMIT 1
   `) as UsageRow[];
   return rows[0] ?? {
-    serp_calls: 0, scrape_calls: 0, sources_stored: 0, signals_generated: 0, cap_notice_sent_at: null,
+    serp_calls: 0, scrape_calls: 0, sources_stored: 0, signals_generated: 0, social_fetches: 0, cap_notice_sent_at: null,
   };
 }
 
@@ -94,6 +96,17 @@ export async function reserveCalls(
       RETURNING sources_stored
     `) as { sources_stored: number }[];
     return rows[0]?.sources_stored ?? delta;
+  }
+  if (counter === "social_fetches") {
+    const rows = (await sqlClient`
+      INSERT INTO usage_counters (user_id, period_start, social_fetches)
+      VALUES (${userId}, ${periodStart}, ${delta})
+      ON CONFLICT (user_id, period_start) DO UPDATE
+        SET social_fetches = usage_counters.social_fetches + EXCLUDED.social_fetches,
+            updated_at = now()
+      RETURNING social_fetches
+    `) as { social_fetches: number }[];
+    return rows[0]?.social_fetches ?? delta;
   }
   // signals_generated
   const rows = (await sqlClient`
