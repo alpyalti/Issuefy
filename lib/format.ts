@@ -28,3 +28,18 @@ export function hoursAgo(d: Date | string | null | undefined): number {
   const date = typeof d === "string" ? new Date(d) : d;
   return Math.max(0, Math.round((Date.now() - date.getTime()) / 3_600_000));
 }
+
+/** 1234 → "1.2K", 3400000 → "3.4M". Social-count style compaction. */
+export function fmtCompact(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) {
+    const v = n / 1_000_000;
+    return `${v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (abs >= 1_000) {
+    const v = n / 1_000;
+    return `${v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  return String(n);
+}
