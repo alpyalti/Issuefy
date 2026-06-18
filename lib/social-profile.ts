@@ -460,6 +460,19 @@ export async function refreshSocialProfiles(
     captureError(e, { stage: "social.signals", projectId });
   }
 
+  // ── Step 6.5: Instagram post CONTENT → signals ──
+  // The real "what did the competitor announce" path: read the captions of
+  // newly-fetched posts and turn genuine developments into signals that land
+  // in the daily brief. Each post is analyzed exactly once (analyzed_at).
+  try {
+    t.signalsCreated += await analyzeAndEmitPostSignals(
+      projectId, limits.maxSignalsPerProjectPerDay, project.user_id, project, competitors, opts?.onlyCompetitorId,
+    );
+  } catch (e) {
+    t.errors.push(`post-signals: ${e instanceof Error ? e.message : "failed"}`);
+    captureError(e, { stage: "social.postSignals", projectId });
+  }
+
   // ── Step 7: AI insight regen per updated competitor ──
   for (const c of competitors) {
     if (!updatedCompetitors.has(c.id)) continue;
@@ -635,6 +648,214 @@ async function detectAndEmitSignals(
     } catch (e) {
       captureError(e, { stage: "social.signals.counter", projectId });
     }
+  }
+  return created;
+}
+
+/* ──────────────────── Instagram post content → signals ──────────────────── */
+
+const POST_SIGNAL_CATEGORIES = [
+  "Competitor Move", "Customer Pain Point", "Market Opportunity", "Threat / Risk",
+  "Trend Signal", "Regulation / Policy", "Pricing / Offer Change",
+  "Service Demand Signal", "Industry Event",
+] as const;
+
+const POST_SIGNALS_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["signals"],
+  properties: {
+    signals: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["post_ref", "title", "category", "description", "importance"],
+        properties: {
+          post_ref: { type: "integer" },
+          title: { type: "string", minLength: 1, maxLength: 120 },
+          category: { type: "string", enum: POST_SIGNAL_CATEGORIES as unknown as string[] },
+          description: { type: "string", minLength: 1, maxLength: 400 },
+          importance: { type: "string", enum: ["Low", "Medium", "High"] },
+        },
+      },
+    },
+  },
+} as const;
+
+const postSignalsZod = z.object({
+  signals: z.array(z.object({
+    post_ref: z.number().int(),
+    title: z.string().min(1),
+    category: z.string(),
+    description: z.string().min(1),
+    importance: z.enum(["Low", "Medium", "High"]),
+  })),
+});
+
+interface UnanalyzedPost {
+  id: string;
+  competitor_id: string;
+  url: string;
+  caption: string | null;
+  post_type: string | null;
+  likes: number | null;
+  comments: number | null;
+  posted_at: string | null;
+}
+
+/**
+ * Read newly-fetched Instagram posts (analyzed_at IS NULL), ask the model
+ * which ones reveal a real business development, and emit those as signals
+ * citing the post URL. Then stamp EVERY fed post analyzed_at = now() so it's
+ * never re-analyzed — one LLM consideration per post, ever.
+ *
+ * Runs per competitor so the prompt stays small and the post_ref → URL
+ * mapping is unambiguous. Shares the per-project/day signal cap with the
+ * delta detector (counts today's signals live).
+ */
+async function analyzeAndEmitPostSignals(
+  projectId: string,
+  maxSignalsPerDay: number,
+  userId: string,
+  project: ProjectRow,
+  competitors: CompetitorRow[],
+  onlyCompetitorId?: string,
+): Promise<number> {
+  const sql = requireSql();
+  const market = resolveMarket(project.target_market);
+
+  const rows = (await sql`
+    SELECT po.id, sp.competitor_id, po.url, po.caption, po.post_type,
+           po.likes, po.comments, po.posted_at::text AS posted_at
+    FROM social_posts po
+    JOIN social_profiles sp ON sp.id = po.profile_id
+    JOIN competitors c ON c.id = sp.competitor_id
+    WHERE c.project_id = ${projectId}
+      AND sp.platform = 'instagram'
+      AND po.analyzed_at IS NULL
+      AND (${onlyCompetitorId ?? null}::uuid IS NULL OR sp.competitor_id = ${onlyCompetitorId ?? null}::uuid)
+    ORDER BY sp.competitor_id, po.posted_at DESC NULLS LAST
+    LIMIT 200
+  `) as UnanalyzedPost[];
+  if (rows.length === 0) return 0;
+
+  // Daily cap shared with the delta detector.
+  const todayRows = (await sql`
+    SELECT COUNT(*)::int AS n FROM signals
+    WHERE project_id = ${projectId} AND created_at >= date_trunc('day', now())
+  `) as { n: number }[];
+  let remaining = Math.max(0, maxSignalsPerDay - (todayRows[0]?.n ?? 0));
+
+  const nameById = new Map(competitors.map((c) => [c.id, c.name]));
+  const byCompetitor = new Map<string, UnanalyzedPost[]>();
+  for (const r of rows) {
+    const arr = byCompetitor.get(r.competitor_id) ?? [];
+    arr.push(r);
+    byCompetitor.set(r.competitor_id, arr);
+  }
+
+  const systemPrompt = [
+    "You extract business-relevant developments from a competitor's recent Instagram posts for a market-intelligence user.",
+    "Output strict JSON only: { \"signals\": [ { post_ref, title, category, description, importance } ] }.",
+    "Rules:",
+    "  1. Emit a signal ONLY for posts that reveal a REAL development: product/feature launch, pricing or promo/offer change, partnership, funding/acquisition, market or location expansion, a notable hiring push, a campaign launch, or an event/conference the competitor is hosting or attending.",
+    "  2. SKIP routine content with no strategic signal: lifestyle/culture posts, memes, generic motivational quotes, holiday greetings, reposts, giveaways/engagement-bait, and vague teasers.",
+    "  3. post_ref MUST be one of the provided [ref] numbers. One signal per post at most.",
+    "  4. category MUST be one of: Competitor Move, Customer Pain Point, Market Opportunity, Threat / Risk, Trend Signal, Regulation / Policy, Pricing / Offer Change, Service Demand Signal, Industry Event.",
+    "  5. importance Low/Medium/High — High only for launches, pricing moves, funding, or expansion that clearly affect the user's market.",
+    "  6. Title <= 120 chars, lead with the competitor name. Description: what they announced and why it matters. Use ONLY what the caption states — never invent specifics.",
+    "  7. If none of the posts carry a real development, return an empty signals array.",
+  ].join("\n");
+
+  let created = 0;
+  for (const [competitorId, posts] of byCompetitor) {
+    if (remaining <= 0) break;
+    const name = nameById.get(competitorId) ?? "Competitor";
+    // Map ref index → post for citation after the model replies.
+    const refMap = posts.slice(0, 12);
+    const postLines = refMap.map((p, i) => {
+      const cap = (p.caption || "(no caption)").replace(/\s+/g, " ").slice(0, 220);
+      const date = p.posted_at ? p.posted_at.slice(0, 10) : "?";
+      return `[${i}] ${date} · ${p.post_type || "Post"} · ${p.likes ?? "?"} likes / ${p.comments ?? "?"} comments\n    ${cap}`;
+    });
+
+    const userPrompt = [
+      `Competitor: ${name}`,
+      `User's industry: ${project.industry} · Target market: ${market.canonicalName}`,
+      "",
+      "Recent Instagram posts:",
+      ...postLines,
+      "",
+      "Return strict JSON: { \"signals\": [ { post_ref, title, category, description, importance } ] }",
+    ].join("\n");
+
+    try {
+      const ai = await chatJson({
+        schemaName: "issuefy_ig_post_signals",
+        jsonSchema: POST_SIGNALS_JSON_SCHEMA,
+        zodSchema: postSignalsZod,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        maxTokens: 900,
+        temperature: 0.2,
+      });
+
+      for (const s of ai.data.signals) {
+        if (remaining <= 0) break;
+        const post = refMap[s.post_ref];
+        if (!post) continue;
+        const category = (POST_SIGNAL_CATEGORIES as readonly string[]).includes(s.category)
+          ? s.category : "Competitor Move";
+        const source = await upsertSource({
+          projectId,
+          competitorId,
+          title: `${name} — Instagram post`,
+          url: post.url,
+          sourceType: "Public Discussion",
+          contentSnippet: (post.caption || s.description).slice(0, 280),
+        });
+        // Dedup: never double-signal the same post within a week.
+        const dup = (await sql`
+          SELECT 1 FROM signals si JOIN signal_sources ss ON ss.signal_id = si.id
+          WHERE ss.source_id = ${source.id} AND si.created_at >= now() - interval '7 days' LIMIT 1
+        `) as unknown[];
+        if (dup.length > 0) continue;
+
+        await withTx(async (client) => {
+          const { rows: ins } = await client.query<{ id: string }>(
+            `INSERT INTO signals
+              (project_id, title, category, description, importance, confidence_score, suggested_action)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+            [projectId, s.title.slice(0, 120), category, s.description, s.importance, 90,
+             `Review ${name}'s Instagram — they're signaling a move worth tracking.`],
+          );
+          await client.query(
+            `INSERT INTO signal_sources (signal_id, source_id) VALUES ($1, $2)
+             ON CONFLICT (signal_id, source_id) DO NOTHING`,
+            [ins[0].id, source.id],
+          );
+        });
+        created++;
+        remaining--;
+      }
+    } catch (e) {
+      captureBreadcrumb("social: post-signal extraction failed", {
+        projectId, competitorId, msg: e instanceof Error ? e.message : "?",
+      });
+    }
+
+    // Stamp ALL fed posts analyzed (signaled or not) so they're never re-fed.
+    const ids = posts.map((p) => p.id);
+    await sql`UPDATE social_posts SET analyzed_at = now() WHERE id = ANY(${ids}::uuid[])`;
+  }
+
+  if (created > 0) {
+    try { await reserveCalls(userId, "signals_generated", created); }
+    catch (e) { captureError(e, { stage: "social.postSignals.counter", projectId }); }
   }
   return created;
 }
