@@ -297,6 +297,9 @@ export default function SettingsClient({
                   {k.last_discovered_at ? `Last discovered ${new Date(k.last_discovered_at).toLocaleDateString()}` : "Awaiting first discovery"}
                 </span>
               </span>
+              <Link href={`/dashboard/${project.id}/keywords/${k.id}`} prefetch className="icon-btn" title={`View ${k.keyword} insights`}>
+                <Icon name="ArrowUpRight01Icon" size={15} stroke={1.8} />
+              </Link>
               <button className="icon-btn" title={k.is_active ? "Pause" : "Resume"} onClick={() => toggleKeyword(k)}>
                 <Icon name={k.is_active ? "Tick02Icon" : "PlusSignIcon"} size={15} stroke={1.8} />
               </button>

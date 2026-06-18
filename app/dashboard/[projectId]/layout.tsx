@@ -3,7 +3,7 @@ import { getOrCreateUser } from "@/lib/clerk-user";
 import { getBillingContext, requireActiveSubscription } from "@/lib/billing-gate";
 import {
   getProject, getCompetitors, getKeywords, getSavedCount,
-  getNewSignalCount, getOwnedProjects,
+  getNewSignalCount, getNewLeadsCount, getOwnedProjects,
 } from "@/lib/project-data";
 import DashChrome from "@/components/dashboard/DashChrome";
 import "../../dashboard.css";
@@ -31,12 +31,13 @@ export default async function ProjectLayout({ children, params, searchParams }: 
   const user = await getOrCreateUser();
   await requireActiveSubscription(user.id, { allowUpgradedHint: sp.upgraded === "1" });
 
-  const [project, competitors, keywords, savedCount, newSignalCount, ownedProjects, billing] = await Promise.all([
+  const [project, competitors, keywords, savedCount, newSignalCount, newLeadsCount, ownedProjects, billing] = await Promise.all([
     getProject(projectId, user.id),
     getCompetitors(projectId),
     getKeywords(projectId),
     getSavedCount(projectId),
     getNewSignalCount(projectId),
+    getNewLeadsCount(projectId),
     getOwnedProjects(user.id),
     getBillingContext(user.id),
   ]);
@@ -64,6 +65,7 @@ export default async function ProjectLayout({ children, params, searchParams }: 
       keywords={keywords.map((k) => ({ id: k.id, keyword: k.keyword, is_active: k.is_active }))}
       savedCount={savedCount}
       newSignalCount={newSignalCount}
+      newLeadsCount={newLeadsCount}
       ownedProjects={ownedProjects}
       role={project.current_user_role}
       rider={rider}

@@ -67,6 +67,21 @@ export const getSavedCount = cache(async (projectId: string) => {
   return rows[0]?.n ?? 0;
 });
 
+/** Count of unworked leads (status='new'). Drives the sidebar Leads badge.
+ *  Tolerates the table being absent on pre-migration environments. */
+export const getNewLeadsCount = cache(async (projectId: string) => {
+  try {
+    const sql = requireSql();
+    const rows = (await sql`
+      SELECT COUNT(*)::int AS n FROM keyword_leads
+      WHERE project_id = ${projectId} AND status = 'new'
+    `) as Array<{ n: number }>;
+    return rows[0]?.n ?? 0;
+  } catch {
+    return 0;
+  }
+});
+
 /** Count of signals created in the last 24h that aren't dismissed.
  *  Drives the notification bell badge in the topbar. */
 export const getNewSignalCount = cache(async (projectId: string) => {

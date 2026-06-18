@@ -59,6 +59,8 @@ const VIEW_TITLES: Record<string, { title: string; sub: string }> = {
   archive: { title: "Archive", sub: "Past daily briefs" },
   account: { title: "Account", sub: "Your identity, plan, billing and security" },
   competitorHub: { title: "Competitor profile", sub: "Social presence, stats and AI insights" },
+  keywordHub: { title: "Keyword insights", sub: "Signals, trend and potential customers" },
+  leads: { title: "Leads", sub: "Potential customers found across your keywords" },
 };
 
 export default function DashChrome(props: {
@@ -68,6 +70,8 @@ export default function DashChrome(props: {
   keywords: Keyword[];
   savedCount: number;
   newSignalCount: number;
+  /** Unworked leads (status='new') — drives the sidebar Leads badge. */
+  newLeadsCount?: number;
   ownedProjects: OwnedProject[];
   /** Caller's role on the currently-open project (Teams Phase 5). Threaded
    *  to every client component below via DashboardRoleProvider. */
@@ -88,7 +92,7 @@ export default function DashChrome(props: {
 }
 
 function DashChromeInner({
-  project, user, competitors, keywords, savedCount, newSignalCount, ownedProjects, rider, children,
+  project, user, competitors, keywords, savedCount, newSignalCount, newLeadsCount = 0, ownedProjects, rider, children,
 }: {
   project: Project;
   user: User;
@@ -96,6 +100,7 @@ function DashChromeInner({
   keywords: Keyword[];
   savedCount: number;
   newSignalCount: number;
+  newLeadsCount?: number;
   ownedProjects: OwnedProject[];
   rider?: AccountRiderInfo;
   children: React.ReactNode;
@@ -120,6 +125,8 @@ function DashChromeInner({
     pathname?.endsWith("/account") ? "account" :
     pathname?.includes("/archive") ? "archive" :
     pathname?.includes("/competitors/") ? "competitorHub" :
+    pathname?.includes("/keywords/") ? "keywordHub" :
+    pathname?.endsWith("/leads") ? "leads" :
     null;
   const isDashboardIndex = !realRoute; // true on /dashboard/[id]
   const activeView: string = realRoute ?? view;
@@ -183,6 +190,7 @@ function DashChromeInner({
         if (key === "s")      { e.preventDefault(); router.push(`/dashboard/${project.id}/sources`); return; }
         if (key === "a")      { e.preventDefault(); router.push(`/dashboard/${project.id}/archive`); return; }
         if (key === "e")      { e.preventDefault(); router.push(`/dashboard/${project.id}/settings`); return; }
+        if (key === "l")      { e.preventDefault(); router.push(`/dashboard/${project.id}/leads`); return; }
         if (key === "p")      { e.preventDefault(); router.push(`/dashboard/${project.id}/account`); return; }
         // Any other key while in g-mode falls through to its normal handler,
         // which is fine — we already cleared the pending state.
@@ -334,6 +342,16 @@ function DashChromeInner({
               <span className="kbd-mini">G A</span>
             </Link>
             <Link
+              href={`/dashboard/${project.id}/leads`}
+              prefetch
+              className={"side-item " + (activeView === "leads" ? "on" : "")}
+            >
+              <Icon name="Target01Icon" size={19} stroke={activeView === "leads" ? 1.9 : 1.6} />
+              <span>Leads</span>
+              {newLeadsCount > 0 ? <span className="side-badge">{newLeadsCount}</span> : null}
+              <span className="kbd-mini">G L</span>
+            </Link>
+            <Link
               href={`/dashboard/${project.id}/settings`}
               prefetch
               className={"side-item " + (activeView === "settings" ? "on" : "")}
@@ -366,11 +384,11 @@ function DashChromeInner({
             {keywords.length > 0 && <div className="watch-group">Keywords</div>}
             {keywords.map((k) => (
               <Link
-                href={`/dashboard/${project.id}/settings`}
+                href={`/dashboard/${project.id}/keywords/${k.id}`}
                 prefetch
                 className="watch-item is-kw"
                 key={"k-" + k.id}
-                title={`Edit ${k.keyword} in project settings`}
+                title={`View ${k.keyword} insights`}
               >
                 <span className={"watch-live " + (k.is_active ? "on" : "")} />
                 <span className="watch-label">{k.keyword}</span>
@@ -496,6 +514,7 @@ function ShortcutsOverlay({ open, onClose }: { open: boolean; onClose: () => voi
       items: [
         { keys: ["G", "S"], label: "Sources" },
         { keys: ["G", "A"], label: "Archive" },
+        { keys: ["G", "L"], label: "Leads" },
         { keys: ["G", "E"], label: "Settings" },
         { keys: ["G", "P"], label: "Account / profile" },
       ],
@@ -680,12 +699,11 @@ function CommandPalette({
       onClose();
     } else if (item.kind === "watch") {
       const w = item.data as WatchEntity;
-      // Competitors open their hub page; keywords still land on Settings
-      // (that's where they're edited).
+      // Competitors and keywords each open their own hub page.
       if (w.kind === "competitor") {
         router.push(`/dashboard/${projectId}/competitors/${w.id}`);
       } else {
-        router.push(`/dashboard/${projectId}/settings`);
+        router.push(`/dashboard/${projectId}/keywords/${w.id}`);
       }
       onClose();
     } else {
