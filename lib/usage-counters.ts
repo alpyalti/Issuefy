@@ -20,7 +20,7 @@
 import { sql, requireSql } from "./db";
 import { currentPeriodStart } from "./usage";
 
-export type CounterName = "serp_calls" | "scrape_calls" | "sources_stored" | "signals_generated" | "social_fetches";
+export type CounterName = "serp_calls" | "scrape_calls" | "sources_stored" | "signals_generated" | "social_fetches" | "lead_scans";
 
 export interface UsageRow {
   serp_calls: number;
@@ -28,6 +28,7 @@ export interface UsageRow {
   sources_stored: number;
   signals_generated: number;
   social_fetches: number;
+  lead_scans: number;
   cap_notice_sent_at: string | null;
 }
 
@@ -35,13 +36,13 @@ export interface UsageRow {
 export async function getUsage(userId: string, periodStart = currentPeriodStart()): Promise<UsageRow> {
   if (!sql) throw new Error("DATABASE_URL is not configured");
   const rows = (await sql`
-    SELECT serp_calls, scrape_calls, sources_stored, signals_generated, social_fetches, cap_notice_sent_at
+    SELECT serp_calls, scrape_calls, sources_stored, signals_generated, social_fetches, lead_scans, cap_notice_sent_at
     FROM usage_counters
     WHERE user_id = ${userId} AND period_start = ${periodStart}
     LIMIT 1
   `) as UsageRow[];
   return rows[0] ?? {
-    serp_calls: 0, scrape_calls: 0, sources_stored: 0, signals_generated: 0, social_fetches: 0, cap_notice_sent_at: null,
+    serp_calls: 0, scrape_calls: 0, sources_stored: 0, signals_generated: 0, social_fetches: 0, lead_scans: 0, cap_notice_sent_at: null,
   };
 }
 
@@ -107,6 +108,17 @@ export async function reserveCalls(
       RETURNING social_fetches
     `) as { social_fetches: number }[];
     return rows[0]?.social_fetches ?? delta;
+  }
+  if (counter === "lead_scans") {
+    const rows = (await sqlClient`
+      INSERT INTO usage_counters (user_id, period_start, lead_scans)
+      VALUES (${userId}, ${periodStart}, ${delta})
+      ON CONFLICT (user_id, period_start) DO UPDATE
+        SET lead_scans = usage_counters.lead_scans + EXCLUDED.lead_scans,
+            updated_at = now()
+      RETURNING lead_scans
+    `) as { lead_scans: number }[];
+    return rows[0]?.lead_scans ?? delta;
   }
   // signals_generated
   const rows = (await sqlClient`

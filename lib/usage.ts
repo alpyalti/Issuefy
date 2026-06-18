@@ -31,6 +31,9 @@ export interface PlanLimits {
   /** Apify Instagram profile results per cycle (Competitor Hub). Generous —
    *  the structural bound is competitorsPerProject × daily snapshots. */
   socialFetchesPerCycle: number;
+  /** Lead candidate classifications per cycle (Lead Discovery). One unit per
+   *  candidate post; the real bound is keywordsPerProject × daily. */
+  leadScansPerCycle: number;
 
   // Per-project/day safety rail (PRD §21.3)
   maxSourcesPerProjectPerDay: number;
@@ -58,6 +61,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     serpCallsPerCycle: 80,
     scrapeCallsPerCycle: 1_200,
     socialFetchesPerCycle: 200,
+    leadScansPerCycle: 300,
     maxSourcesPerProjectPerDay: 50,
     maxSignalsPerProjectPerDay: 20,
   },
@@ -73,6 +77,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     serpCallsPerCycle: 250,
     scrapeCallsPerCycle: 4_000,
     socialFetchesPerCycle: 800,
+    leadScansPerCycle: 1_200,
     maxSourcesPerProjectPerDay: 50,
     maxSignalsPerProjectPerDay: 20,
   },
@@ -88,6 +93,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     serpCallsPerCycle: 700,
     scrapeCallsPerCycle: 12_000,
     socialFetchesPerCycle: 2_500,
+    leadScansPerCycle: 4_000,
     maxSourcesPerProjectPerDay: 50,
     maxSignalsPerProjectPerDay: 20,
   },
@@ -103,6 +109,7 @@ const PLANS: Record<PlanId, PlanLimits> = {
     serpCallsPerCycle: 7_000,
     scrapeCallsPerCycle: 120_000,
     socialFetchesPerCycle: 25_000,
+    leadScansPerCycle: 40_000,
     maxSourcesPerProjectPerDay: 50,
     maxSignalsPerProjectPerDay: 20,
   },
