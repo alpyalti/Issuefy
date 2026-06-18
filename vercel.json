@@ -10,6 +10,10 @@
       "schedule": "0 5 * * *"
     },
     {
+      "path": "/api/cron/lead-discovery",
+      "schedule": "30 5 * * *"
+    },
+    {
       "path": "/api/cron/cleanup",
       "schedule": "0 4 * * *"
     }
