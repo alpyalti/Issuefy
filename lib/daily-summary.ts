@@ -44,6 +44,9 @@ interface RecentSignal {
   description: string;
   importance: string;
   confidence_score: number | null;
+  /** Primary source domain — used to label social-derived signals in the
+   *  prompt so the brief can name the channel ("…announced on Instagram"). */
+  source_domain: string | null;
 }
 
 interface RecentSource {
@@ -118,11 +121,15 @@ export async function generateDailySummaryForProject(projectId: string): Promise
   // The most recent live signals (excluding dismissed) — that's what "today"
   // is about. PRD §13.6: summarize the most important RECENT signals.
   const signals = (await sql`
-    SELECT id, title, category, description, importance, confidence_score
-    FROM signals
-    WHERE project_id = ${projectId}
-      AND dismissed_at IS NULL
-    ORDER BY created_at DESC
+    SELECT s.id, s.title, s.category, s.description, s.importance, s.confidence_score,
+           (SELECT src.domain FROM signal_sources ss
+              JOIN sources src ON src.id = ss.source_id
+             WHERE ss.signal_id = s.id
+             ORDER BY src.scraped_at DESC LIMIT 1) AS source_domain
+    FROM signals s
+    WHERE s.project_id = ${projectId}
+      AND s.dismissed_at IS NULL
+    ORDER BY s.created_at DESC
     LIMIT ${MAX_SIGNALS_IN_PROMPT}
   `) as RecentSignal[];
 
@@ -155,8 +162,19 @@ export async function generateDailySummaryForProject(projectId: string): Promise
     ? `Your company (${project.company_name || "unnamed"}, ${project.company_website || "no website"}): ${project.company_description || "(no description)"}`
     : "(No company profile — assess relative to competitors and keywords only.)";
 
+  // Label the channel for social-derived signals so the brief can say
+  // "announced on Instagram" rather than burying the source.
+  const channelOf = (domain: string | null): string => {
+    if (!domain) return "";
+    if (domain.includes("instagram")) return " (via Instagram)";
+    if (domain.includes("youtube") || domain.includes("youtu.be")) return " (via YouTube)";
+    if (domain.includes("reddit")) return " (via Reddit)";
+    if (domain.includes("linkedin")) return " (via LinkedIn)";
+    if (domain.includes("tiktok")) return " (via TikTok)";
+    return "";
+  };
   const signalsBlock = signals.length
-    ? signals.map((s, i) => `${i + 1}. [${s.category} · ${s.importance}] ${s.title}: ${s.description}`).join("\n")
+    ? signals.map((s, i) => `${i + 1}. [${s.category} · ${s.importance}]${channelOf(s.source_domain)} ${s.title}: ${s.description}`).join("\n")
     : "(No live signals — base the summary on the source snippets below.)";
 
   const sourcesBlock = sources.map((s) => ({
@@ -182,6 +200,7 @@ export async function generateDailySummaryForProject(projectId: string): Promise
     "  6. If there's not enough data, say so clearly — do not fabricate context.",
     "  7. When a company profile is provided, frame opportunities and risks RELATIVE TO that company.",
     "  8. TARGET MARKET PRIORITY: lead with signals and developments most relevant to the user's target market. Local-market context (regulations, competitors, customers, news in that region) outranks generic global commentary.",
+    "  9. CHANNEL PRIORITY: lead with concrete competitor DEVELOPMENTS — product/feature launches, pricing or offer changes, partnerships, funding, expansion, campaigns, and events. Signals tagged with a channel like '(via Instagram)' come from a competitor's own social account — surface these prominently and name the channel naturally (e.g. 'On Instagram, Acme teased a new tier'). Give the LEAST weight to generic, static, or encyclopedic background; do not spend words restating what a company simply is.",
   ].join("\n");
 
   const baseUser = [
