@@ -54,6 +54,23 @@ interface KeywordRow { id: string; keyword: string; is_active: boolean; last_dis
 const SCRAPE_CONCURRENCY = 4; // PRD §10.7: 3–5 concurrent
 const WEEKLY_MS = 7 * 24 * 3_600 * 1_000;
 
+// Encyclopedic / reference domains that surface in SERP results but rarely
+// carry a real, dated DEVELOPMENT — they restate static background. We drop
+// them at discovery so they never become low-value signals. (Competitor and
+// company sites are tracked separately and intentionally kept.)
+const LOW_VALUE_SOURCE_DOMAINS = [
+  "wikipedia.org", "wikimedia.org", "wikidata.org", "wiktionary.org",
+  "britannica.com", "fandom.com", "investopedia.com",
+];
+function isLowValueSourceDomain(rawUrl: string): boolean {
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, "");
+    return LOW_VALUE_SOURCE_DOMAINS.some((d) => host === d || host.endsWith("." + d));
+  } catch {
+    return false;
+  }
+}
+
 export type ProcessJobType = "daily" | "manual";
 
 export interface ProcessProjectResult {
@@ -197,6 +214,9 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
           for (const r of results) {
             if (seen.has(r.url)) continue;
             seen.add(r.url);
+            // Drop encyclopedic/reference results — they dilute the brief with
+            // static background instead of real developments.
+            if (isLowValueSourceDomain(r.url)) continue;
             merged.push({ title: r.title || r.url, url: r.url, snippet: r.snippet });
           }
         } catch (e) {
