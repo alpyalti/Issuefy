@@ -228,10 +228,18 @@ export async function refreshSocialProfiles(
   // ── Step 2: Instagram via Apify — ONE batched call for all due handles ──
   const igProfiles = byPlatform("instagram");
   if (igProfiles.length > 0 && !apifyEnabled()) {
-    // Be honest on the hub instead of leaving the row "pending" forever —
-    // the operator needs to know the token is the missing piece.
+    // Flag profiles that have NEVER fetched so the hub explains the missing
+    // token — but DON'T clobber a previously-successful fetch. A token-less
+    // environment (local dev, or a deploy missing the env var) must not wipe
+    // good data or bump last_fetched_at. Existing posts stay analyzable.
     for (const p of igProfiles) {
-      await markFailed(p.id, "Instagram fetching isn't configured yet (APIFY_TOKEN not set)");
+      await sql`
+        UPDATE social_profiles
+        SET fetch_status = 'failed',
+            fetch_error = 'Instagram fetching isn''t configured yet (APIFY_TOKEN not set)',
+            updated_at = now()
+        WHERE id = ${p.id} AND fetch_status <> 'ok'
+      `;
     }
     t.errors.push("instagram: APIFY_TOKEN not set — Instagram tier skipped");
   }
@@ -926,7 +934,7 @@ async function regenerateInsight(project: ProjectRow, competitor: CompetitorRow)
   let postLines: string[] = [];
   if (igProfile) {
     const posts = (await sql`
-      SELECT post_type, caption, likes, comments, video_views, posted_at
+      SELECT post_type, caption, likes, comments, video_views, posted_at::text AS posted_at
       FROM social_posts WHERE profile_id = ${igProfile.id}
       ORDER BY posted_at DESC NULLS LAST LIMIT 12
     `) as Array<{ post_type: string | null; caption: string | null; likes: number | null; comments: number | null; video_views: number | null; posted_at: string | null }>;
