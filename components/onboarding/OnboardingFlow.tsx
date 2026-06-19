@@ -112,6 +112,11 @@ export default function OnboardingFlow({
   const [companyEnriching, setCompanyEnriching] = useState(false);
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [enrichErr, setEnrichErr] = useState<string | null>(null);
+  // Manual company entry — fallback when the website scrape fails (or the user
+  // prefers to type details), so they're never stuck on the company step.
+  const [manual, setManual] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualDesc, setManualDesc] = useState("");
   // Business details (always required, PRD §12.2)
   const [projectName, setProjectName] = useState("");
   const [industry, setIndustry] = useState("");
@@ -170,6 +175,27 @@ export default function OnboardingFlow({
     const card = profileToCardData(profile, companyUrl);
     setCompanyData(card);
     if (!projectName) setProjectName(card.name);
+    setStep(2);
+  }
+
+  // Build a company profile from hand-typed details (scrape fallback).
+  function useManualCompany() {
+    const name = manualName.trim();
+    if (!name) return;
+    const domain = domainFrom(companyUrl);
+    const initials =
+      name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() ||
+      domain.slice(0, 2).toUpperCase() || "CO";
+    setCompanyData({
+      name,
+      domain,
+      tagline: manualDesc.trim().slice(0, 100),
+      color: "#15171A",
+      initials,
+      socials: [],
+    });
+    if (!projectName) setProjectName(name);
+    setEnrichErr(null);
     setStep(2);
   }
 
@@ -249,7 +275,9 @@ export default function OnboardingFlow({
     try {
       const companyBody = !skipCompany && companyData ? {
         company_name: companyData.name,
-        company_website: companyData.domain,
+        // Omit when blank — a hand-entered company may have no website, and the
+        // API's url validator rejects "" (min length 3).
+        ...(companyData.domain ? { company_website: companyData.domain } : {}),
         company_description: companyData.tagline,
         company_socials: cardToSocialsPayload(companyData),
         track_company: true,
@@ -382,7 +410,7 @@ export default function OnboardingFlow({
               <span className="onb-kicker">Step 1 · Your company</span>
               <h2>First, what&apos;s your company?</h2>
               <p>Issuefy assesses opportunities and risks <i>relative to you</i>. Paste your company website and we&apos;ll pull in your basic profile and social channels — or skip this and run on competitors and keywords only.</p>
-              {!skipCompany && !companyData && (
+              {!skipCompany && !companyData && !manual && (
                 <>
                   <div className="lookup">
                     <div className="lookup-field">
@@ -403,10 +431,31 @@ export default function OnboardingFlow({
                     </button>
                   </div>
                   {enrichErr && <p className="modal-hint" style={{ color: "var(--neg)", marginTop: 8 }}>{enrichErr}</p>}
-                  <button className="btn btn-quiet" style={{ marginTop: 12 }} onClick={() => { setSkipCompany(true); setStep(2); }}>
-                    Skip — track competitors and keywords only
-                  </button>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+                    <button className="btn btn-quiet" onClick={() => { setManual(true); setEnrichErr(null); }}>
+                      Enter details by hand
+                    </button>
+                    <button className="btn btn-quiet" onClick={() => { setSkipCompany(true); setStep(2); }}>
+                      Skip — track competitors and keywords only
+                    </button>
+                  </div>
                 </>
+              )}
+              {!skipCompany && !companyData && manual && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 6 }}>
+                  <input className="modal-input" placeholder="Company name" value={manualName} autoFocus
+                    onChange={(e) => setManualName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") useManualCompany(); }} />
+                  <input className="modal-input" placeholder="What you do — one line (optional)" value={manualDesc}
+                    onChange={(e) => setManualDesc(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") useManualCompany(); }} />
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                    <button className="btn btn-accent" disabled={!manualName.trim()} onClick={useManualCompany}>
+                      Continue with these details<Icon name="ArrowRight01Icon" size={16} stroke={2} />
+                    </button>
+                    <button className="btn btn-quiet" onClick={() => setManual(false)}>Back to website lookup</button>
+                  </div>
+                </div>
               )}
               {companyData && (
                 <CompanyCard
