@@ -35,11 +35,14 @@ export default async function KeywordHubPage({ params }: Ctx) {
 
   const [sigRows, trendRows, catRows, srcRows, leadRows] = await Promise.all([
     sql`
-      SELECT DISTINCT s.id, s.title, s.category, s.importance, s.created_at::text AS created_at
+      SELECT s.id, s.title, s.category, s.importance, s.created_at::text AS created_at
       FROM signals s
-      JOIN signal_sources ss ON ss.signal_id = s.id
-      JOIN sources src ON src.id = ss.source_id
-      WHERE src.keyword_id = ${keywordId} AND s.project_id = ${projectId} AND s.dismissed_at IS NULL
+      WHERE s.project_id = ${projectId} AND s.dismissed_at IS NULL
+        AND EXISTS (
+          SELECT 1 FROM signal_sources ss
+          JOIN sources src ON src.id = ss.source_id
+          WHERE ss.signal_id = s.id AND src.keyword_id = ${keywordId}
+        )
       ORDER BY s.created_at DESC LIMIT 20
     ` as unknown as Promise<KwSignal[]>,
     sql`
