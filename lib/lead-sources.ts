@@ -7,6 +7,7 @@
  * platform hiccup never aborts a keyword scan.
  */
 import { standardScrape } from "./scraperapi";
+import { apifyEnabled, searchRedditViaApify } from "./apify";
 import { captureBreadcrumb } from "./sentry";
 
 export type LeadPlatform = "reddit" | "hackernews";
@@ -127,12 +128,48 @@ function mapRedditListing(json: unknown): RawLead[] {
 }
 
 /**
- * Search Reddit for recent posts matching the keyword. Tries the public
- * search.json directly with the issuefy UA; if Reddit serves an HTML
- * interstitial (some IP ranges) the JSON comes through fine via ScraperAPI's
- * proxy pool — same fallback shape as lib/social-stats.ts fetchRedditMembers.
+ * Search Reddit for recent posts matching the keyword.
+ *
+ * Preferred path: Apify's Reddit Scraper Lite (when APIFY_TOKEN is set).
+ * Reddit blocks datacenter IPs, so the public endpoints below only succeed
+ * from residential proxies — which the actor provides (direct fetch 403s and
+ * ScraperAPI standard proxies 500 for Reddit; ScraperAPI residential needs a
+ * paid plan). If the actor errors (or no token), fall back to the public
+ * search.json directly, then ScraperAPI — same shape as fetchRedditMembers.
  */
 export async function searchReddit(keyword: string): Promise<RawLead[]> {
+  if (apifyEnabled()) {
+    try {
+      const posts = await searchRedditViaApify(keyword, 25);
+      const mapped: RawLead[] = [];
+      for (const p of posts) {
+        if (!p.url || !p.title || p.over18) continue;
+        mapped.push({
+          platform: "reddit",
+          postUrl: p.url,
+          title: clip(p.title, 300),
+          excerpt: clip(p.body, 500),
+          author: p.username,
+          authorUrl:
+            p.username && p.username !== "[deleted]"
+              ? `https://www.reddit.com/user/${p.username}`
+              : null,
+          context: p.communityName ?? "Reddit",
+          postedAt: p.createdAt,
+          engagement: p.upVotes,
+        });
+      }
+      // A successful run with no matches is a valid "nothing this week" — only
+      // a thrown error falls through to the public-endpoint path below.
+      return mapped;
+    } catch (e) {
+      captureBreadcrumb("lead-sources: reddit via apify failed, trying direct", {
+        keyword, msg: e instanceof Error ? e.message : "?",
+      });
+      // fall through to the direct + ScraperAPI path
+    }
+  }
+
   const params = new URLSearchParams({
     q: keyword,
     sort: "new",
