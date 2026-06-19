@@ -59,8 +59,8 @@ const VIEW_TITLES: Record<string, { title: string; sub: string }> = {
   archive: { title: "Archive", sub: "Past daily briefs" },
   account: { title: "Account", sub: "Your identity, plan, billing and security" },
   competitorHub: { title: "Competitor profile", sub: "Social presence, stats and AI insights" },
-  keywordHub: { title: "Keyword insights", sub: "Signals, trend and potential customers" },
-  leads: { title: "Leads", sub: "Potential customers found across your keywords" },
+  keywordHub: { title: "Keyword insights", sub: "Signals, trend and conversations" },
+  leads: { title: "Conversations", sub: "Posts where recommending your product would be natural" },
 };
 
 export default function DashChrome(props: {
@@ -347,7 +347,7 @@ function DashChromeInner({
               className={"side-item " + (activeView === "leads" ? "on" : "")}
             >
               <Icon name="Target01Icon" size={19} stroke={activeView === "leads" ? 1.9 : 1.6} />
-              <span>Leads</span>
+              <span>Conversations</span>
               {newLeadsCount > 0 ? <span className="side-badge">{newLeadsCount}</span> : null}
               <span className="kbd-mini">G L</span>
             </Link>
@@ -514,7 +514,7 @@ function ShortcutsOverlay({ open, onClose }: { open: boolean; onClose: () => voi
       items: [
         { keys: ["G", "S"], label: "Sources" },
         { keys: ["G", "A"], label: "Archive" },
-        { keys: ["G", "L"], label: "Leads" },
+        { keys: ["G", "L"], label: "Conversations" },
         { keys: ["G", "E"], label: "Settings" },
         { keys: ["G", "P"], label: "Account / profile" },
       ],

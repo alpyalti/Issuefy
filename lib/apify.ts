@@ -201,7 +201,7 @@ export interface ApifyRedditPost {
  * `maxItems` (also the billing cap — this actor is pay-per-result). Throws when
  * APIFY_TOKEN is unset so searchReddit() can fall back to its direct path.
  */
-export async function searchRedditViaApify(keyword: string, maxItems = 25): Promise<ApifyRedditPost[]> {
+export async function searchRedditViaApify(keyword: string, maxItems = 12): Promise<ApifyRedditPost[]> {
   if (!APIFY_TOKEN) throw new Error("APIFY_TOKEN is not configured");
   const input = {
     searches: [keyword],

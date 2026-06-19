@@ -107,7 +107,7 @@ export function LeadCard({ projectId, lead }: { projectId: string; lead: Lead })
     <div className={"lead-card" + (status === "replied" ? " lead-replied" : "")}>
       <div className="lead-top">
         <span className="lead-plat"><Icon name={plat.icon} size={14} stroke={1.7} /> {lead.context}</span>
-        <span className="lead-score" title="Lead score">{lead.lead_score}</span>
+        <span className="lead-score" title="Relevance — how naturally you could recommend your product here">{lead.lead_score}</span>
       </div>
 
       <a href={lead.post_url} target="_blank" rel="noopener noreferrer" className="lead-title">
@@ -147,7 +147,7 @@ export function LeadCard({ projectId, lead }: { projectId: string; lead: Lead })
         <div className="lead-actions">
           <button className="btn btn-ghost btn-sm" onClick={draft} disabled={drafting}>
             <Icon name={drafting ? "Loading03Icon" : "AiMagicIcon"} size={14} stroke={1.8} className={drafting ? "spin" : ""} />
-            {reply ? (drafting ? "Redrafting…" : "Redraft reply") : (drafting ? "Drafting…" : "Draft reply")}
+            {reply ? (drafting ? "Rewriting…" : "Redraft") : (drafting ? "Writing…" : "Draft recommendation")}
           </button>
           <span className="lead-action-spacer" />
           <button className={"btn btn-quiet btn-sm" + (status === "saved" ? " on" : "")} onClick={() => setLeadStatus(status === "saved" ? "new" : "saved")}>

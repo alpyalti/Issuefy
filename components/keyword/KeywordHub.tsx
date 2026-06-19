@@ -43,13 +43,13 @@ export default function KeywordHub({
     try {
       const res = await fetch(`/api/projects/${projectId}/keywords/${keyword.id}/find-leads`, { method: "POST" });
       const body = await res.json().catch(() => ({}));
-      if (res.status === 429) { setScanMsg(body.error || "Lead scan runs once per hour per keyword."); return; }
-      if (!res.ok) { setScanMsg(body.error || "Lead scan failed — try again."); return; }
+      if (res.status === 429) { setScanMsg(body.error || "Scan runs once per hour per keyword."); return; }
+      if (!res.ok) { setScanMsg(body.error || "Scan failed — try again."); return; }
       const n = body.leadsCreated ?? 0;
-      setScanMsg(n > 0 ? `Found ${n} new lead${n === 1 ? "" : "s"}.` : "No new leads this scan.");
+      setScanMsg(n > 0 ? `Found ${n} new conversation${n === 1 ? "" : "s"}.` : "No new conversations this scan.");
       router.refresh();
     } catch {
-      setScanMsg("Lead scan failed — check your connection.");
+      setScanMsg("Scan failed — check your connection.");
     } finally {
       setScanning(false);
     }
@@ -62,7 +62,7 @@ export default function KeywordHub({
     { label: "Signals (total)", value: stats.totalSignals },
     { label: "Signals this week", value: stats.weekSignals },
     { label: "Sources discovered", value: stats.sources },
-    { label: "Leads found", value: stats.leads },
+    { label: "Conversations", value: stats.leads },
   ];
 
   return (
@@ -85,7 +85,7 @@ export default function KeywordHub({
           <div className="hub-actions">
             <button className="btn btn-ghost" onClick={findLeads} disabled={scanning}>
               <Icon name={scanning ? "Loading03Icon" : "Target01Icon"} size={15} stroke={1.7} className={scanning ? "spin" : ""} />
-              {scanning ? "Scanning…" : "Find leads now"}
+              {scanning ? "Scanning…" : "Find conversations now"}
             </button>
           </div>
         )}
@@ -114,11 +114,11 @@ export default function KeywordHub({
           <section className="card hub-card">
             <div className="hub-insight-head" style={{ marginBottom: 4 }}>
               <Icon name="Target01Icon" size={15} stroke={1.7} color="var(--accent)" />
-              <span>Potential customers · Reddit &amp; Hacker News</span>
+              <span>Conversations · Reddit &amp; Hacker News</span>
             </div>
             {activeLeads.length === 0 ? (
               <p className="hub-empty-sub" style={{ padding: "8px 0" }}>
-                No leads yet. The daily scan looks for people discussing &ldquo;{keyword.keyword}&rdquo; who could be customers{canEdit ? " — or click Find leads now." : "."}
+                No conversations yet. Issuefy looks for posts about &ldquo;{keyword.keyword}&rdquo; where recommending your product would be natural{canEdit ? " — or click Find conversations now." : "."}
               </p>
             ) : (
               <div className="lead-list">

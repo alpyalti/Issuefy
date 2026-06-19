@@ -42,7 +42,7 @@ export async function POST(_req: Request, { params }: Ctx) {
     `) as { last: string | null }[];
     const last = lastRows[0]?.last;
     if (last && Date.now() - new Date(last).getTime() < HOUR_MS) {
-      return rateLimited("Lead scan runs once per hour per keyword.");
+      return rateLimited("Conversation scan runs once per hour per keyword.");
     }
   }
 

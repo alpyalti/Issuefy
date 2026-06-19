@@ -26,7 +26,13 @@ import { captureBreadcrumb, captureError } from "./sentry";
 
 const LOOKBACK_DAYS = 14;
 const MAX_CANDIDATES_PER_KEYWORD = 15; // bound classification cost
-const LEAD_SCORE_THRESHOLD = 55;
+// A conversation only qualifies if recommending the user's product there would
+// be natural — a high bar, on purpose: the user wants a few great opportunities,
+// not many mediocre ones. This is also the floor used when DISPLAYING rows
+// (queries in the leads page / keyword page / badge filter on lead_score), so
+// older low-relevance rows from looser scans drop out of view automatically.
+export const LEAD_SCORE_THRESHOLD = 70;
+const MAX_LEADS_PER_KEYWORD = 8; // hard ceiling per keyword per scan
 // The Reddit actor is slow + flaky, so we fetch it for all keywords up front,
 // in parallel (small pool) under a hard wall-clock deadline, BEFORE the
 // sequential classify loop — keeping the whole worker well under its 300s cap.
@@ -93,6 +99,65 @@ const classifyZod = z.object({
   })),
 });
 
+type ClassifyVerdict = { ref: number; is_lead: boolean; score: number; intent: string; reason: string };
+interface ClassifyCand {
+  platform: string; context: string; title: string; excerpt: string | null; author: string | null;
+}
+
+/**
+ * The single source of truth for "is this a post where we could naturally
+ * recommend the user's product?" — used by the live scan AND by the
+ * re-classification pass over already-stored rows. One batched LLM call.
+ */
+async function classifyForRecommendation(
+  project: ProjectProfile, keywordLabel: string, cands: ClassifyCand[],
+): Promise<ClassifyVerdict[]> {
+  const market = resolveMarket(project.target_market);
+  const blurb = companyBlurb(project);
+  const lines = cands.map((c, i) =>
+    `[${i}] ${c.platform === "reddit" ? c.context : "Hacker News"} · by ${c.author || "unknown"}\n    ${c.title}\n    ${c.excerpt || "(no body)"}`,
+  );
+  const systemPrompt = [
+    "You find posts where the user's brand (described below) could be NATURALLY RECOMMENDED in a reply — and reject everything else. The user will read each match and, if it fits, post a reply suggesting their product. So the only useful posts are ones where dropping in to recommend the product would be genuinely welcome and on-topic.",
+    "Mark is_lead=true ONLY when ALL of these hold:",
+    "  • The author is actively looking for the kind of solution the brand provides — asking for a tool/recommendation, frustrated with an alternative, comparing options, or asking how to solve a problem the brand directly solves.",
+    "  • The brand is a REAL, specific fit for their stated need — not just loosely in the same industry/topic.",
+    "  • A reply recommending the brand would read as a helpful peer suggestion, not an ad or an off-topic plug.",
+    "Reject (is_lead=false): general discussion or news, people already settled on another tool, the brand's competitors promoting themselves, job/hiring posts, memes, tutorials, show-and-tell with no need, students/career questions, and anything where a recommendation would feel forced. When unsure, REJECT.",
+    "Be very strict — the user wants a FEW excellent opportunities, not many mediocre ones. It is normal for most or all posts to be is_lead=false.",
+    "Output strict JSON only: { \"leads\": [ { ref, is_lead, score, intent, reason } ] }.",
+    "  - ref: the [n] of the post.",
+    "  - is_lead: true only if you could write a natural reply recommending THIS brand's product there.",
+    "  - score: 0-100 = how natural and strong the recommendation opportunity is. Reserve 80+ for posts explicitly asking for a recommendation the brand clearly fits; use <70 for anything you're not confident about (those won't be shown).",
+    `  - intent: one of ${LEAD_INTENTS.join(", ")}.`,
+    "  - reason: one sentence naming the recommendation angle — what you'd suggest and why it fits their need.",
+    "Return an entry for every ref.",
+  ].join("\n");
+  const userPrompt = [
+    blurb,
+    `Industry: ${project.industry} · Target market: ${market.canonicalName}`,
+    `Topic being tracked: "${keywordLabel}"`,
+    "",
+    "Candidate posts — for each, judge whether you could naturally recommend the brand in a reply:",
+    ...lines,
+    "",
+    "Return strict JSON: { \"leads\": [ { ref, is_lead, score, intent, reason } ] }",
+  ].join("\n");
+
+  const result = await chatJson({
+    schemaName: "issuefy_lead_classify",
+    jsonSchema: CLASSIFY_JSON_SCHEMA,
+    zodSchema: classifyZod,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    maxTokens: 1_200,
+    temperature: 0.1,
+  });
+  return result.data.leads;
+}
+
 function companyBlurb(p: ProjectProfile): string {
   if (p.track_company && (p.company_name || p.company_description)) {
     return `The user's brand: ${p.company_name || "(unnamed)"} — ${p.company_description || "no description"}${p.company_website ? ` (${p.company_website})` : ""}.`;
@@ -138,8 +203,6 @@ export async function discoverLeadsForProject(
   if (keywords.length === 0) return t;
 
   const sinceUnix = Math.floor(Date.now() / 1000) - LOOKBACK_DAYS * 86_400;
-  const market = resolveMarket(project.target_market);
-  const blurb = companyBlurb(project);
 
   // Phase A — when Apify is on, prefetch Reddit for every keyword in parallel
   // (small pool) under a hard deadline, since the actor is slow + flaky. Each
@@ -194,55 +257,22 @@ export async function discoverLeadsForProject(
         break;
       }
 
-      // 4. Classify in one batched call.
-      const lines = candidates.map((c, i) =>
-        `[${i}] ${c.platform === "reddit" ? c.context : "Hacker News"} · by ${c.author || "unknown"}\n    ${c.title}\n    ${c.excerpt || "(no body)"}`,
-      );
-      const systemPrompt = [
-        "You qualify social-media posts as potential SALES LEADS for a specific brand.",
-        "A lead = the post AUTHOR is plausibly a buyer/evaluator for what the brand sells: asking for a recommendation, frustrated with a current tool, comparing options, asking how to solve a problem the brand addresses, or actively researching a purchase.",
-        "NOT leads: general news/discussion, the brand's own competitors promoting themselves, job posts, memes, tutorials with no buyer, or posts unrelated to the brand's space. Be strict — false positives waste the user's time.",
-        "Output strict JSON only: { \"leads\": [ { ref, is_lead, score, intent, reason } ] }.",
-        "  - ref: the [n] of the post.",
-        "  - is_lead: true only for genuine buying-intent leads.",
-        "  - score: 0-100 confidence the author is a reachable potential customer.",
-        `  - intent: one of ${LEAD_INTENTS.join(", ")}.`,
-        "  - reason: one sentence on why (or why not) — name the buying signal.",
-        "Return an entry for every ref. If none qualify, set is_lead=false for all.",
-      ].join("\n");
-      const userPrompt = [
-        blurb,
-        `Industry: ${project.industry} · Target market: ${market.canonicalName}`,
-        `Keyword being tracked: "${kw.keyword}"`,
-        "",
-        "Candidate posts:",
-        ...lines,
-        "",
-        "Return strict JSON: { \"leads\": [ { ref, is_lead, score, intent, reason } ] }",
-      ].join("\n");
-
-      let result;
+      // 4. Classify in one batched call (shared with the re-classification pass).
+      let verdicts: ClassifyVerdict[];
       try {
-        result = await chatJson({
-          schemaName: "issuefy_lead_classify",
-          jsonSchema: CLASSIFY_JSON_SCHEMA,
-          zodSchema: classifyZod,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          maxTokens: 1_200,
-          temperature: 0.1,
-        });
+        verdicts = await classifyForRecommendation(project, kw.keyword, candidates);
       } catch (e) {
         t.errors.push(`classify:${kw.keyword}: ${e instanceof Error ? e.message : "failed"}`);
         captureError(e, { stage: "leads.classify", projectId, keyword: kw.keyword });
         continue;
       }
 
-      // 5. Store qualifying leads.
-      for (const v of result.data.leads) {
-        if (!v.is_lead || v.score < LEAD_SCORE_THRESHOLD) continue;
+      // 5. Store qualifying matches — strict threshold, only the few best per keyword.
+      const qualifying = verdicts
+        .filter((v) => v.is_lead && v.score >= LEAD_SCORE_THRESHOLD && candidates[v.ref])
+        .sort((a, b) => b.score - a.score)
+        .slice(0, MAX_LEADS_PER_KEYWORD);
+      for (const v of qualifying) {
         const c = candidates[v.ref];
         if (!c) continue;
         const intent = (LEAD_INTENTS as readonly string[]).includes(v.intent) ? v.intent : "researching";
@@ -266,6 +296,89 @@ export async function discoverLeadsForProject(
   }
 
   return t;
+}
+
+export interface ReclassifyResult {
+  projectId: string;
+  scanned: number;     // un-acted-on leads re-judged
+  kept: number;        // still qualify (score updated)
+  dismissed: number;   // no longer qualify → status='dismissed' (reversible)
+  errors: string[];
+}
+
+/**
+ * Re-judge already-stored, un-acted-on ('new') leads with the current strict
+ * classifier and DISMISS the ones that no longer qualify (reversible — the user
+ * can Undo). Qualifying rows get their score/intent/reason refreshed. Uses only
+ * stored post text, so it costs no scraping — just a few LLM calls. Run after
+ * tightening the classifier so the existing inbox reflects the new bar.
+ */
+export async function reclassifyExistingLeads(projectId: string): Promise<ReclassifyResult> {
+  const sql = requireSql();
+  const res: ReclassifyResult = { projectId, scanned: 0, kept: 0, dismissed: 0, errors: [] };
+
+  const projRows = (await sql`
+    SELECT p.id, p.user_id, u.plan, u.role AS owner_role,
+           p.company_name, p.company_description, p.company_website, p.track_company,
+           p.industry, p.business_type, p.target_market
+    FROM projects p JOIN users u ON u.id = p.user_id
+    WHERE p.id = ${projectId} LIMIT 1
+  `) as Array<ProjectProfile & { owner_role: string }>;
+  const project = projRows[0];
+  if (!project) { res.errors.push("project not found"); return res; }
+
+  const rows = (await sql`
+    SELECT kl.id, kl.keyword_id, k.keyword, kl.platform, kl.context,
+           kl.post_title, kl.post_excerpt, kl.author
+    FROM keyword_leads kl JOIN keywords k ON k.id = kl.keyword_id
+    WHERE kl.project_id = ${projectId} AND kl.status = 'new'
+    ORDER BY kl.keyword_id
+  `) as Array<{
+    id: string; keyword_id: string; keyword: string; platform: string; context: string;
+    post_title: string; post_excerpt: string | null; author: string | null;
+  }>;
+
+  // Group by keyword, then classify in batches (same cap as the live scan).
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const arr = groups.get(r.keyword_id);
+    if (arr) arr.push(r); else groups.set(r.keyword_id, [r]);
+  }
+
+  for (const group of groups.values()) {
+    for (let i = 0; i < group.length; i += MAX_CANDIDATES_PER_KEYWORD) {
+      const batch = group.slice(i, i + MAX_CANDIDATES_PER_KEYWORD);
+      const cands: ClassifyCand[] = batch.map((l) => ({
+        platform: l.platform, context: l.context, title: l.post_title, excerpt: l.post_excerpt, author: l.author,
+      }));
+      let verdicts: ClassifyVerdict[];
+      try {
+        verdicts = await classifyForRecommendation(project, batch[0].keyword, cands);
+      } catch (e) {
+        res.errors.push(`classify:${batch[0].keyword}: ${e instanceof Error ? e.message : "failed"}`);
+        continue;
+      }
+      const byRef = new Map(verdicts.map((v) => [v.ref, v]));
+      for (let j = 0; j < batch.length; j++) {
+        res.scanned++;
+        const lead = batch[j];
+        const v = byRef.get(j);
+        if (v && v.is_lead && v.score >= LEAD_SCORE_THRESHOLD) {
+          const intent = (LEAD_INTENTS as readonly string[]).includes(v.intent) ? v.intent : "researching";
+          await sql`
+            UPDATE keyword_leads
+            SET lead_score = ${Math.max(0, Math.min(100, v.score))}, intent = ${intent}, reason = ${v.reason.slice(0, 240)}
+            WHERE id = ${lead.id} AND status = 'new'
+          `;
+          res.kept++;
+        } else {
+          await sql`UPDATE keyword_leads SET status = 'dismissed' WHERE id = ${lead.id} AND status = 'new'`;
+          res.dismissed++;
+        }
+      }
+    }
+  }
+  return res;
 }
 
 /* ─────────────────────────── reply drafting ─────────────────────────── */
@@ -306,19 +419,20 @@ export async function draftLeadReply(leadId: string, projectId: string): Promise
     : `You work in the ${lead.industry} space (${lead.business_type}).`;
 
   const systemPrompt = [
-    `You draft a reply the user can post on ${isReddit ? `Reddit (${lead.context})` : "Hacker News"} to a potential customer.`,
+    `You draft a reply the user can post on ${isReddit ? `Reddit (${lead.context})` : "Hacker News"} that naturally RECOMMENDS their product to this poster.`,
     brand,
+    "The whole point of this reply is to suggest the user's product as a fitting solution — written like a helpful real user who happens to know the product, NOT a generic answer that ignores it and NOT an ad.",
     "Rules:",
-    `  1. Voice: ${isReddit ? "casual, peer-to-peer, genuinely helpful — Redditors despise shills." : "substantive and technical — HN values depth and honesty."}`,
-    "  2. LEAD WITH VALUE: directly help with what they actually asked. Be specific and useful even if they never buy.",
-    "  3. Mention the brand at most once, only if naturally relevant, and disclose the affiliation plainly (e.g. 'disclosure: I work on X'). If a mention would feel forced, omit it entirely.",
-    "  4. No marketing speak, no hard sell, no links unless they directly answer the question. 60-140 words.",
+    `  1. Voice: ${isReddit ? "casual, peer-to-peer — Redditors downvote anything that smells like marketing, so earn it." : "substantive and technical — HN values honesty and specifics."}`,
+    "  2. Open by engaging with their specific situation in a sentence, then recommend the product by name and say in one line WHY it fits what they asked for.",
+    "  3. Disclose the affiliation plainly and briefly (e.g. 'disclosure: I work on it'). Be honest and specific; never invent features or over-claim.",
+    "  4. No marketing speak, no hype, no multiple pitches. At most one link, only if it directly helps. 50-130 words, one short paragraph.",
     "  5. Output strict JSON only: { \"reply_text\": \"...\" }.",
   ].join("\n");
   const userPrompt = [
-    `Their post${lead.intent ? ` (intent: ${lead.intent})` : ""}:`,
+    `The poster's post${lead.intent ? ` (intent: ${lead.intent})` : ""} — recommend the product as a fit for this:`,
     `Title: ${lead.post_title}`,
-    `Body: ${lead.post_excerpt || "(no body — reply to the title)"}`,
+    `Body: ${lead.post_excerpt || "(no body — work from the title)"}`,
     "",
     "Return strict JSON: { \"reply_text\": \"...\" }",
   ].join("\n");

@@ -67,7 +67,7 @@ export default async function KeywordHubPage({ params }: Ctx) {
       SELECT id, keyword_id, platform, post_url, post_title, post_excerpt, author, author_url,
              context, posted_at::text AS posted_at, engagement, lead_score, intent, reason,
              draft_reply, status
-      FROM keyword_leads WHERE keyword_id = ${keywordId}
+      FROM keyword_leads WHERE keyword_id = ${keywordId} AND lead_score >= 70
       ORDER BY lead_score DESC, created_at DESC LIMIT 50
     ` as unknown as Promise<Lead[]>,
   ]);

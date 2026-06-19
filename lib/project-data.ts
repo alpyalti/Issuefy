@@ -74,7 +74,7 @@ export const getNewLeadsCount = cache(async (projectId: string) => {
     const sql = requireSql();
     const rows = (await sql`
       SELECT COUNT(*)::int AS n FROM keyword_leads
-      WHERE project_id = ${projectId} AND status = 'new'
+      WHERE project_id = ${projectId} AND status = 'new' AND lead_score >= 70
     `) as Array<{ n: number }>;
     return rows[0]?.n ?? 0;
   } catch {

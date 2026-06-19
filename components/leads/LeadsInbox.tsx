@@ -36,9 +36,9 @@ export default function LeadsInbox({ projectId, leads }: { projectId: string; le
   return (
     <div className="page-wrap" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <header style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <h1 style={{ fontFamily: "var(--serif)", fontSize: 26, fontWeight: 500, letterSpacing: "-0.02em" }}>Leads</h1>
+        <h1 style={{ fontFamily: "var(--serif)", fontSize: 26, fontWeight: 500, letterSpacing: "-0.02em" }}>Conversations</h1>
         <p className="muted" style={{ fontSize: 14 }}>
-          Potential customers discussing your keywords on Reddit &amp; Hacker News.
+          Posts on Reddit &amp; Hacker News where recommending your product would be natural — a hand-picked few, not a firehose.
           {newCount > 0 ? ` ${newCount} new.` : ""}
         </p>
       </header>
@@ -46,9 +46,9 @@ export default function LeadsInbox({ projectId, leads }: { projectId: string; le
       {leads.length === 0 ? (
         <section className="card" style={{ padding: 34, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
           <Icon name="Target01Icon" size={26} stroke={1.5} />
-          <p style={{ fontSize: 14, color: "var(--ink-2)" }}>No leads yet.</p>
+          <p style={{ fontSize: 14, color: "var(--ink-2)" }}>No conversations yet.</p>
           <p className="muted" style={{ fontSize: 13, maxWidth: "46ch" }}>
-            Each morning Issuefy scans Reddit &amp; Hacker News for people discussing your keywords who could be customers. Open a keyword and hit <b>Find leads now</b> to scan immediately.
+            A couple of times a week, Issuefy scans Reddit &amp; Hacker News for posts where your product would be a natural recommendation. Open a keyword and hit <b>Find conversations now</b> to scan immediately.
           </p>
           <Link href={`/dashboard/${projectId}`} className="btn btn-ghost btn-sm">Back to dashboard</Link>
         </section>
@@ -72,16 +72,15 @@ export default function LeadsInbox({ projectId, leads }: { projectId: string; le
               <span>Min score</span>
               <select className="fsel" value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}>
                 <option value={0}>Any</option>
-                <option value={60}>60+</option>
-                <option value={70}>70+</option>
                 <option value={80}>80+</option>
+                <option value={90}>90+</option>
               </select>
             </label>
-            <span className="leads-count mono">{filtered.length} lead{filtered.length === 1 ? "" : "s"}</span>
+            <span className="leads-count mono">{filtered.length} conversation{filtered.length === 1 ? "" : "s"}</span>
           </div>
 
           {filtered.length === 0 ? (
-            <p className="muted" style={{ fontSize: 13.5, padding: "20px 4px" }}>No leads match these filters.</p>
+            <p className="muted" style={{ fontSize: 13.5, padding: "20px 4px" }}>No conversations match these filters.</p>
           ) : (
             <div className="leads-grid">
               {filtered.map((l) => <LeadCard key={l.id} projectId={projectId} lead={l} />)}

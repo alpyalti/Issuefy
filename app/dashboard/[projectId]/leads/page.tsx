@@ -7,7 +7,7 @@ import type { Lead } from "@/components/leads/LeadCard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Leads — Issuefy" };
+export const metadata = { title: "Conversations — Issuefy" };
 
 type Ctx = { params: Promise<{ projectId: string }> };
 
@@ -29,7 +29,7 @@ export default async function LeadsPage({ params }: Ctx) {
            kl.lead_score, kl.intent, kl.reason, kl.draft_reply, kl.status
     FROM keyword_leads kl
     JOIN keywords k ON k.id = kl.keyword_id
-    WHERE kl.project_id = ${projectId}
+    WHERE kl.project_id = ${projectId} AND kl.lead_score >= 70
     ORDER BY kl.lead_score DESC, kl.created_at DESC
     LIMIT 200
   `) as unknown as Lead[];

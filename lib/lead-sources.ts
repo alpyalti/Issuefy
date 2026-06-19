@@ -140,7 +140,7 @@ function mapRedditListing(json: unknown): RawLead[] {
 export async function searchReddit(keyword: string): Promise<RawLead[]> {
   if (apifyEnabled()) {
     try {
-      const posts = await searchRedditViaApify(keyword, 25);
+      const posts = await searchRedditViaApify(keyword, 12);
       const mapped: RawLead[] = [];
       for (const p of posts) {
         if (!p.url || !p.title || p.over18) continue;
