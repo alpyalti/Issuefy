@@ -21,11 +21,17 @@ import { reserveCalls } from "./usage-counters";
 import { getLimits } from "./usage";
 import { resolveMarket } from "./markets";
 import { searchHackerNews, searchReddit, type RawLead } from "./lead-sources";
+import { apifyEnabled } from "./apify";
 import { captureBreadcrumb, captureError } from "./sentry";
 
 const LOOKBACK_DAYS = 14;
 const MAX_CANDIDATES_PER_KEYWORD = 15; // bound classification cost
 const LEAD_SCORE_THRESHOLD = 55;
+// The Reddit actor is slow + flaky, so we fetch it for all keywords up front,
+// in parallel (small pool) under a hard wall-clock deadline, BEFORE the
+// sequential classify loop — keeping the whole worker well under its 300s cap.
+const REDDIT_POOL = 3;
+const REDDIT_PHASE_DEADLINE_MS = 180_000;
 
 export const LEAD_INTENTS = [
   "seeking_recommendation", "frustrated_with_tool", "asking_how_to",
@@ -96,6 +102,15 @@ function companyBlurb(p: ProjectProfile): string {
 
 /* ─────────────────────────── orchestrator ─────────────────────────── */
 
+/** Run `fn` over items with at most `poolSize` in flight at once. */
+async function runPool<T>(items: T[], poolSize: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let i = 0;
+  const worker = async () => {
+    while (i < items.length) await fn(items[i++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(poolSize, items.length) }, worker));
+}
+
 export async function discoverLeadsForProject(
   projectId: string,
   opts?: { onlyKeywordId?: string },
@@ -126,14 +141,35 @@ export async function discoverLeadsForProject(
   const market = resolveMarket(project.target_market);
   const blurb = companyBlurb(project);
 
+  // Phase A — when Apify is on, prefetch Reddit for every keyword in parallel
+  // (small pool) under a hard deadline, since the actor is slow + flaky. Each
+  // keyword defaults to [] so the loop below always finds an entry; late
+  // completions after the deadline harmlessly overwrite unused slots. Without
+  // Apify we fall through to the per-keyword searchReddit() in the loop.
+  const useApify = apifyEnabled();
+  const redditByKw = new Map<string, RawLead[]>(keywords.map((k) => [k.id, []]));
+  if (useApify) {
+    await Promise.race([
+      runPool(keywords, REDDIT_POOL, async (kw) => {
+        try {
+          redditByKw.set(kw.id, await searchReddit(kw.keyword));
+        } catch (e) {
+          captureBreadcrumb("leads: reddit prefetch failed", {
+            keyword: kw.keyword, msg: e instanceof Error ? e.message : "?",
+          });
+        }
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, REDDIT_PHASE_DEADLINE_MS)),
+    ]);
+  }
+
   for (const kw of keywords) {
     t.keywordsScanned++;
     try {
-      // 1. Search both platforms (fail-soft each).
-      const [hn, reddit] = await Promise.all([
-        searchHackerNews(kw.keyword, sinceUnix),
-        searchReddit(kw.keyword),
-      ]);
+      // 1. Search both platforms (fail-soft each). Reddit is prefetched above
+      //    when Apify is configured; otherwise call the public path inline.
+      const reddit = useApify ? (redditByKw.get(kw.id) ?? []) : await searchReddit(kw.keyword);
+      const hn = await searchHackerNews(kw.keyword, sinceUnix);
       let merged: RawLead[] = [...reddit, ...hn];
       if (merged.length === 0) continue;
 

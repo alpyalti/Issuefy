@@ -29,7 +29,10 @@ const ACTOR = process.env.APIFY_IG_ACTOR || "apify~instagram-profile-scraper";
 // 1,000 results) is how Reddit leads actually come through.
 const REDDIT_ACTOR = process.env.APIFY_REDDIT_ACTOR || "trudax~reddit-scraper-lite";
 const RUN_TIMEOUT_S = 240;
-const HTTP_ABORT_MS = 250_000;
+// Reddit runs are short — cap them low so a proxy-blocked run fails fast and we
+// retry on a fresh IP instead of hanging near the worker's 300s ceiling.
+const REDDIT_RUN_TIMEOUT_S = 80;
+const REDDIT_MAX_ATTEMPTS = 2;
 
 /** True when the Instagram tier is configured. Callers skip IG when false. */
 export function apifyEnabled(): boolean {
@@ -121,17 +124,17 @@ function mapProfile(item: Record<string, unknown>): IgProfileResult | null {
  * errors so callers can fail soft. `input` is the actor's input object,
  * POSTed as the request body.
  */
-async function runActorSync(actor: string, input: unknown): Promise<unknown[]> {
+async function runActorSync(actor: string, input: unknown, timeoutS = RUN_TIMEOUT_S): Promise<unknown[]> {
   if (!APIFY_TOKEN) throw new Error("APIFY_TOKEN is not configured");
   const params = new URLSearchParams({
     token: APIFY_TOKEN,
-    timeout: String(RUN_TIMEOUT_S),
+    timeout: String(timeoutS),
     format: "json",
   });
   const url = `https://api.apify.com/v2/acts/${actor}/run-sync-get-dataset-items?${params.toString()}`;
 
   const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), HTTP_ABORT_MS);
+  const t = setTimeout(() => ctl.abort(), timeoutS * 1000 + 10_000);
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -212,9 +215,33 @@ export async function searchRedditViaApify(keyword: string, maxItems = 25): Prom
     maxItems,
     maxPostCount: maxItems,
     includeNSFW: false,
+    // NB: the default post output has NO upVotes/numberOfComments, and the
+    // `includeMediaLinks` flag that's meant to add them reliably returns 0
+    // results (tested twice) — so Reddit leads carry engagement: null. Posts
+    // come through fine without it (~13/15; the rest are community rows we drop).
     proxy: { useApifyProxy: true },
   };
-  const items = await runActorSync(REDDIT_ACTOR, input);
+  // Reddit blocks the actor's datacenter proxies intermittently → a run comes
+  // back empty (status 201, 0 items) or errors (400/timeout). Both are cheap to
+  // retry — pay-per-result means a 0-result run costs $0, and a fresh attempt
+  // gets a new proxy IP. Short per-run timeout so a blocked run fails fast.
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= REDDIT_MAX_ATTEMPTS; attempt++) {
+    try {
+      const items = await runActorSync(REDDIT_ACTOR, input, REDDIT_RUN_TIMEOUT_S);
+      const posts = mapRedditItems(items);
+      if (posts.length > 0 || attempt === REDDIT_MAX_ATTEMPTS) return posts;
+    } catch (e) {
+      lastErr = e;
+      if (attempt === REDDIT_MAX_ATTEMPTS) throw e;
+    }
+  }
+  if (lastErr) throw lastErr;
+  return [];
+}
+
+/** Map raw actor dataset items → typed posts (drops communities/errors/no-url). */
+function mapRedditItems(items: unknown[]): ApifyRedditPost[] {
   const out: ApifyRedditPost[] = [];
   for (const it of items) {
     if (typeof it !== "object" || it === null) continue;
