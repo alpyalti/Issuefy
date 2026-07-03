@@ -1,4 +1,5 @@
 import { captureBreadcrumb } from "@/lib/sentry";
+import { fetchWithTimeout } from "@/lib/fetch";
 
 export const runtime = "nodejs";
 
@@ -39,22 +40,19 @@ export async function GET(req: Request) {
     return new Response("Forbidden host", { status: 403 });
   }
 
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const upstream = await fetch(target.toString(), {
+    const upstream = await fetchWithTimeout(target.toString(), {
       headers: {
         // No Referer — that's the whole point. A browser-ish UA + Accept
         // keeps the CDN happy.
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
         Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
       },
-      signal: ctl.signal,
       // No redirects: the host allowlist is validated on the INITIAL URL only,
       // so following a 3xx could reach a non-allowlisted host. Meta CDN serves
       // images directly; a redirecting URL just falls through to the 404 path.
       redirect: "manual",
-    });
+    }, FETCH_TIMEOUT_MS);
     if (!upstream.ok) {
       return new Response("Upstream error", { status: 404 });
     }
@@ -75,7 +73,5 @@ export async function GET(req: Request) {
   } catch (e) {
     captureBreadcrumb("social-image proxy failed", { host: target.hostname, msg: e instanceof Error ? e.message : "?" });
     return new Response("Fetch failed", { status: 404 });
-  } finally {
-    clearTimeout(timer);
   }
 }

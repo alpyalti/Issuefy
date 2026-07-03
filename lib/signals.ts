@@ -18,6 +18,7 @@ import { reserveCalls } from "./usage-counters";
 import { getLimits } from "./usage";
 import { captureError } from "./sentry";
 import { resolveMarket } from "./markets";
+import { companyPromptBlock } from "./company-block";
 import {
   signalExtractionResponseSchema,
   SIGNAL_CATEGORIES,
@@ -183,9 +184,7 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
       : { source_id: s.id, title: s.title, url: s.url, text };
   });
 
-  const companyBlock = project.track_company || project.company_name
-    ? `Your company (${project.company_name || "unnamed"}, ${project.company_website || "no website"}): ${project.company_description || "(no description)"}`
-    : "(No company profile — run on competitors and keywords only.)";
+  const companyBlock = companyPromptBlock(project, "(No company profile — run on competitors and keywords only.)");
 
   // Resolve once so the prompt sees the canonical label ("Turkey", "Global",
   // "Latin America") rather than the dropdown code ("TR", "REGION_LATAM").

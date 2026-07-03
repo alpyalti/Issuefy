@@ -20,6 +20,8 @@
  * one run per handle).
  */
 
+import { fetchWithTimeout } from "./fetch";
+
 const APIFY_TOKEN = process.env.APIFY_TOKEN || "";
 // Tilde form is the actor path on Apify's API ("apify/instagram-profile-scraper").
 const ACTOR = process.env.APIFY_IG_ACTOR || "apify~instagram-profile-scraper";
@@ -135,30 +137,23 @@ async function runActorSync(actor: string, input: unknown, timeoutS = RUN_TIMEOU
   });
   const url = `https://api.apify.com/v2/acts/${actor}/run-sync-get-dataset-items?${params.toString()}`;
 
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutS * 1000 + 10_000);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-      signal: ctl.signal,
-    });
-    if (res.status === 408) {
-      throw new Error(`Apify run timed out after ${RUN_TIMEOUT_S}s (${actor})`);
-    }
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`Apify run failed: ${res.status} ${res.statusText} ${body.slice(0, 300)}`);
-    }
-    const items = (await res.json()) as unknown;
-    if (!Array.isArray(items)) {
-      throw new Error("Apify returned a non-array dataset response");
-    }
-    return items;
-  } finally {
-    clearTimeout(t);
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  }, timeoutS * 1000 + 10_000);
+  if (res.status === 408) {
+    throw new Error(`Apify run timed out after ${timeoutS}s (${actor})`);
   }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Apify run failed: ${res.status} ${res.statusText} ${body.slice(0, 300)}`);
+  }
+  const items = (await res.json()) as unknown;
+  if (!Array.isArray(items)) {
+    throw new Error("Apify returned a non-array dataset response");
+  }
+  return items;
 }
 
 /**

@@ -19,6 +19,7 @@ import { requireSql, withTx } from "./db";
 import { chatJson } from "./openrouter";
 import { captureError } from "./sentry";
 import { resolveMarket } from "./markets";
+import { companyPromptBlock } from "./company-block";
 import {
   dailySummaryResponseSchema,
   type DailySummaryResponse,
@@ -158,9 +159,7 @@ export async function generateDailySummaryForProject(projectId: string): Promise
     };
   }
 
-  const companyBlock = project.track_company || project.company_name
-    ? `Your company (${project.company_name || "unnamed"}, ${project.company_website || "no website"}): ${project.company_description || "(no description)"}`
-    : "(No company profile — assess relative to competitors and keywords only.)";
+  const companyBlock = companyPromptBlock(project, "(No company profile — assess relative to competitors and keywords only.)");
 
   // Label the channel for social-derived signals so the brief can say
   // "announced on Instagram" rather than burying the source.

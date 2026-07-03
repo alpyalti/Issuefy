@@ -8,6 +8,7 @@
  */
 import { standardScrape } from "./scraperapi";
 import { apifyEnabled, searchRedditViaApify } from "./apify";
+import { fetchWithTimeout } from "./fetch";
 import { captureBreadcrumb } from "./sentry";
 
 export type LeadPlatform = "reddit" | "hackernews";
@@ -59,10 +60,8 @@ export async function searchHackerNews(keyword: string, sinceUnix: number): Prom
     hitsPerPage: "20",
   });
   const url = `https://hn.algolia.com/api/v1/search_by_date?${params.toString()}`;
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), HN_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" }, signal: ctl.signal });
+    const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, HN_TIMEOUT_MS);
     if (!res.ok) return [];
     const data = (await res.json()) as { hits?: HnHit[] };
     const hits = data.hits ?? [];
@@ -85,8 +84,6 @@ export async function searchHackerNews(keyword: string, sinceUnix: number): Prom
     return out;
   } catch {
     return [];
-  } finally {
-    clearTimeout(t);
   }
 }
 
@@ -177,13 +174,10 @@ export async function searchReddit(keyword: string): Promise<RawLead[]> {
     limit: "25",
   });
   const url = `https://www.reddit.com/search.json?${params.toString()}`;
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), REDDIT_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: { "User-Agent": ISSUEFY_UA, Accept: "application/json" },
-      signal: ctl.signal,
-    });
+    }, REDDIT_TIMEOUT_MS);
     if (res.ok) {
       try {
         return mapRedditListing(await res.json());
@@ -193,8 +187,6 @@ export async function searchReddit(keyword: string): Promise<RawLead[]> {
     }
   } catch {
     /* network/timeout — fall through to ScraperAPI */
-  } finally {
-    clearTimeout(t);
   }
   // Fallback via ScraperAPI proxy.
   try {

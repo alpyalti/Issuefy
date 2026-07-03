@@ -17,6 +17,7 @@
  */
 
 import { z } from "zod";
+import { fetchWithTimeout } from "./fetch";
 
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const TIMEOUT_MS = 45_000;
@@ -79,24 +80,16 @@ export async function chatJson<T>(opts: ChatJsonOptions<T>): Promise<ChatJsonRes
     },
   };
 
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(API_URL, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.APP_URL || "https://issuefy.app",
-        "X-Title": "Issuefy",
-      },
-      body: JSON.stringify(body),
-    });
-  } finally {
-    clearTimeout(t);
-  }
+  const res = await fetchWithTimeout(API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": process.env.APP_URL || "https://issuefy.app",
+      "X-Title": "Issuefy",
+    },
+    body: JSON.stringify(body),
+  }, TIMEOUT_MS);
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");

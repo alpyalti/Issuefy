@@ -125,3 +125,44 @@ export const getAccessibleProjects = cache(async (userId: string) => {
  * company_name } still works. New role field is appended.
  */
 export const getOwnedProjects = getAccessibleProjects;
+
+/** One signal row as the entity hubs render it. */
+export interface EntitySignal {
+  id: string;
+  title: string;
+  category: string;
+  importance: number;
+  created_at: string;
+}
+
+/**
+ * Signals citing a watchlist entity — the SINGLE definition of "a signal for
+ * this keyword/competitor" (signal_sources → sources link, EXISTS to avoid
+ * DISTINCT+ORDER BY pitfalls). The keyword and competitor hubs previously
+ * carried near-identical copies of this query; one of them drifting is what
+ * crashed the keyword hub (fix b8d1a29), so it now lives in one place.
+ */
+export async function getEntitySignals(
+  projectId: string,
+  entity: { keywordId?: string; competitorId?: string },
+  limit: number,
+): Promise<EntitySignal[]> {
+  const { keywordId = null, competitorId = null } = entity;
+  if (!keywordId && !competitorId) throw new Error("getEntitySignals: pass keywordId or competitorId");
+  const sql = requireSql();
+  return (await sql`
+    SELECT s.id, s.title, s.category, s.importance, s.created_at::text AS created_at
+    FROM signals s
+    WHERE s.project_id = ${projectId}
+      AND s.dismissed_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM signal_sources ss
+        JOIN sources src ON src.id = ss.source_id
+        WHERE ss.signal_id = s.id
+          AND (${keywordId}::uuid IS NULL OR src.keyword_id = ${keywordId}::uuid)
+          AND (${competitorId}::uuid IS NULL OR src.competitor_id = ${competitorId}::uuid)
+      )
+    ORDER BY s.created_at DESC
+    LIMIT ${limit}
+  `) as EntitySignal[];
+}

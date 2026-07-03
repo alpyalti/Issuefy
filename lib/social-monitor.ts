@@ -28,6 +28,7 @@ import { requireSql } from "./db";
 import { upsertSource, type SourceType } from "./sources";
 import { domainOf } from "./url-normalize";
 import { safeSocialUrl } from "./social-url";
+import { fetchWithTimeout } from "./fetch";
 
 const LINKEDIN_WEEKLY_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -137,18 +138,15 @@ async function fetchRedditPosts(redditUrl: string): Promise<RedditPostStub[]> {
   // Strip trailing slash, then append /.json (handles /r/X, /user/X, /u/X).
   const base = redditUrl.replace(/\/+$/, "");
   const url = `${base}/.json?limit=${REDDIT_MAX_POSTS}`;
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), REDDIT_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: {
         // Reddit returns 429 / blank to default User-Agents. A distinctive UA
         // gets us a normal response.
         "User-Agent": "issuefy-monitor/1.0 (+https://issuefy.app)",
         Accept: "application/json",
       },
-      signal: ctl.signal,
-    });
+    }, REDDIT_TIMEOUT_MS);
     if (!res.ok) return [];
     const data = await res.json() as { data?: { children?: Array<{ data?: Partial<RedditPostStub> }> } };
     const children = data?.data?.children ?? [];
@@ -160,8 +158,6 @@ async function fetchRedditPosts(redditUrl: string): Promise<RedditPostStub[]> {
       .slice(0, REDDIT_MAX_POSTS);
   } catch {
     return [];
-  } finally {
-    clearTimeout(t);
   }
 }
 

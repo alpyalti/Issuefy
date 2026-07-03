@@ -14,6 +14,7 @@
  * Every parser fails soft to null — the hub shows "—" rather than fake data.
  */
 import { safeSocialUrl } from "./social-url";
+import { fetchWithTimeout } from "./fetch";
 
 /** "1.2M" / "850K" / "12,345" / "1.234.567" → integer, or null. */
 export function parseCompactCount(raw: string | null | undefined): number | null {
@@ -107,25 +108,20 @@ export async function fetchYouTubeSubscribersDirect(channelUrl: string): Promise
   // possibly legacy-DB) URL must canonicalize to a real YouTube host.
   const url = safeSocialUrl("youtube", channelUrl);
   if (!url) return null;
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), DIRECT_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: {
         "User-Agent": BROWSER_UA,
         "Accept-Language": "en-US,en;q=0.9",
         Cookie: "CONSENT=YES+cb; SOCS=CAI",
       },
       redirect: "follow",
-      signal: ctl.signal,
-    });
+    }, DIRECT_FETCH_TIMEOUT_MS);
     if (!res.ok) return null;
     const html = await res.text();
     return parseYouTubeSubscribers(html);
   } catch {
     return null;
-  } finally {
-    clearTimeout(t);
   }
 }
 
@@ -156,22 +152,17 @@ export function parseRedditAbout(data: unknown): number | null {
 export async function fetchRedditMembers(redditUrl: string): Promise<number | null> {
   const url = redditAboutUrl(redditUrl);
   if (!url) return null;
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), REDDIT_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: {
         "User-Agent": "issuefy-monitor/1.0 (+https://issuefy.app)",
         Accept: "application/json",
       },
-      signal: ctl.signal,
-    });
+    }, REDDIT_TIMEOUT_MS);
     if (!res.ok) return null;
     return parseRedditAbout(await res.json());
   } catch {
     return null;
-  } finally {
-    clearTimeout(t);
   }
 }
 

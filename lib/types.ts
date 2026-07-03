@@ -37,45 +37,6 @@ export interface SignalItem {
   userNote?: string | null;
 }
 
-export interface StatItem {
-  label: string;
-  value: string;
-  icon: IconName;
-  delta: string;
-  tone: "mute" | "info" | "pos" | "neg";
-}
-
-export interface WatchItem {
-  label: string;
-  type: "Competitor" | "Keyword";
-  live: boolean;
-}
-
-export interface DailySummary {
-  count: number;
-  lead: string;
-  body: string;
-  moves: string[];
-}
-
-export interface MyCompany {
-  name: string;
-  domain: string;
-  color?: string;
-  initials: string;
-}
-
-export interface DashboardData {
-  user: { name: string; role: string; company: string; initials: string };
-  today: string;
-  generatedAt: string;
-  summary: DailySummary;
-  stats: StatItem[];
-  signals: SignalItem[];
-  recentSources: (SourceItem & { sigCat?: SignalCategory })[];
-  watchlist: WatchItem[];
-}
-
 /* Category + severity display metadata (ported from components.jsx CAT/SEV). */
 export const CAT: Record<
   SignalCategory,

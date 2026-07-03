@@ -12,10 +12,8 @@ export function badRequest(detail: unknown, status = 400) {
   return json({ error: "Bad request", detail }, { status });
 }
 export function notFound() { return json({ error: "Not found" }, { status: 404 }); }
-export function forbidden() { return json({ error: "Forbidden" }, { status: 403 }); }
 export function conflict(message: string) { return json({ error: message }, { status: 409 }); }
 export function rateLimited(message: string) { return json({ error: message }, { status: 429 }); }
-export function serverError(message: string) { return json({ error: message }, { status: 500 }); }
 
 /** Parse JSON body and Zod-validate, returning a 400 Response on failure. */
 export async function parseJson<T>(req: Request, schema: z.ZodType<T>): Promise<T | Response> {
@@ -52,27 +50,7 @@ export async function parseJson<T>(req: Request, schema: z.ZodType<T>): Promise<
 export type ProjectRole = "owner" | "editor" | "viewer";
 
 /**
- * Project + the caller's role on it. null when the caller has no membership.
- * Returns the project row augmented with current_user_role for callers that
- * want to gate UI by role without a second query.
- */
-export async function accessibleProject<T = Record<string, unknown>>(
-  userId: string,
-  projectId: string,
-): Promise<(T & { current_user_role: ProjectRole }) | null> {
-  if (!sql) throw new Error("DATABASE_URL is not configured");
-  const rows = (await sql`
-    SELECT p.*, pm.role AS current_user_role
-      FROM projects p
-      JOIN project_members pm ON pm.project_id = p.id
-     WHERE p.id = ${projectId} AND pm.user_id = ${userId}
-     LIMIT 1
-  `) as Array<T & { current_user_role: ProjectRole }>;
-  return rows[0] ?? null;
-}
-
-/**
- * Same as accessibleProject but tightened to roles allowed to MUTATE project
+ * Project + the caller's role, tightened to roles allowed to MUTATE project
  * data (watchlist, signals, name/industry/target_market). Owners + editors.
  * Use this on POST/PATCH/DELETE routes touching project-scoped data.
  */
@@ -132,22 +110,9 @@ export async function ownedProject<T = Record<string, unknown>>(userId: string, 
 }
 
 /**
- * Ownership for child rows. Joins back to projects → project_members for the
- * authenticated user. Any role can access; tighten with the *Manage variants
- * for mutating endpoints.
+ * Membership checks for child rows — join back through projects →
+ * project_members and require a mutating role (owner/editor).
  */
-export async function ownedCompetitor(userId: string, competitorId: string) {
-  if (!sql) throw new Error("DATABASE_URL is not configured");
-  const rows = (await sql`
-    SELECT c.* FROM competitors c
-    JOIN projects p ON p.id = c.project_id
-    JOIN project_members pm ON pm.project_id = p.id
-    WHERE c.id = ${competitorId} AND pm.user_id = ${userId}
-    LIMIT 1
-  `) as Array<Record<string, unknown>>;
-  return rows[0] ?? null;
-}
-
 export async function manageableCompetitor(userId: string, competitorId: string) {
   if (!sql) throw new Error("DATABASE_URL is not configured");
   const rows = (await sql`
@@ -157,18 +122,6 @@ export async function manageableCompetitor(userId: string, competitorId: string)
     WHERE c.id = ${competitorId}
       AND pm.user_id = ${userId}
       AND pm.role IN ('owner','editor')
-    LIMIT 1
-  `) as Array<Record<string, unknown>>;
-  return rows[0] ?? null;
-}
-
-export async function ownedKeyword(userId: string, keywordId: string) {
-  if (!sql) throw new Error("DATABASE_URL is not configured");
-  const rows = (await sql`
-    SELECT k.* FROM keywords k
-    JOIN projects p ON p.id = k.project_id
-    JOIN project_members pm ON pm.project_id = p.id
-    WHERE k.id = ${keywordId} AND pm.user_id = ${userId}
     LIMIT 1
   `) as Array<Record<string, unknown>>;
   return rows[0] ?? null;

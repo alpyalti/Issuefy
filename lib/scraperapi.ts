@@ -15,6 +15,8 @@
  * logs to scrape_jobs + Sentry and continues with the next URL (PRD §13.2).
  */
 
+import { fetchWithTimeout as fetchWithTimeoutMs } from "./fetch";
+
 const KEY = process.env.SCRAPERAPI_KEY || "";
 const TIMEOUT_MS = 25_000;
 
@@ -23,15 +25,9 @@ function ensureKey(): string {
   return KEY;
 }
 
-async function fetchWithTimeout(url: string, init?: RequestInit, ms = TIMEOUT_MS): Promise<Response> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
-}
+// Shared util with this module's default timeout baked in.
+const fetchWithTimeout = (url: string, init?: RequestInit, ms = TIMEOUT_MS) =>
+  fetchWithTimeoutMs(url, init, ms);
 
 // ──────────────────────────────────────────────────────────────────────────
 // Standard endpoint — fetch raw HTML

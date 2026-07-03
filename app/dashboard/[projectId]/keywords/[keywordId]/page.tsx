@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
-import { getProject } from "@/lib/project-data";
+import { getProject, getEntitySignals } from "@/lib/project-data";
 import KeywordHub, {
   type KwRow, type KwTrendPoint, type KwCategory, type KwSignal,
 } from "@/components/keyword/KeywordHub";
@@ -34,17 +34,7 @@ export default async function KeywordHubPage({ params }: Ctx) {
   if (!keyword) notFound();
 
   const [sigRows, trendRows, catRows, srcRows, leadRows] = await Promise.all([
-    sql`
-      SELECT s.id, s.title, s.category, s.importance, s.created_at::text AS created_at
-      FROM signals s
-      WHERE s.project_id = ${projectId} AND s.dismissed_at IS NULL
-        AND EXISTS (
-          SELECT 1 FROM signal_sources ss
-          JOIN sources src ON src.id = ss.source_id
-          WHERE ss.signal_id = s.id AND src.keyword_id = ${keywordId}
-        )
-      ORDER BY s.created_at DESC LIMIT 20
-    ` as unknown as Promise<KwSignal[]>,
+    getEntitySignals(projectId, { keywordId }, 20) as unknown as Promise<KwSignal[]>,
     sql`
       SELECT to_char(date_trunc('week', s.created_at), 'YYYY-MM-DD') AS wk, COUNT(DISTINCT s.id)::int AS n
       FROM signals s
