@@ -12,6 +12,22 @@ const nextConfig = {
     // Allow remote logos discovered during website enrichment (og:image / favicons).
     remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
+  // Baseline security headers on every response. HSTS is added by Vercel
+  // automatically; CSP is deliberately absent for now (Clerk + Stripe +
+  // inline styles make a strict policy its own project).
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
 };
 
 // Wrap with Sentry — uploads source maps at build time (silent in CI) and
