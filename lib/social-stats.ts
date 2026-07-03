@@ -13,6 +13,7 @@
  *
  * Every parser fails soft to null — the hub shows "—" rather than fake data.
  */
+import { safeSocialUrl } from "./social-url";
 
 /** "1.2M" / "850K" / "12,345" / "1.234.567" → integer, or null. */
 export function parseCompactCount(raw: string | null | undefined): number | null {
@@ -102,12 +103,14 @@ const BROWSER_UA =
  * the direct fetch returns the full payload. Null on any failure.
  */
 export async function fetchYouTubeSubscribersDirect(channelUrl: string): Promise<number | null> {
-  const url = (channelUrl || "").trim();
+  // SSRF guard: this fetch runs from our own egress, so the (user-supplied,
+  // possibly legacy-DB) URL must canonicalize to a real YouTube host.
+  const url = safeSocialUrl("youtube", channelUrl);
   if (!url) return null;
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), DIRECT_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url.startsWith("http") ? url : `https://${url}`, {
+    const res = await fetch(url, {
       headers: {
         "User-Agent": BROWSER_UA,
         "Accept-Language": "en-US,en;q=0.9",
@@ -128,11 +131,12 @@ export async function fetchYouTubeSubscribersDirect(channelUrl: string): Promise
 
 const REDDIT_TIMEOUT_MS = 15_000;
 
-/** Build the about.json URL for a subreddit / user profile link. */
+/** Build the about.json URL for a subreddit / user profile link.
+ *  SSRF guard: only real reddit.com hosts survive canonicalization. */
 export function redditAboutUrl(redditUrl: string): string | null {
-  const base = (redditUrl || "").trim().replace(/\/+$/, "");
-  if (!base) return null;
-  return `${base.startsWith("http") ? base : `https://${base}`}/about.json`;
+  const canon = safeSocialUrl("reddit", redditUrl);
+  if (!canon) return null;
+  return `${canon.replace(/\/+$/, "")}/about.json`;
 }
 
 /** Pull the member count out of a parsed about.json payload. */

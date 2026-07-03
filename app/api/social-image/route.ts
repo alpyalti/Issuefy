@@ -50,7 +50,10 @@ export async function GET(req: Request) {
         Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
       },
       signal: ctl.signal,
-      redirect: "follow",
+      // No redirects: the host allowlist is validated on the INITIAL URL only,
+      // so following a 3xx could reach a non-allowlisted host. Meta CDN serves
+      // images directly; a redirecting URL just falls through to the 404 path.
+      redirect: "manual",
     });
     if (!upstream.ok) {
       return new Response("Upstream error", { status: 404 });

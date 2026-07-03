@@ -37,6 +37,7 @@ import {
   parseLinkedInFollowers,
 } from "./social-stats";
 import { standardScrape } from "./scraperapi";
+import { safeSocialUrl, type SocialKey } from "./social-url";
 import { cleanForStorage } from "./cleaner";
 import { upsertSource } from "./sources";
 import { chatJson } from "./openrouter";
@@ -151,16 +152,20 @@ export async function refreshSocialProfiles(
         linked.push({ platform: "instagram", handle, url: `https://www.instagram.com/${handle}/`, linkOnly: false });
       }
     }
-    const yt = socials.youtube?.trim();
-    if (yt) linked.push({ platform: "youtube", handle: yt.replace(/^https?:\/\/(www\.)?youtube\.com\//i, "").split(/[/?#]/)[0] || yt, url: yt, linkOnly: false });
-    const rd = socials.reddit?.trim();
-    if (rd) linked.push({ platform: "reddit", handle: rd.replace(/^https?:\/\/(www\.)?reddit\.com\//i, "").replace(/\/+$/, "") || rd, url: rd, linkOnly: false });
-    const li = socials.linkedin?.trim();
-    if (li) linked.push({ platform: "linkedin", handle: li.replace(/^https?:\/\/(www\.)?linkedin\.com\//i, "").replace(/\/+$/, "") || li, url: li, linkOnly: false });
-    for (const p of LINK_ONLY_PLATFORMS) {
-      const link = socials[p]?.trim();
-      if (link) linked.push({ platform: p, handle: link, url: link, linkOnly: true });
-    }
+    // Canonicalize through safeSocialUrl — user-typed values only become a
+    // social_profiles.url (later fetched server-side) when their host anchors
+    // to the platform's real domain. Bad/foreign links are silently skipped.
+    const push = (platform: SocialPlatform, raw: string | undefined, linkOnly: boolean) => {
+      const canon = safeSocialUrl(platform as SocialKey, raw);
+      if (!canon) return;
+      const path = decodeURIComponent(new URL(canon).pathname.replace(/^\/+|\/+$/g, ""));
+      const handle = platform === "youtube" ? (path.split("/")[0] || canon) : (path || canon);
+      linked.push({ platform, handle, url: canon, linkOnly });
+    };
+    push("youtube", socials.youtube, false);
+    push("reddit", socials.reddit, false);
+    push("linkedin", socials.linkedin, false);
+    for (const p of LINK_ONLY_PLATFORMS) push(p, socials[p], true);
 
     for (const l of linked) {
       await sql`

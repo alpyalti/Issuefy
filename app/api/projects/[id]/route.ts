@@ -19,8 +19,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 // PATCH /api/projects/:id — update fields. Editors and owners can mutate;
 // viewers get a 404 (not a 403, to avoid leaking project existence).
-// TODO (Phase 5): split field-level — track_company + company_* should be
-// owner-only. For now an editor can change them too.
+// track_company + company_* are owner-only (field-level split below).
 export async function PATCH(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
@@ -30,6 +29,19 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   const body = await parseJson(req, projectUpdateSchema);
   if (body instanceof Response) return body;
+
+  // The company profile drives every AI prompt (signals, briefs, replies) —
+  // editing it is an owner decision, not an editor one.
+  const touchesCompany =
+    body.company_name !== undefined || body.company_website !== undefined ||
+    body.company_description !== undefined || body.company_logo_url !== undefined ||
+    body.company_socials !== undefined || body.track_company !== undefined;
+  if (touchesCompany) {
+    const owner = await adminProject(user.id, id);
+    if (!owner) {
+      return json({ error: "Only the project owner can edit the company profile." }, { status: 403 });
+    }
+  }
 
   const sql = requireSql();
   // Build the UPDATE with COALESCE so absent keys keep their current value —

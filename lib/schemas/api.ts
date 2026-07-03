@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TARGET_MARKET_VALUES } from "@/lib/markets";
+import { safeSocialUrl, type SocialKey } from "@/lib/social-url";
 
 /* Zod schemas for API request bodies. Strict — reject unknown fields. */
 
@@ -9,16 +10,27 @@ const url = z.string().trim().min(3).max(2_048).refine((v) => {
   return /^([a-z0-9-]+\.)+[a-z]{2,}(\/.*)?$/i.test(v) || /^https?:\/\//i.test(v);
 }, { message: "Must be a website URL" });
 
+// Social links are later rendered as <a href> and (youtube/reddit) fetched
+// server-side, so each value must canonicalize to the platform's real domain
+// — safeSocialUrl rejects foreign hosts, javascript:/data: schemes, userinfo
+// and ports. Empty string = "clear this link" and passes through.
+const socialValue = (platform: SocialKey) =>
+  z.string().trim().max(300)
+    .refine((v) => v === "" || safeSocialUrl(platform, v) !== null, {
+      message: `Not a valid ${platform} link`,
+    })
+    .optional();
+
 const socials = z.object({
-  instagram: z.string().optional(),
-  facebook: z.string().optional(),
-  linkedin: z.string().optional(),
-  x: z.string().optional(),
-  twitter: z.string().optional(),
-  youtube: z.string().optional(),
-  tiktok: z.string().optional(),
-  reddit: z.string().optional(),
-  website: z.string().optional(),
+  instagram: socialValue("instagram"),
+  facebook: socialValue("facebook"),
+  linkedin: socialValue("linkedin"),
+  x: socialValue("x"),
+  twitter: socialValue("twitter"),
+  youtube: socialValue("youtube"),
+  tiktok: socialValue("tiktok"),
+  reddit: socialValue("reddit"),
+  website: socialValue("website"),
 }).strict().partial();
 
 export const BUSINESS_TYPES = [

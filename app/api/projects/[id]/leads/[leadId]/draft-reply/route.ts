@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/clerk-user";
 import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
-import { json, manageableProject, notFound } from "@/lib/api";
+import { json, manageableProject, notFound, rateLimited } from "@/lib/api";
 import { draftLeadReply } from "@/lib/leads";
 import { captureError } from "@/lib/sentry";
 
@@ -9,6 +9,11 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type Ctx = { params: Promise<{ id: string; leadId: string }> };
+
+// Process-local per-user cooldown — each draft is a paid LLM call, so don't
+// let a click-loop burn spend. Same best-effort pattern as /api/enrich.
+const lastDraft = new Map<string, number>();
+const DRAFT_COOLDOWN_MS = 10_000;
 
 /**
  * POST /api/projects/:id/leads/:leadId/draft-reply
@@ -21,6 +26,10 @@ export async function POST(_req: Request, { params }: Ctx) {
   if (user instanceof Response) return user;
   const guard = await ensureActiveSubscriptionApi(user.id);
   if (guard) return guard;
+
+  const last = lastDraft.get(user.id) ?? 0;
+  if (Date.now() - last < DRAFT_COOLDOWN_MS) return rateLimited("Give that a moment.");
+  lastDraft.set(user.id, Date.now());
   const { id: projectId, leadId } = await params;
   const proj = await manageableProject(user.id, projectId);
   if (!proj) return notFound();

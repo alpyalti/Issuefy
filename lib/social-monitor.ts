@@ -27,6 +27,7 @@
 import { requireSql } from "./db";
 import { upsertSource, type SourceType } from "./sources";
 import { domainOf } from "./url-normalize";
+import { safeSocialUrl } from "./social-url";
 
 const LINKEDIN_WEEKLY_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -180,7 +181,8 @@ export async function ingestRedditActivity(
   let inserted = 0;
 
   for (const c of competitors) {
-    const reddit = c.socials?.reddit?.trim();
+    // SSRF guard — only canonical reddit.com URLs get fetched from our egress.
+    const reddit = safeSocialUrl("reddit", c.socials?.reddit);
     if (!reddit) continue;
     scanned++;
 
