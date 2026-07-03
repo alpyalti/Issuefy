@@ -29,9 +29,11 @@ const ACTOR = process.env.APIFY_IG_ACTOR || "apify~instagram-profile-scraper";
 // 1,000 results) is how Reddit leads actually come through.
 const REDDIT_ACTOR = process.env.APIFY_REDDIT_ACTOR || "trudax~reddit-scraper-lite";
 const RUN_TIMEOUT_S = 240;
-// Reddit runs are short — cap them low so a proxy-blocked run fails fast and we
-// retry on a fresh IP instead of hanging near the worker's 300s ceiling.
-const REDDIT_RUN_TIMEOUT_S = 80;
+// Reddit run timeout. Free-plan Apify runs often QUEUE before they execute, so
+// an aggressive cap kills them mid-queue — prod logs showed 4/5 runs TIMED-OUT
+// at the previous 80s cap. 150s absorbs queue + a normal ~40-80s run; the
+// engine's phase deadline (lib/leads.ts) still bounds total wall-clock.
+const REDDIT_RUN_TIMEOUT_S = 150;
 const REDDIT_MAX_ATTEMPTS = 2;
 
 /** True when the Instagram tier is configured. Callers skip IG when false. */

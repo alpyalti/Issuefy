@@ -46,7 +46,11 @@ export default function KeywordHub({
       if (res.status === 429) { setScanMsg(body.error || "Scan runs once per hour per keyword."); return; }
       if (!res.ok) { setScanMsg(body.error || "Scan failed — try again."); return; }
       const n = body.leadsCreated ?? 0;
-      setScanMsg(n > 0 ? `Found ${n} new conversation${n === 1 ? "" : "s"}.` : "No new conversations this scan.");
+      const rp = body.redditPosts ?? 0;
+      const hp = body.hnPosts ?? 0;
+      if (n > 0) setScanMsg(`Found ${n} new conversation${n === 1 ? "" : "s"}.`);
+      else if (rp + hp === 0) setScanMsg("Reddit & Hacker News returned nothing this scan — sources may be busy. Try again later.");
+      else setScanMsg(`Scanned ${rp + hp} fresh posts (${rp} Reddit · ${hp} HN) — none were a natural fit.`);
       router.refresh();
     } catch {
       setScanMsg("Scan failed — check your connection.");

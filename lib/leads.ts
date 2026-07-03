@@ -36,8 +36,10 @@ const MAX_LEADS_PER_KEYWORD = 8; // hard ceiling per keyword per scan
 // The Reddit actor is slow + flaky, so we fetch it for all keywords up front,
 // in parallel (small pool) under a hard wall-clock deadline, BEFORE the
 // sequential classify loop — keeping the whole worker well under its 300s cap.
-const REDDIT_POOL = 3;
-const REDDIT_PHASE_DEADLINE_MS = 180_000;
+// Pool of 2: the free Apify plan queues concurrent runs, and queue time counts
+// against the run timeout (3 parallel runs reliably TIMED-OUT in prod).
+const REDDIT_POOL = 2;
+const REDDIT_PHASE_DEADLINE_MS = 240_000;
 
 export const LEAD_INTENTS = [
   "seeking_recommendation", "frustrated_with_tool", "asking_how_to",
@@ -47,6 +49,10 @@ export const LEAD_INTENTS = [
 export interface LeadTelemetry {
   keywordsScanned: number;
   candidates: number;
+  /** Raw posts returned per platform (pre-dedup) — 0 on Reddit usually means
+   *  the actor was blocked/timed out, which the UI surfaces honestly. */
+  redditPosts: number;
+  hnPosts: number;
   leadsCreated: number;
   errors: string[];
 }
@@ -181,7 +187,9 @@ export async function discoverLeadsForProject(
   opts?: { onlyKeywordId?: string },
 ): Promise<LeadTelemetry> {
   const sql = requireSql();
-  const t: LeadTelemetry = { keywordsScanned: 0, candidates: 0, leadsCreated: 0, errors: [] };
+  const t: LeadTelemetry = {
+    keywordsScanned: 0, candidates: 0, redditPosts: 0, hnPosts: 0, leadsCreated: 0, errors: [],
+  };
 
   const projRows = (await sql`
     SELECT p.id, p.user_id, u.plan, u.role AS owner_role,
@@ -233,6 +241,8 @@ export async function discoverLeadsForProject(
       //    when Apify is configured; otherwise call the public path inline.
       const reddit = useApify ? (redditByKw.get(kw.id) ?? []) : await searchReddit(kw.keyword);
       const hn = await searchHackerNews(kw.keyword, sinceUnix);
+      t.redditPosts += reddit.length;
+      t.hnPosts += hn.length;
       let merged: RawLead[] = [...reddit, ...hn];
       if (merged.length === 0) continue;
 
