@@ -227,17 +227,17 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
 
       // Cap merged results to TOP_N — keeps downstream Stage 2 scrape +
       // Stage 3 LLM cost flat regardless of how many variants we ran.
+      // Upserts are independent rows → run them in parallel (each await was
+      // its own Neon HTTP round trip).
       const capped = merged.slice(0, TOP_N);
-      for (const r of capped) {
-        await upsertSource({
-          projectId,
-          keywordId: kw.id,
-          title: r.title,
-          url: r.url,
-          sourceType: "Article",
-          contentSnippet: r.snippet,
-        });
-      }
+      await Promise.all(capped.map((r) => upsertSource({
+        projectId,
+        keywordId: kw.id,
+        title: r.title,
+        url: r.url,
+        sourceType: "Article",
+        contentSnippet: r.snippet,
+      })));
       // Only stamp last_discovered_at when at least one variant landed real
       // results — if the very first variant exhausted the budget with zero
       // results, leave the keyword due so the next cycle picks it back up.
@@ -257,11 +257,24 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
     // the Competitor Hub (lib/social-profile.ts). ScraperAPI can't read IG's
     // JS shell anyway — re-scraping them would burn a budget tick per day
     // per profile just to fail the content gate.
+    //
+    // Re-scrape policy (credit control — this loop was the #1 ScraperAPI
+    // burn): competitor-linked pages are LIVING pages, so they re-scrape
+    // daily for change detection. Keyword-discovered articles are immutable
+    // once published — they get an initial-scrape window (fresh rows, plus a
+    // retry path for rows that never yielded content) and are then left
+    // alone. Without this, the ever-growing article archive was re-scraped
+    // in full every day (~7× the free ScraperAPI tier at 2 projects).
     const discoveredSources = (await sql`
       SELECT id, url, competitor_id, keyword_id
       FROM sources
       WHERE project_id = ${projectId}
         AND domain <> 'instagram.com'
+        AND (
+          competitor_id IS NOT NULL
+          OR created_at > now() - interval '3 days'
+          OR cleaned_text IS NULL
+        )
     `) as { id: string; url: string; competitor_id: string | null; keyword_id: string | null }[];
 
     type ScrapeTarget = {

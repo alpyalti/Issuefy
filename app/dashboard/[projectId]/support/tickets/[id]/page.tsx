@@ -19,11 +19,12 @@ export async function generateMetadata({ params }: Ctx) {
 export default async function UserTicketPage({ params }: Ctx) {
   const { projectId, id } = await params;
   const user = await getOrCreateUser();
-  const ticket = await ownedTicket(user.id, id);
+  // Messages only need the ticket id — fetch in parallel with the ownership
+  // check; they're discarded unrendered when the check 404s.
+  const [ticket, messages] = await Promise.all([ownedTicket(user.id, id), getTicketMessages(id)]);
   if (!ticket) notFound();
 
   const basePath = `/dashboard/${projectId}/support`;
-  const messages = await getTicketMessages(id);
   const threadMessages = messages.map((m) => ({
     id: m.id,
     body: m.body,

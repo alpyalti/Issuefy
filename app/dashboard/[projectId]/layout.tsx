@@ -29,9 +29,13 @@ export default async function ProjectLayout({ children, params, searchParams }: 
   const { projectId } = await params;
   const sp = searchParams ? await searchParams : {};
   const user = await getOrCreateUser();
-  await requireActiveSubscription(user.id, { allowUpgradedHint: sp.upgraded === "1" });
 
-  const [project, competitors, keywords, savedCount, newSignalCount, newLeadsCount, ownedProjects, billing] = await Promise.all([
+  // Start the page data immediately and run the subscription gate in parallel
+  // — the gate's reads are request-cached (getSubscriptionStatus /
+  // getBillingContext) so they dedupe with the batch below instead of adding
+  // serial Neon round trips. The catch() guard keeps a data failure from
+  // surfacing as an unhandled rejection when the gate redirects first.
+  const dataP = Promise.all([
     getProject(projectId, user.id),
     getCompetitors(projectId),
     getKeywords(projectId),
@@ -41,6 +45,10 @@ export default async function ProjectLayout({ children, params, searchParams }: 
     getOwnedProjects(user.id),
     getBillingContext(user.id),
   ]);
+  dataP.catch(() => { /* re-thrown at the await below when we get there */ });
+  await requireActiveSubscription(user.id, { allowUpgradedHint: sp.upgraded === "1" });
+
+  const [project, competitors, keywords, savedCount, newSignalCount, newLeadsCount, ownedProjects, billing] = await dataP;
   if (!project) notFound();
 
   const initials =

@@ -31,15 +31,18 @@ export default async function ArchivePage({ params, searchParams }: Ctx) {
   if (!project) notFound();
 
   type DayRow = { summary_date: string; signal_count: number };
+  // One grouped scan of the project's signals joined to the day list — the
+  // previous correlated subquery re-scanned all non-dismissed signals once
+  // PER DAY (unindexable date_trunc = date comparison, up to 90×).
   const days = (await sql`
-    SELECT
-      ds.summary_date::text AS summary_date,
-      (SELECT COUNT(*)::int FROM signals s
-        WHERE s.project_id = ${projectId}
-          AND s.dismissed_at IS NULL
-          AND date_trunc('day', s.created_at AT TIME ZONE 'UTC') = ds.summary_date
-      ) AS signal_count
+    SELECT ds.summary_date::text AS summary_date, COALESCE(sc.n, 0)::int AS signal_count
     FROM daily_summaries ds
+    LEFT JOIN (
+      SELECT date_trunc('day', s.created_at AT TIME ZONE 'UTC')::date AS d, COUNT(*)::int AS n
+      FROM signals s
+      WHERE s.project_id = ${projectId} AND s.dismissed_at IS NULL
+      GROUP BY 1
+    ) sc ON sc.d = ds.summary_date
     WHERE ds.project_id = ${projectId}
     ORDER BY ds.summary_date DESC
     LIMIT 90
@@ -64,22 +67,26 @@ export default async function ArchivePage({ params, searchParams }: Ctx) {
     : days[0].summary_date;
 
   type SummaryRow = { id: string; summary_text: string; updated_at: string };
-  const summaryRows = (await sql`
-    SELECT id, summary_text, updated_at
-    FROM daily_summaries
-    WHERE project_id = ${projectId} AND summary_date = ${chosenDate}
-    LIMIT 1
-  `) as unknown as SummaryRow[];
-  const summary = summaryRows[0];
-
   type SourceRow = { title: string; url: string; domain: string; scraped_at: string };
-  const sources = summary ? (await sql`
-    SELECT s.title, s.url, s.domain, s.scraped_at
-    FROM daily_summary_sources dss
-    JOIN sources s ON s.id = dss.source_id
-    WHERE dss.daily_summary_id = ${summary.id}
-    ORDER BY s.scraped_at DESC
-  `) as unknown as SourceRow[] : [];
+  // Sources join through (project, date) rather than the summary id, so both
+  // reads run in parallel instead of two serial Neon round trips.
+  const [summaryRows, sources] = await Promise.all([
+    sql`
+      SELECT id, summary_text, updated_at
+      FROM daily_summaries
+      WHERE project_id = ${projectId} AND summary_date = ${chosenDate}
+      LIMIT 1
+    ` as unknown as Promise<SummaryRow[]>,
+    sql`
+      SELECT s.title, s.url, s.domain, s.scraped_at
+      FROM daily_summary_sources dss
+      JOIN daily_summaries ds ON ds.id = dss.daily_summary_id
+      JOIN sources s ON s.id = dss.source_id
+      WHERE ds.project_id = ${projectId} AND ds.summary_date = ${chosenDate}
+      ORDER BY s.scraped_at DESC
+    ` as unknown as Promise<SourceRow[]>,
+  ]);
+  const summary = summaryRows[0];
 
   const chosenLabel = new Date(`${chosenDate}T00:00:00Z`).toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC",

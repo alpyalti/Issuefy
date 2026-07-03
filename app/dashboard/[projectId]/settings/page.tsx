@@ -17,13 +17,30 @@ export default async function SettingsPage({ params }: Ctx) {
   const { projectId } = await params;
   const user = await getOrCreateUser();
 
-  // All four reads come from cache() — layout + settings page issue each
-  // underlying SQL only once per request.
-  const [project, competitors, keywords, usage] = await Promise.all([
+  // All four cached reads + the seat count in ONE parallel batch — the seat
+  // query previously ran as an extra serial round trip after this block.
+  const sql = requireSql();
+  const [project, competitors, keywords, usage, seatRows] = await Promise.all([
     getProject(projectId, user.id),
     getCompetitors(projectId),
     getKeywords(projectId),
     getUsage(user.id, currentPeriodStart()),
+    sql`
+      SELECT
+        (SELECT COUNT(DISTINCT pm.user_id)::int
+           FROM project_members pm
+           JOIN projects p ON p.id = pm.project_id
+          WHERE p.user_id = ${user.id})
+        AS members,
+        (SELECT COUNT(*)::int
+           FROM project_invitations pi
+           JOIN projects p ON p.id = pi.project_id
+          WHERE p.user_id = ${user.id}
+            AND pi.accepted_at IS NULL
+            AND pi.canceled_at IS NULL
+            AND pi.expires_at > now())
+        AS pending
+    ` as unknown as Promise<Array<{ members: number; pending: number }>>,
   ]);
   if (!project) notFound();
 
@@ -40,29 +57,10 @@ export default async function SettingsPage({ params }: Ctx) {
 
   // Owner-only Team card. Seat count is per-account (distinct members across
   // all projects this user owns + pending invitations) — mirrors the cap
-  // check enforced server-side on POST /invitations.
+  // check enforced server-side on POST /invitations. Fetched in the batch
+  // above; only rendered for owners.
   const isOwner = project.current_user_role === "owner";
-  let seatsUsed = 0;
-  if (isOwner) {
-    const sql = requireSql();
-    const seatRows = (await sql`
-      SELECT
-        (SELECT COUNT(DISTINCT pm.user_id)::int
-           FROM project_members pm
-           JOIN projects p ON p.id = pm.project_id
-          WHERE p.user_id = ${user.id})
-        AS members,
-        (SELECT COUNT(*)::int
-           FROM project_invitations pi
-           JOIN projects p ON p.id = pi.project_id
-          WHERE p.user_id = ${user.id}
-            AND pi.accepted_at IS NULL
-            AND pi.canceled_at IS NULL
-            AND pi.expires_at > now())
-        AS pending
-    `) as Array<{ members: number; pending: number }>;
-    seatsUsed = (seatRows[0]?.members ?? 0) + (seatRows[0]?.pending ?? 0);
-  }
+  const seatsUsed = isOwner ? (seatRows[0]?.members ?? 0) + (seatRows[0]?.pending ?? 0) : 0;
 
   return (
     <div className="page-wrap" style={{ display: "flex", flexDirection: "column", gap: 28 }}>

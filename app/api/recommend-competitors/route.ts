@@ -7,6 +7,8 @@ import { captureError } from "@/lib/sentry";
 import { resolveMarket } from "@/lib/markets";
 
 export const runtime = "nodejs";
+// One LLM call, but model retries/fallback can push past short defaults.
+export const maxDuration = 60;
 
 /**
  * POST /api/recommend-competitors — given a company profile (collected during

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { sql } from "./db";
 import { sendWelcomeEmail } from "./mailer";
@@ -27,7 +28,9 @@ export interface UserRow {
   updated_at: string;
 }
 
-export async function getOrCreateUser(): Promise<UserRow> {
+// cache(): the [projectId] layout AND every page call this during the same
+// request — without dedupe that's 2× auth() + 2× SELECT users per hard load.
+export const getOrCreateUser = cache(async (): Promise<UserRow> => {
   if (!sql) throw new Error("DATABASE_URL is not configured");
 
   const { userId } = await auth();
@@ -68,7 +71,7 @@ export async function getOrCreateUser(): Promise<UserRow> {
   }
 
   return row;
-}
+});
 
 /**
  * Convenience for routes that need the user row up front. Throws a typed

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 import dynamic from "next/dynamic";
+import portalShot from "@/public/portal.png";
 import "./landing.css";
 import { Icon } from "@/components/icons/Icon";
 import LandingChrome from "@/components/landing/LandingChrome";
@@ -94,8 +96,17 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="frame-body">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/portal.png" alt="Issuefy dashboard" className="frame-shot" />
+              {/* next/image: the raw PNG is ~790 KB — AVIF/WebP transcoding +
+                  responsive srcset cuts the hero payload ~8×. Static import
+                  supplies intrinsic dimensions (no CLS); CSS still sizes it. */}
+              <Image
+                src={portalShot}
+                alt="Issuefy dashboard"
+                className="frame-shot"
+                priority
+                placeholder="blur"
+                sizes="(max-width: 1120px) 100vw, 1060px"
+              />
             </div>
           </div>
         </div>

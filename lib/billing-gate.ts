@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { requireSql } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
@@ -21,7 +22,7 @@ interface GateRow { subscription_status: string | null; role: string }
  * the columns don't exist (e.g. pre-migration dev environments) — callers
  * treat that as "no gate" via the stripe-not-configured short-circuit.
  */
-export async function getSubscriptionStatus(userId: string): Promise<GateRow> {
+export const getSubscriptionStatus = cache(async (userId: string): Promise<GateRow> => {
   try {
     const sql = requireSql();
     const rows = (await sql`
@@ -31,7 +32,7 @@ export async function getSubscriptionStatus(userId: string): Promise<GateRow> {
   } catch {
     return { subscription_status: null, role: "user" };
   }
-}
+});
 
 /**
  * Is this user an EDITOR / VIEWER of any project whose OWNER has an active
@@ -81,15 +82,13 @@ export interface BillingContext {
   isRiderOnly: boolean;
 }
 
-export async function getBillingContext(userId: string): Promise<BillingContext> {
+export const getBillingContext = cache(async (userId: string): Promise<BillingContext> => {
   const sql = requireSql();
   let hasOwnActiveSub = false;
   let memberships: RidingMembership[] = [];
   try {
-    const selfRows = (await sql`
-      SELECT subscription_status FROM users WHERE id = ${userId} LIMIT 1
-    `) as Array<{ subscription_status: string | null }>;
-    const status = selfRows[0]?.subscription_status ?? null;
+    // Reuses the (request-cached) gate row instead of re-reading users.
+    const { subscription_status: status } = await getSubscriptionStatus(userId);
     hasOwnActiveSub = !!status && ACTIVE_STATUSES.has(status);
 
     const rows = (await sql`
@@ -115,7 +114,7 @@ export async function getBillingContext(userId: string): Promise<BillingContext>
     memberships,
     isRiderOnly: !hasOwnActiveSub && memberships.length > 0,
   };
-}
+});
 
 /**
  * Dashboard subscription gate. If Stripe is configured and the user doesn't
@@ -139,7 +138,9 @@ export async function requireActiveSubscription(
   const { subscription_status, role } = await getSubscriptionStatus(userId);
   if (role === "admin") return;
   if (subscription_status && ACTIVE_STATUSES.has(subscription_status)) return;
-  if (await isMemberOfSubscribedProject(userId)) return;
+  // Rider check via the request-cached billing context — dedupes with the
+  // layout's own getBillingContext call (same query set as the old LIMIT 1).
+  if ((await getBillingContext(userId)).memberships.length > 0) return;
   redirect("/upgrade?required=1");
 }
 

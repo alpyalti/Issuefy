@@ -14,11 +14,13 @@ if (dsn) {
     replaysSessionSampleRate: 0.0,
     // No PII leakage from the browser by default.
     sendDefaultPii: false,
-    integrations: [
-      Sentry.replayIntegration({
-        maskAllText: true,
-        blockAllMedia: true,
-      }),
-    ],
   });
+  // Load the Replay bundle (~50 KB gz) OUTSIDE the critical path — statically
+  // registering it ships it in every page's initial JS. Lazy-loading means the
+  // rare error in the first ~1s may miss its replay; that trade is worth it.
+  Sentry.lazyLoadIntegration("replayIntegration")
+    .then((replayIntegration) => {
+      Sentry.addIntegration(replayIntegration({ maskAllText: true, blockAllMedia: true }));
+    })
+    .catch(() => { /* replay is best-effort */ });
 }
