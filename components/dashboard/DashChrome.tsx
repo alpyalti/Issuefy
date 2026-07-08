@@ -73,6 +73,11 @@ export default function DashChrome(props: {
   /** Unworked leads (status='new') — drives the sidebar Leads badge. */
   newLeadsCount?: number;
   ownedProjects: OwnedProject[];
+  /** Today's date label, computed ON THE SERVER (layout). Rendering a
+   *  client-side `new Date().toLocaleDateString(undefined, …)` here caused a
+   *  hydration mismatch whenever the browser's locale/timezone disagreed with
+   *  the server's — the topbar visibly flickered right after paint. */
+  todayLabel?: string;
   /** Caller's role on the currently-open project (Teams Phase 5). Threaded
    *  to every client component below via DashboardRoleProvider. */
   role: DashboardRole;
@@ -92,7 +97,7 @@ export default function DashChrome(props: {
 }
 
 function DashChromeInner({
-  project, user, competitors, keywords, savedCount, newSignalCount, newLeadsCount = 0, ownedProjects, rider, children,
+  project, user, competitors, keywords, savedCount, newSignalCount, newLeadsCount = 0, ownedProjects, todayLabel, rider, children,
 }: {
   project: Project;
   user: User;
@@ -102,6 +107,7 @@ function DashChromeInner({
   newSignalCount: number;
   newLeadsCount?: number;
   ownedProjects: OwnedProject[];
+  todayLabel?: string;
   rider?: AccountRiderInfo;
   children: React.ReactNode;
 }) {
@@ -414,7 +420,7 @@ function DashChromeInner({
           <div className="topbar-title">
             <h1>{title.title}</h1>
             <span className="topbar-date">
-              {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} · {title.sub}
+              {todayLabel ? `${todayLabel} · ` : ""}{title.sub}
             </span>
           </div>
           <div className="topbar-right">

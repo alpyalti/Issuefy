@@ -65,10 +65,18 @@ export default async function ProjectLayout({ children, params, searchParams }: 
     ? { isRiderOnly: true, primaryOwnerName: primary.owner_name, primaryOwnerEmail: primary.owner_email }
     : undefined;
 
+  // Computed server-side with a pinned locale so the SSR HTML and client
+  // hydration render byte-identical text (a client-side toLocaleDateString
+  // with the browser's locale/timezone made the topbar flicker on load).
+  const todayLabel = new Date().toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric", timeZone: "UTC",
+  });
+
   return (
     <DashChrome
       project={{ id: project.id, name: project.name }}
       user={{ name: user.name, email: user.email, initials }}
+      todayLabel={todayLabel}
       competitors={competitors.map((c) => ({ id: c.id, name: c.name, is_active: c.is_active }))}
       keywords={keywords.map((k) => ({ id: k.id, keyword: k.keyword, is_active: k.is_active }))}
       savedCount={savedCount}

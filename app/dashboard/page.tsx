@@ -113,6 +113,9 @@ export default async function DashboardIndex({ searchParams }: { searchParams: S
       rider={rider}
       title="Your projects"
       subtitle="Pick a project to open its dashboard"
+      todayLabel={new Date().toLocaleDateString("en-US", {
+        weekday: "long", month: "long", day: "numeric", timeZone: "UTC",
+      })}
       topbarAction={
         <Link href="/dashboard/new" className="btn btn-accent">
           <Icon name="Add01Icon" size={16} stroke={2} /> New project

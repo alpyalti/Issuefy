@@ -36,6 +36,10 @@ export default function GlobalShell({
   rider,
   title,
   subtitle,
+  /** Today's date label, computed ON THE SERVER by the caller — a client-side
+   *  toLocaleDateString here hydration-mismatched (browser locale/timezone vs
+   *  server) and made the topbar flicker on load. */
+  todayLabel,
   /** Optional right-aligned topbar action (typically a "+ New project"). */
   topbarAction,
   children,
@@ -45,6 +49,7 @@ export default function GlobalShell({
   rider?: AccountRiderInfo;
   title: string;
   subtitle?: string;
+  todayLabel?: string;
   topbarAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -81,7 +86,7 @@ export default function GlobalShell({
             <h1>{title}</h1>
             {subtitle && (
               <span className="topbar-date">
-                {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} · {subtitle}
+                {todayLabel ? `${todayLabel} · ` : ""}{subtitle}
               </span>
             )}
           </div>
