@@ -11,9 +11,31 @@ export default function LandingChrome() {
     /* navbar: flat at top, glass island on scroll */
     const navbar = document.getElementById("navbar");
     if (navbar) {
-      const onScroll = () => navbar.classList.toggle("float", window.scrollY > 40);
+      // Hysteresis — engage the island at 56px, release at 24px. A single
+      // 40px threshold flip-flops while trackpad momentum or rubber-band
+      // scrolling wobbles a few px around it, and each flip restarts a 420ms
+      // multi-property transition: that reads as the header glitching.
+      const ON = 56, OFF = 24;
+      let floating = window.scrollY > ON;
+
+      // Commit the initial state with transitions suppressed, then re-enable
+      // them. Reading offsetWidth forces a synchronous style flush, so the
+      // starting state is painted rather than animated into — a page can
+      // arrive already scrolled via reload, back-nav or an #anchor link.
+      // Done synchronously (not via rAF) because rAF never fires while a tab
+      // is in the background, which would strand the bar in its preload state.
+      navbar.classList.add("nav-preload");
+      navbar.classList.toggle("float", floating);
+      void navbar.offsetWidth;
+      navbar.classList.remove("nav-preload");
+
+      const onScroll = () => {
+        const next = floating ? window.scrollY > OFF : window.scrollY > ON;
+        if (next === floating) return; // touch the DOM only on a real change
+        floating = next;
+        navbar.classList.toggle("float", next);
+      };
       window.addEventListener("scroll", onScroll, { passive: true });
-      onScroll();
       cleanups.push(() => window.removeEventListener("scroll", onScroll));
     }
 

@@ -17,6 +17,7 @@
 }
 .navbar.float{ padding:16px 16px 0; }
 .nav{
+  position:relative;              /* anchors the ::before glass layer */
   pointer-events:auto;
   width:100%; max-width:1200px;
   display:flex; align-items:center; justify-content:space-between; gap:20px;
@@ -25,21 +26,41 @@
   background:transparent;
   border:1px solid transparent;
   box-shadow:none;
-  -webkit-backdrop-filter:none; backdrop-filter:none;
   transition:max-width .42s cubic-bezier(.2,.7,.3,1), padding .42s cubic-bezier(.2,.7,.3,1),
              border-radius .42s cubic-bezier(.2,.7,.3,1), background .3s ease, border-color .3s ease,
-             box-shadow .42s ease, -webkit-backdrop-filter .3s ease, backdrop-filter .3s ease;
+             box-shadow .42s ease;
 }
+/* The frosted backdrop lives on a PERSISTENT pseudo-element and only its
+   opacity animates. Transitioning backdrop-filter itself (none <-> blur) was
+   the flicker: `none` is not interpolatable, so every toggle tore down and
+   rebuilt the backdrop compositing layer — and because the hero's animated
+   WebGL canvas (mix-blend-mode:multiply) sits directly behind this bar, that
+   layer was already being re-sampled every frame. Opacity is GPU-composited
+   and keeps one stable layer. */
+.nav::before{
+  content:""; position:absolute; inset:0; z-index:-1;
+  border-radius:inherit;
+  -webkit-backdrop-filter:blur(22px) saturate(180%);
+  backdrop-filter:blur(22px) saturate(180%);
+  opacity:0;
+  transition:opacity .3s ease, border-radius .42s cubic-bezier(.2,.7,.3,1);
+  pointer-events:none;
+}
+.navbar.float .nav::before{ opacity:1; }
 .navbar.float .nav{
   max-width:960px;
   padding:9px 9px 9px 18px;
   border-radius:20px;
   background:rgba(252,252,250,.66);
-  -webkit-backdrop-filter:blur(22px) saturate(180%);
-  backdrop-filter:blur(22px) saturate(180%);
   border-color:rgba(21,23,26,.08);
   box-shadow:0 12px 38px -12px rgba(21,23,26,.26), 0 3px 10px -4px rgba(21,23,26,.10), inset 0 1px 0 rgba(255,255,255,.6);
 }
+/* First paint after hydration must not animate. The bar is server-rendered
+   flat, so a page arriving already scrolled (reload mid-page, back-nav, or an
+   #anchor link) would otherwise play the full 420ms shrink on arrival. */
+.navbar.nav-preload,
+.navbar.nav-preload .nav,
+.navbar.nav-preload .nav::before{ transition:none !important; }
 .nav-links{ display:flex; align-items:center; gap:28px; }
 .nav-links a{ text-decoration:none; color:var(--ink-2); font-size:14.5px; font-weight:500; transition:color .15s; white-space:nowrap; }
 .nav-links a:hover{ color:var(--ink); }
