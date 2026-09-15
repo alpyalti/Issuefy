@@ -22,3 +22,13 @@ Coordinator must set checkout `success_url` to `/billing/complete?session_id={CH
 Setup is atomic but has no request-id deduplication: a connection loss after a successful commit can leave completion uncertain. The error asks users to check the dashboard before retrying, and owner locking still enforces the project cap. Existing historical orphan rows are deliberately not repaired or removed.
 
 Rollback is a code revert only; retain all saved projects and subscriptions. Reverting activation also requires reverting its coordinated checkout return URL change. Avoid restoring the legacy gate bypass.
+
+## Shared-data completion mode gate (follow-up)
+
+Dependency: integrate IFY-003 commit `cf0a805c6ab9519a87975ba1846ca3a97527a28d` (including shared `lib/billing-mode.ts`) before the completion mode follow-up. This older activation worktree was tested using the exact helper extracted from that commit, without changing or committing a duplicate helper.
+
+The completion page and API use the shared environment/key contract. Unset/`production` requires a live key and live objects. `isolated_test` requires a test key and test objects, and is rejected when `VERCEL_ENV=production`. Unknown configuration, missing/unrecognized key, or missing/mismatched object `livemode` fail closed. No flag was enabled: the existing shared Preview must stay live-only until separate DB/auth/provider resources are provisioned.
+
+Session ID mode and configuration are checked before the API's lazy `requireUser`. After a read-only Clerk identity check, Stripe session and expanded subscription modes are verified before user upsert or account reads. The page no longer calls `getOrCreateUser`; dashboard billing-return hints redirect before its lazy upsert. Provider checks are repeated before readiness, including for admins. An unexpanded subscription fails closed. Unlike the original completion path, missing Stripe configuration no longer bypasses checkout verification; other development/admin entry gates are unchanged.
+
+Follow-up evidence: 22 activation tests and all 158 repository tests pass, including actual shared-helper/API tests for production/Preview mode rejection before side effects, missing object modes, explicit isolated test acceptance, live acceptance, and page/legacy-return ordering. Typecheck and production build pass with the dependency helper available. No live provider/DB calls, migrations, environment configuration changes, or deployment.

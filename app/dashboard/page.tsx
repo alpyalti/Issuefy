@@ -30,12 +30,12 @@ type SearchParams = Promise<{ upgraded?: string; session_id?: string; plan?: str
  * success_url) now goes to a bounded verification wait screen.
  */
 export default async function DashboardIndex({ searchParams }: { searchParams: SearchParams }) {
-  // Lazy user upsert + Resend welcome email (first time only).
-  const user = await getOrCreateUser();
   const sp = await searchParams;
   if (sp.session_id) redirect(`/billing/complete?session_id=${encodeURIComponent(sp.session_id)}`);
   // Legacy returns wait for the webhook too; the hint never grants access.
   if (sp.upgraded === "1") redirect("/billing/complete");
+  // Billing-return mode checks run before this lazy user upsert.
+  const user = await getOrCreateUser();
   if ((sp.plan || sp.billing) && await ensureActiveSubscriptionApi(user.id)) {
     redirect(activationUrl(sp.plan, sp.billing));
   }

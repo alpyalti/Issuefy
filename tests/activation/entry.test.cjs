@@ -29,7 +29,7 @@ test('spoofed legacy upgraded hint goes to verification without bypassing subscr
   const page = loadTs('app/dashboard/page.tsx', {
     'react/jsx-runtime': jsx, 'next/navigation': { redirect }, 'next/link': () => {}, '@/lib/activation': activation,
     '@/lib/billing-gate': { requireActiveSubscription: async () => { gated = true; }, ensureActiveSubscriptionApi: async () => null },
-    '@/lib/clerk-user': { getOrCreateUser: async () => ({ id: 'u' }) }, '@/lib/db': {},
+    '@/lib/clerk-user': { getOrCreateUser: async () => { throw Error('must not upsert a billing return'); } }, '@/lib/db': {},
     '@/components/icons/Icon': {}, '@/components/dashboard/GlobalShell': {}, '../dashboard.css': {},
   }).default;
   await assert.rejects(page({ searchParams: Promise.resolve({ upgraded: '1' }) }), /redirect:\/billing\/complete/);
