@@ -1,3 +1,4 @@
+import { activationUrl } from "@/lib/activation";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { requireSql } from "@/lib/db";
@@ -8,7 +9,7 @@ import "../../auth.css";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Create your account — Issuefy" };
 
-type SearchParams = Promise<{ invite?: string }>;
+type SearchParams = Promise<{ invite?: string; plan?: string; billing?: string }>;
 
 /**
  * Sign-up. If a ?invite=<token> param is present (link came from an
@@ -27,7 +28,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Searc
   // Already signed in? If they followed an invite link, send them to the
   // invite page so the accept button shows. Otherwise off to /dashboard.
   if (userId) {
-    redirect(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/dashboard");
+    redirect(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : activationUrl(sp.plan, sp.billing, "/dashboard"));
   }
 
   let invitationEmail: string | null = null;
@@ -48,7 +49,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Searc
   }
 
   return (
-    <AuthShell secondaryText="Already a member? Sign in →" secondaryHref="/sign-in">
+    <AuthShell secondaryText="Already a member? Sign in →" secondaryHref={activationUrl(sp.plan, sp.billing, "/sign-in")}>
       <SignUpForm inviteToken={invitationEmail ? inviteToken : null} invitationEmail={invitationEmail} />
     </AuthShell>
   );

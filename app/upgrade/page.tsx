@@ -11,12 +11,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Choose your plan — Issuefy" };
 
-type SearchParams = Promise<{ required?: string; canceled?: string; reason?: string }>;
+type SearchParams = Promise<{ required?: string; canceled?: string; reason?: string; plan?: string; billing?: string }>;
 
 /**
  * Plan picker. Three modes:
  *   - "required" → reached because the user has no active subscription. Shown
- *     after onboarding, after a canceled Checkout, or whenever the dashboard
+ *     before onboarding, after a canceled Checkout, or whenever the dashboard
  *     gate kicks in. Stronger copy, no escape hatch.
  *   - "reason=project_cap" / "reason=seat_cap" → user is subscribed but has
  *     hit a plan-cap. Header tells them why they're here.
@@ -74,7 +74,7 @@ export default async function UpgradePage({ searchParams }: { searchParams: Sear
           </Link>
         )}
       </header>
-      <UpgradePicker currentPlan={user.plan} />
+      <UpgradePicker currentPlan={hasActive ? user.plan : null} initialPlan={sp.plan} initialBilling={sp.billing} />
     </div>
   );
 }

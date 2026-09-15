@@ -4,19 +4,20 @@ import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
 import { requireActiveSubscription, getBillingContext } from "@/lib/billing-gate";
 import { Icon } from "@/components/icons/Icon";
-import { EmptyState, EMPTY_STATES } from "@/components/ui/EmptyState";
+import { activationUrl } from "@/lib/activation";
+import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import GlobalShell from "@/components/dashboard/GlobalShell";
 import "../dashboard.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ upgraded?: string }>;
+type SearchParams = Promise<{ upgraded?: string; session_id?: string; plan?: string; billing?: string }>;
 
 /**
  * /dashboard
  *
- * - 0 projects → onboarding empty state (PRD §19 NO_PROJECT)
+ * - 0 projects → onboarding after subscription verification
  * - 1 project  → redirect straight in (most users land here)
  * - 2+ projects → list with last-scrape timestamps inside the GlobalShell
  *   chrome (same sidebar + topbar look as every project page).
@@ -26,13 +27,19 @@ type SearchParams = Promise<{ upgraded?: string }>;
  *
  * Trial gate: users without an active Stripe subscription get bounced to
  * /upgrade?required=1 (lib/billing-gate.ts). `?upgraded=1` (set by Stripe's
- * success_url) bypasses the gate once to absorb the webhook race.
+ * success_url) now goes to a bounded verification wait screen.
  */
 export default async function DashboardIndex({ searchParams }: { searchParams: SearchParams }) {
   // Lazy user upsert + Resend welcome email (first time only).
   const user = await getOrCreateUser();
   const sp = await searchParams;
-  await requireActiveSubscription(user.id, { allowUpgradedHint: sp.upgraded === "1" });
+  if (sp.session_id) redirect(`/billing/complete?session_id=${encodeURIComponent(sp.session_id)}`);
+  // Legacy returns wait for the webhook too; the hint never grants access.
+  if (sp.upgraded === "1") redirect("/billing/complete");
+  if ((sp.plan || sp.billing) && await ensureActiveSubscriptionApi(user.id)) {
+    redirect(activationUrl(sp.plan, sp.billing));
+  }
+  await requireActiveSubscription(user.id);
 
   const sql = requireSql();
   // Membership-aware list (Teams Phase 2). Includes both owned projects and
@@ -52,15 +59,7 @@ export default async function DashboardIndex({ searchParams }: { searchParams: S
   }>;
 
   if (projects.length === 0) {
-    return (
-      <div className="page-wrap">
-        <header style={{ marginBottom: 36 }}>
-          <h1 style={{ fontSize: 32, fontFamily: "var(--serif)" }}>Welcome to Issuefy</h1>
-          <p className="muted" style={{ marginTop: 8 }}>Set up your first project to start receiving daily market briefs.</p>
-        </header>
-        <EmptyState {...EMPTY_STATES.NO_PROJECT} />
-      </div>
-    );
+    redirect(activationUrl(sp.plan, sp.billing, "/onboarding"));
   }
 
   if (projects.length === 1) {
