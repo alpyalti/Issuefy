@@ -40,8 +40,9 @@ export default function SignInForm() {
         await setActive({ session: attempt.createdSessionId });
         router.push(activationUrl(params.get("plan"), params.get("billing"), "/dashboard"));
       } else {
-        // Edge case (2FA etc.) — push them through Clerk's hosted flow.
-        router.push("/sign-in/continue");
+        // Clerk completes pending verification (including second factors) using
+        // the existing client attempt; no session is activated here.
+        router.push(activationUrl(params.get("plan"), params.get("billing"), "/sign-in/continue"));
       }
     } catch (err) {
       const e = err as { errors?: ClerkAPIError[] };
