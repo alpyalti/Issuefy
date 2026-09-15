@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 
 /* Ports the landing page's vanilla interactions (Landing Page.html <script> +
    borderglow.js). Returns null; attaches listeners to the server-rendered DOM. */
 export default function LandingChrome() {
-  useEffect(() => {
-    const cleanups: Array<() => void> = [];
-
+  // Scroll restoration can precede hydration. Apply the restored header state
+  // before React paints this commit; a passive effect can flash the flat bar.
+  useLayoutEffect(() => {
     /* navbar: flat at top, glass island on scroll */
     const navbar = document.getElementById("navbar");
     if (navbar) {
@@ -36,8 +36,12 @@ export default function LandingChrome() {
         navbar.classList.toggle("float", next);
       };
       window.addEventListener("scroll", onScroll, { passive: true });
-      cleanups.push(() => window.removeEventListener("scroll", onScroll));
+      return () => window.removeEventListener("scroll", onScroll);
     }
+  }, []);
+
+  useEffect(() => {
+    const cleanups: Array<() => void> = [];
 
     /* product mockup: scroll-driven 3D tilt that flattens as it enters view */
     const product = document.getElementById("product");

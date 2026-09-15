@@ -200,7 +200,7 @@ p{ margin:0; }
   cursor:pointer;
   line-height:1;
 }
-.source:hover{ border-color:var(--accent); box-shadow:0 4px 14px -6px rgba(45,91,227,.4); transform:translateY(-1px); }
+.source:hover{ border-color:var(--accent); box-shadow:0 4px 14px -6px rgba(45,91,227,.4); }
 .source .favicon{
   width:22px; height:22px; border-radius:6px; flex:none;
   display:flex; align-items:center; justify-content:center;
