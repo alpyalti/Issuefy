@@ -2,6 +2,8 @@ import { z } from "zod";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { requireUser } from "@/lib/clerk-user";
 import { requireSql } from "@/lib/db";
+import { stripe } from "@/lib/stripe";
+import { accountDeletionMode, deleteAccount, AccountDeletionError } from "@/lib/account-deletion";
 import { json, parseJson } from "@/lib/api";
 
 export const runtime = "nodejs";
@@ -32,31 +34,26 @@ export async function PATCH(req: Request) {
   return json({ user: rows[0] });
 }
 
-/**
- * DELETE /api/account — fully delete the account.
- *
- * Two-phase delete:
- *   1. Delete the row from Postgres — `ON DELETE CASCADE` on every FK to users
- *      cleans up projects, competitors, keywords, sources, signals, daily
- *      summaries, scrape_jobs, usage_counters.
- *   2. Delete the Clerk user via the Backend API. If this fails (network),
- *      we've already removed our DB state — Clerk leak is acceptable
- *      (admin can clean up via Clerk dashboard).
+/** DELETE remains callable while pending: requireUser deliberately denies a
+ * tombstoned account. Authentication identifies ONLY the caller's own record.
  */
 export async function DELETE() {
-  const user = await requireUser();
-  if (user instanceof Response) return user;
-  const { userId: clerkUserId } = await auth();
-  if (!clerkUserId) return new Response("Unauthorized", { status: 401 });
-  const sql = requireSql();
-  await sql`DELETE FROM users WHERE id = ${user.id}`;
+  try {
+    // Before auth/lazy upsert, and before any database/provider mutation.
+    accountDeletionMode();
+  } catch {
+    return json({ error: "Account deletion configuration is invalid.", code: "deletion_environment_invalid" }, { status: 503 });
+  }
+  const { userId } = await auth();
+  if (!userId) return new Response("Unauthorized", { status: 401 });
+  if (!stripe) return json({ error: "Billing is unavailable.", code: "deletion_billing_unavailable" }, { status: 503 });
   try {
     const client = await clerkClient();
-    await client.users.deleteUser(clerkUserId);
-  } catch (e) {
-    // Logged but not fatal — DB is the source of truth.
-    // eslint-disable-next-line no-console
-    console.warn("[account-delete] Clerk delete failed:", e);
+    return json(await deleteAccount(userId, stripe, client.users));
+  } catch (error) {
+    if (error instanceof AccountDeletionError) {
+      return json({ ok: false, status: "pending", error: error.message, code: error.code }, { status: error.status });
+    }
+    return json({ ok: false, status: "pending", error: "Account deletion is not complete. Retry or contact support.", code: "deletion_retry" }, { status: 503 });
   }
-  return json({ ok: true });
 }

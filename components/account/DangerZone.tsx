@@ -17,13 +17,18 @@ export default function DangerZone({ email }: { email: string }) {
     if (!confirmed || pending) return;
     setPending(true);
     try {
-      await fetch("/api/account", { method: "DELETE" });
+      const response = await fetch("/api/account", { method: "DELETE" });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.ok !== true || result?.status !== "completed") {
+        throw new Error(result?.error || "Account deletion is not complete. Retry or contact support.");
+      }
       // Sign out locally + go home. The DELETE already removed the Clerk user;
       // signOut just clears the local session cookie.
       await clerk.signOut({ redirectUrl: "/" });
-    } catch {
+    } catch (error) {
       setPending(false);
-      alert("Couldn't delete your account. Try again or contact support.");
+      alert(error instanceof Error ? error.message : "Couldn't delete your account. Try again or contact support.");
+      return; // Keep the authenticated page available for a deletion retry.
     }
     router.refresh();
   }
@@ -33,7 +38,8 @@ export default function DangerZone({ email }: { email: string }) {
       <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, color: "var(--neg)", marginBottom: 8 }}>Danger zone</h2>
       <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.5, maxWidth: 540 }}>
         Deleting your account removes all your projects, signals, sources, and daily briefs — permanently.
-        Your subscription will be canceled. This action cannot be undone.
+        Your subscription will be canceled immediately. Deletion does not issue a refund,
+        prorated credit, or new final invoice. This action cannot be undone.
       </p>
       {!open ? (
         <button
