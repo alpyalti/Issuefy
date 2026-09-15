@@ -1,7 +1,8 @@
+import { configuredEnv } from "./lib/env";
 // Sentry — Node.js runtime config (route handlers, server actions).
 import * as Sentry from "@sentry/nextjs";
 
-const dsn = process.env.SENTRY_DSN;
+const dsn = configuredEnv(process.env.SENTRY_DSN);
 
 if (dsn) {
   Sentry.init({

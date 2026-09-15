@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { loadTs } = require("../helpers/load-ts.cjs");
-const { checkCronSecret, checkInternalSecret } = loadTs("lib/cron-auth.ts");
+const { checkCronSecret, checkInternalSecret } = loadTs("lib/cron-auth.ts", { "./env": loadTs("lib/env.ts") });
 
 for (const [key, guard] of [
   ["CRON_SECRET", checkCronSecret],

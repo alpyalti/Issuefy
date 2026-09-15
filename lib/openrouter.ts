@@ -1,3 +1,4 @@
+import { configuredEnv } from "./env";
 /**
  * OpenRouter client — single low-cost primary model with a fallback (PRD §10.8).
  *
@@ -23,7 +24,7 @@ const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const TIMEOUT_MS = 45_000;
 
 function ensureKey(): string {
-  const k = process.env.OPENROUTER_API_KEY;
+  const k = configuredEnv(process.env.OPENROUTER_API_KEY);
   if (!k) throw new Error("OPENROUTER_API_KEY is not configured");
   return k;
 }
@@ -61,8 +62,8 @@ export interface ChatJsonResult<T> {
  */
 export async function chatJson<T>(opts: ChatJsonOptions<T>): Promise<ChatJsonResult<T>> {
   const key = ensureKey();
-  const primary = process.env.OPENROUTER_MODEL_PRIMARY || "google/gemini-2.0-flash-001";
-  const fallback = process.env.OPENROUTER_MODEL_FALLBACK || "openai/gpt-4o-mini";
+  const primary = configuredEnv(process.env.OPENROUTER_MODEL_PRIMARY) || "google/gemini-2.0-flash-001";
+  const fallback = configuredEnv(process.env.OPENROUTER_MODEL_FALLBACK) || "openai/gpt-4o-mini";
 
   const body = {
     model: primary,

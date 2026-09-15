@@ -1,3 +1,4 @@
+import { configuredEnv } from "./env";
 /**
  * ScraperAPI — standard URL endpoint + Google Search Structured Data (SERP).
  *
@@ -17,7 +18,7 @@
 
 import { fetchWithTimeout as fetchWithTimeoutMs } from "./fetch";
 
-const KEY = process.env.SCRAPERAPI_KEY || "";
+const KEY = configuredEnv(process.env.SCRAPERAPI_KEY) || "";
 const TIMEOUT_MS = 25_000;
 
 function ensureKey(): string {

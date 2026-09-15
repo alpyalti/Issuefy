@@ -1,3 +1,4 @@
+import { configuredEnv } from "./env";
 import { Resend } from "resend";
 import { buildDailyBriefEmail, type DailyBriefEmailInput } from "./daily-brief-email";
 import { buildInvitationEmail, type InvitationEmailInput } from "./invitation-email";
@@ -27,8 +28,8 @@ import {
  */
 type SendArgs = { to: string; subject: string; html: string; text?: string };
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM = process.env.RESEND_FROM_EMAIL || "Issuefy <hello@issuefy.app>";
+const RESEND_API_KEY = configuredEnv(process.env.RESEND_API_KEY);
+const FROM = configuredEnv(process.env.RESEND_FROM_EMAIL) || "Issuefy <hello@issuefy.app>";
 
 const client = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
