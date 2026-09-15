@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic";
  *
  * Fast SELECT 1 against Neon — used by external uptime monitors so we notice
  * a DB outage before customers do. No auth (probes need to hit it without
- * credentials), no PII in the response. Always returns 200 with a status
- * field so monitors can distinguish "endpoint reachable, DB down" from
- * "endpoint unreachable, total outage".
+ * credentials), no PII in the response. Returns 503 when the database is
+ * unavailable so HTTP uptime monitors detect the failure. Provider error
+ * details are never included in this public response.
  *
  * Caveats:
  *   - `db: "ok"` only confirms the connection is alive — not that schema is
@@ -23,13 +23,12 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const startedAt = Date.now();
   let dbStatus: "ok" | "error" = "error";
-  let dbError: string | undefined;
   try {
     const sql = requireSql();
     await sql`SELECT 1`;
     dbStatus = "ok";
-  } catch (e) {
-    dbError = e instanceof Error ? e.message : "unknown";
+  } catch {
+    // Database errors can contain credentials, hostnames or query details.
   }
   const durationMs = Date.now() - startedAt;
   return json({
@@ -37,6 +36,8 @@ export async function GET() {
     db: dbStatus,
     durationMs,
     ts: new Date().toISOString(),
-    ...(dbError ? { error: dbError } : {}),
+  }, {
+    status: dbStatus === "ok" ? 200 : 503,
+    headers: { "cache-control": "no-store" },
   });
 }
