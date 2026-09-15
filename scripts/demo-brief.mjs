@@ -38,7 +38,7 @@ export function buildEnvironment(staging, providers) {
   check(providers.OPENROUTER_MODEL_PRIMARY === PIN.primary && providers.OPENROUTER_MODEL_FALLBACK === PIN.fallback, 'Explicit configured model IDs must match pins');
   check(staging.BETA_STARTER_LIMITS !== 'false', 'Demo requires existing beta Starter limits');
   // Reconstruct URL, excluding all alternative-target/libpq options.
-  url.search = '?sslmode=require';
+  url.search = '?sslmode=verify-full';
   return {
     DATABASE_URL: url.toString(), STRIPE_SECRET_KEY: staging.STRIPE_SECRET_KEY,
     BILLING_DATA_ENVIRONMENT: 'isolated_test', VERCEL_ENV: 'preview',
@@ -94,7 +94,12 @@ export function validateSnapshot(s, market) {
   check(u.email_brief_enabled === false, 'Owner email brief must be disabled');
   check(s.owner_member === true, 'Owner membership required');
   check(market.matched && market.langs.length === 1 && market.langs[0] === 'en', 'Known English-only market required');
-  check(noSocials(p.company_socials) && cs.every(c => noSocials(c.socials)), 'Social monitoring must be empty');
+  check(noSocials(p.company_socials) && cs.every(c => {
+    if (c.socials == null) return true;
+    if (typeof c.socials !== 'object' || Array.isArray(c.socials)) return false;
+    const { website, ...socials } = c.socials;
+    return (!website || website === c.website_url) && noSocials(socials);
+  }), 'Only the verified competitor website may be configured in social links');
   check(cs.length === 2 && cs.every(c => c.is_active) && cs.map(c => c.name.toLowerCase()).sort().join(',') === 'asana,atlassian', 'Expected two active Atlassian/Asana competitors');
   for (const c of cs) {
     let url; try { url = new URL(c.website_url); } catch { throw new Error('Invalid competitor URL'); }

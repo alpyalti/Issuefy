@@ -23,6 +23,7 @@ test('environment rejects alternate DB targets/options, live/disabled billing an
   assert.equal(safe.RESEND_API_KEY, undefined);
   assert.equal(safe.R2_ENABLED, 'false');
   assert.equal(safe.APP_URL, 'http://localhost:3001');
+  assert.equal(new URL(safe.DATABASE_URL).searchParams.get('sslmode'), 'verify-full');
   assert.equal(safe.OPENROUTER_MODEL_PRIMARY, PIN.fallback);
   assert.equal(safe.OPENROUTER_MODEL_FALLBACK, PIN.fallback);
   for (const override of [
@@ -39,6 +40,11 @@ test('environment rejects alternate DB targets/options, live/disabled billing an
 
 test('fresh pinned shape required; unsafe state fails closed', () => {
   assert.equal(validateSnapshot(fixture(), market).expectedRequests.scrapeAtMost, 11);
+  const websiteOnly = fixture();
+  websiteOnly.competitors[0].socials = { website: websiteOnly.competitors[0].website_url };
+  assert.equal(validateSnapshot(websiteOnly, market).expectedRequests.scrapeAtMost, 11);
+  websiteOnly.competitors[0].socials.website = 'https://other.example';
+  assert.throws(() => validateSnapshot(websiteOnly, market));
   for (const mutate of [
     s => s.owner.email = 'other@example.com', s => s.owner.role = 'admin', s => s.owner.email_brief_enabled = true,
     s => s.owner.subscription_status = 'canceled', s => s.owner_member = false,
