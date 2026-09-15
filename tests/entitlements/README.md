@@ -42,9 +42,47 @@ No schema or production data changes. Revert the commit to roll back.
   to the worker increment. Draft replies and reclassification operate on existing
   leads, so they require owner billing but remain available while daily scans are
   paused. Discovery/scan workers still require an active project.
-- Project/watchlist/invitation/refresh concurrency races and source/signal quota
-  accounting remain deferred. This increment does not claim atomic quotas.
+- The first increment deferred quota races. The atomic follow-up below addresses
+  project refresh and invitations; project/watchlist and source/signal accounting
+  remain deferred.
 - Cancellation during an already-running pipeline is not interrupted; entitlement
   is rechecked when each guarded entry point starts.
 - Plan tests explicitly disable BETA_STARTER_LIMITS. Existing default beta mode
   still applies Starter limits to every plan unless configured false.
+
+## Atomic refresh and invitation increment
+
+`atomic-claims.test.cjs` starts a disposable PostgreSQL server on a private Unix
+socket, loads the relevant production table DDL, and runs competing transactions
+on separate sessions. It never reads `DATABASE_URL`. Set `ISSUEFY_TEST_PG_BIN` to
+an installed PostgreSQL binary directory (default local Homebrew PostgreSQL 17).
+Without the binaries this integration test is explicitly skipped; unit tests
+still run. Temporary clusters are stopped and removed in `finally`.
+
+Validated locally: **147 tests pass, none skipped**, including eleven PostgreSQL
+subtests; TypeScript and diff checks pass. Real lock waits are observed through
+`pg_stat_activity`; these are not mocked locking tests. Provider execution is
+mocked in the composed route/worker case.
+
+- Refresh locks the owner before reading cooldown and account usage in subsequent
+  READ COMMITTED statements. The transaction inserts one pending manual job and
+  stamps cooldown. The worker consumes that exact row once, so pending, running,
+  historical and failed jobs count exactly once toward the rolling 24-hour cap.
+- A paused refresh remains a successful no-op and reserves nothing. If the owner
+  lapses or the project pauses after reservation, worker entry rejects and the
+  route marks the pending job failed. Accepted attempts that fail remain counted.
+  A handler crash before worker start leaves a counted pending row; automatic
+  recovery and expiry/retry policy belong to the durable-worker increment.
+- Invites lock the same owner before member, duplicate and seat checks, then
+  insert. Acceptance holds the owner lock while replacing a pending invitation
+  with membership, and locks/rechecks the token against cancellation and expiry.
+  Membership and token updates roll back together on failure. Email is sent only
+  after reservation commits, outside the transaction.
+- NO KEY UPDATE serializes quota transactions while permitting unrelated foreign
+  key checks. No transaction is held across provider calls or email delivery.
+- No migration or backfill is required. Rollback is a code revert; existing pending
+  reservations remain preserved and counted by the old manual-job quota query.
+- This is not a global execution lease: cron and separately authorized admin
+  refreshes can still overlap. Social/keyword refresh cooldowns, project/watchlist
+  creation caps, and source/signal accounting remain out of scope. The latter still
+  misses discovery source accounting and atomic signal-cap enforcement.

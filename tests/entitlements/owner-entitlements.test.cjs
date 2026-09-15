@@ -24,6 +24,8 @@ function setup({ status = 'active', ownerPlan = 'starter', callerPlan = 'agency'
     if (query.includes('AS "ownerId"')) return missing ? [] : [{ ownerId: 'target-owner', plan: ownerPlan, subscription_status: status, role: ownerRole, isActive: active }];
     if (query.includes('subscription_status, role FROM users')) return [{ subscription_status: callerStatus, role: admin ? 'admin' : 'user' }];
     if (query.includes('SELECT p.*, pm.role')) return ['owner', 'editor'].includes(callerRole) ? [{ id: 'project', current_user_role: callerRole, last_manual_refresh_at: null }] : [];
+    if (query.includes('SELECT u.id, u.plan')) return [{ id: 'target-owner', plan: ownerPlan }];
+    if (query.includes('SELECT p.last_manual_refresh_at')) return [{ cooling_down: false }];
     if (query.includes('COUNT(*)')) return [{ n: count }];
     if (query.includes('INSERT')) return [{ id: 'created' }];
     if (query.includes('UPDATE projects')) return [];
@@ -35,7 +37,12 @@ function setup({ status = 'active', ownerPlan = 'starter', callerPlan = 'agency'
   });
   const api = load('lib/api.ts', { zod: {}, './db': { sql } });
   let ran = false;
+  const claims = load('lib/entitlement-claims.ts', {
+    './db': { withTx: async fn => fn({ query: async (query, values = []) => ({ rows: await sql([query], ...values) }) }) },
+    './usage': load('lib/usage.ts', {}), './api': api,
+  });
   const mocks = {
+    '@/lib/entitlement-claims': claims,
     '@/lib/clerk-user': { requireUser: async () => caller }, '@/lib/billing-gate': billing,
     '@/lib/db': { requireSql: () => sql }, '@/lib/api': { ...api, parseJson: async () => ({ keyword: 'test', website_url: 'https://example.test', ...body }) },
     '@/lib/usage': load('lib/usage.ts', { './db': { requireSql: () => sql } }),
