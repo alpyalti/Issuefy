@@ -17,7 +17,7 @@ Rollback reference: prior Vercel artifact `9KYEmRfmshDG4HTDPidQ9DHGKfrY`. Prior 
 
 ## Stabilization branch: implemented, not released to production
 
-`codex/issuefy-stabilization` at `56c0207` includes recoverable webhook/outbox processing (migration 0016), serialized recoverable checkout (0018), strict live/test separation, checkout-first activation, atomic project setup, owner entitlements, refresh reservations and invitation-seat serialization, durable account deletion and identity synchronization (0020), full-response HTTP timeouts, metadata-only source preservation, migration environment handling and a generic no-store health failure response.
+`codex/issuefy-stabilization` (draft PR https://github.com/alpyalti/Issuefy/pull/2) includes recoverable webhook/outbox processing (migration 0016), serialized recoverable checkout (0018), strict live/test separation, checkout-first activation, atomic project setup, owner entitlements, refresh reservations and invitation-seat serialization, durable account deletion and identity synchronization (0020), full-response HTTP timeouts, metadata-only source preservation, migration environment handling and a generic no-store health failure response.
 
 Latest billing/account corrections: `2ac7e91` attributes notices to the locked account and recognizes correct-mode deletion tombstones; `ec87406` reproduces shared-email suppression. Independent review PASS with migration 0020 and lifecycle code prerequisites. Immediate account cancellation uses no proration or invoice; actual production subscriptions have not been canceled. Stripe contact-email synchronization remains deferred.
 
@@ -32,7 +32,7 @@ Latest billing/account corrections: `2ac7e91` attributes notices to the locked a
 
 Created Neon schema-only branch `issuefy-staging` and blank database `issuefy_staging`. Initial copied-schema users/projects counts were zero. Applied the complete migration chain plus 0020 successfully to the blank staging database. No production migration or customer-data copy performed.
 
-Development Clerk keys and Stripe test products/prices are stored with staging credentials in ignored mode-0600 environment files. Local synthetic Clerk signup reached the checkout-first upgrade page with plan/cadence preserved. Real Stripe SANDBOX Checkout displayed the correct 14-day trial and monthly price. Trial submission and full onboarding are not yet validated.
+Development Clerk keys and Stripe test products/prices are stored with staging credentials in ignored mode-0600 environment files. Local synthetic Clerk signup reached the checkout-first upgrade page with plan/cadence preserved. Real Stripe SANDBOX Checkout displayed the correct 14-day trial and monthly price. Trial submission, a signed local relay of the actual checkout event (HTTP 200), and full onboarding now pass. The synthetic demo dashboard is created with two competitors and three keywords. Actual remote webhook transport remains unverified.
 
 User explicitly approved uploading staging database credentials, development Clerk keys and Stripe test keys ONLY to the `codex/issuefy-stabilization` Vercel Preview branch. Production was deselected in the environment dialog. Import has NOT succeeded: Chrome extension file upload requires Allow access to file URLs. Existing preview continues to inherit production configuration; do not perform state-changing tests there.
 
@@ -48,6 +48,10 @@ User explicitly approved uploading staging database credentials, development Cle
 
 Trello remains the delivery tracker: https://trello.com/b/bm7BA77r/issuefy. Updated billing/account, entitlement, source and QA cards with this batch. Account and entitlement increments are in Review & Test. IFY-015 landing-page header flickering is saved in To Do: https://trello.com/c/GYW1zsRX.
 
+Header restored-scroll hydration fix integrated as `b504436`; targeted browser fixture and project typecheck pass. Full-page pricing anchor rendered the floating header correctly; pre-hydration cold-load/WebGL flicker remains unverified.
+
+The user requested a demo account and recurring signal quality evaluation. Demo project and 11:00 Dubai daily follow-up are created; see DEMO-QUALITY-PLAN.md and DEMO-QUALITY-LOG.md. First real ingestion is being prepared, not yet scored.
+
 Broader durable pipeline jobs, source versioning/fair analysis backlog, signal/source quota accounting, citation/storage retention, accessibility and hosted end-to-end QA remain open. No new feature scope has been approved; present feature ideas after stabilization.
 
 ## Task IDs
@@ -59,3 +63,5 @@ Broader durable pipeline jobs, source versioning/fair analysis backlog, signal/s
 - Independent QA: 01a0a5b1-0b48-7451-a9e9-5e08a794c890
 - Checkout: 01a0a5b5-8fca-7cc1-b04c-06054d4b08ca
 - Timeout (Astra low): 01a0a5b7-36f5-7e22-88c2-636ecb094e32
+
+Main baseline merged into stabilization as bb55774. Only duplicate CI additions conflicted; resolved tree was byte-identical to the already tested stabilization tree. No production merge performed.
