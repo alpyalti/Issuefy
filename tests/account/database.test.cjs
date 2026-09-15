@@ -218,3 +218,28 @@ sqlTest('ambiguous legacy recipient blocks deletion instead of deleting another 
     assert.equal((await db.query('SELECT * FROM account_deletions')).rows.length, 0); assert.equal(p.calls.length, 0);
   });
 });
+
+sqlTest('webhook attribution suppresses a deleted account notice without suppressing another account sharing its email', async t => {
+  const db = await setup(t); const { api } = adapter(db); const p = providers();
+  await db.query('DELETE FROM billing_notification_outbox');
+  await db.query(`INSERT INTO users(id,clerk_user_id,email,plan,subscription_status,stripe_customer_id,stripe_subscription_id)
+    VALUES($1,'clerk-other','old@example.test','starter','active','cus_other','sub_other')`, [otherId]);
+  p.fail.clerk = true;
+  await isolated(async () => {
+    await assert.rejects(api.deleteAccount('clerk-synthetic', p.stripe, p.identity));
+    const { processBillingEvent } = loadTs('lib/billing/webhook.ts');
+    const subscription = (id, customer) => ({ id, customer, livemode: false, status: 'canceled', created: 100,
+      cancel_at_period_end: false, items: { data: [{ price: { id: 'price_starter' }, current_period_end: 300 }] } });
+    const deleted = subscription('sub_synthetic', 'cus_synthetic');
+    const other = subscription('sub_other', 'cus_other');
+    const apply = (eventId, sub) => processBillingEvent({ id: eventId, type: 'customer.subscription.deleted', livemode: false, data: { object: sub } }, {
+      transaction: fn => db.transaction(fn), retrieveSubscription: async () => sub, planFromPriceId: () => 'starter',
+    });
+    await apply('evt_deleted_owner', deleted);
+    assert.equal((await db.query("SELECT * FROM billing_notification_outbox WHERE event_id='evt_deleted_owner'")).rows.length, 0);
+    await apply('evt_other_owner', other);
+    const notices = (await db.query("SELECT * FROM billing_notification_outbox WHERE event_id='evt_other_owner'")).rows;
+    assert.equal(notices.length, 1); assert.equal(notices[0].account_user_id, otherId);
+    assert.equal(notices[0].recipient, 'old@example.test');
+  });
+});

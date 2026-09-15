@@ -2,6 +2,8 @@
 
 ## Dependencies and rollout
 
+Webhook integration dependency: `1de6202170c218df1ec136830500a087fe37f1c9` supplies explicit notification ownership and acknowledges pending/completed deletion tombstones. Apply it with the account lifecycle and migration 0020.
+
 Base: `292a757a0e5b79ed313ae5ae0b1d43b18ee3a54e`, including integrated IFY-003 webhook/outbox, shared `billing-mode`, IFY-004 checkout journal, and activation/entitlement changes. Apply additive migration `0020_account_deletion.sql` **before** deploying this code. The migration depends on `0016` and `0018`; it does not delete or backfill existing accounts. It also fixes the contradictory support-author `NOT NULL` / `ON DELETE SET NULL` constraint so another user's support messages survive author deletion.
 
 Current production and shared Preview must keep `BILLING_DATA_ENVIRONMENT` unset or `production`, with live Stripe and Clerk keys. `isolated_test` permits test keys only outside `VERCEL_ENV=production`, after separate database, Clerk and Stripe/webhook resources have been provisioned. The marker is an operator assertion, not proof of isolation. No environment was changed and no provider was called during implementation.
@@ -47,7 +49,7 @@ Rollback: retain migration `0020`, tombstones and snapshots; disable account del
 
 Only the verified **primary** Clerk email can replace the application's email; no first-address or fabricated-email fallback. A monotonic Clerk profile version prevents an older concurrent read from reverting a newer email. Custom names are preserved. Only the request that inserts a new user sends the welcome email.
 
-Pending billing notices have an account attribution column populated by a trigger for unambiguous recipients. Account deletion suppresses future attributed notices and removes that account's pending notices. Verified email changes remove stale pending notices rather than changing the payload attached to an existing Resend idempotency key. Already dispatched mail cannot be recalled. Ambiguous legacy recipients shared by multiple users block the affected deletion/email change for reconciliation, rather than modifying another account's notices. Previously sent notices are retained. Stripe customer contact-email synchronization is not part of this application-email change.
+Future webhook notices must explicitly populate account_user_id from the already correlated account.id; this is a required integration fix for accounts sharing an email. The trigger only provides a fallback for unambiguous legacy producers. Account deletion suppresses future attributed notices and removes that account's pending notices. Verified email changes remove stale pending notices rather than changing the payload attached to an existing Resend idempotency key. Already dispatched mail cannot be recalled. Ambiguous legacy recipients shared by multiple users block the affected deletion/email change for reconciliation, rather than modifying another account's notices. Previously sent notices are retained. Stripe customer contact-email synchronization is not part of this application-email change.
 
 ## Validation
 
@@ -60,8 +62,8 @@ npm run build
 
 Database tests launch a **new private local PostgreSQL server**, use a unique short `/tmp` Unix socket directory, disable TCP, apply the actual migration chain, insert only synthetic users, exercise real concurrent transactions/locks/triggers, stop the server, and remove only that generated test directory. They never accept `DATABASE_URL`. Set `ISSUEFY_TEST_PG_BIN` to local PostgreSQL binaries if they are not installed at `/opt/homebrew/opt/postgresql@17/bin`; otherwise database tests explicitly skip. The account fixture sets LC_ALL=C for PostgreSQL startup because the credential-sanitizing test runner otherwise removes the locale required by macOS PostgreSQL. Its private socket path is also kept short.
 
-Coverage includes Stripe/Clerk failures and lost responses; expiration/completion races; multiple subscriptions and trial evidence; lock loss; false-success UI handling; wrong-mode configuration; actual migration reruns; pending and completed identity resurrection; real deletion/checkout/registration contention; final transaction rollback; verified/unverified/stale email profiles; welcome-email concurrency; unrelated support-message preservation; and ambiguous legacy notifications.
+Coverage includes Stripe/Clerk failures and lost responses; expiration/completion races; multiple subscriptions and trial evidence; lock loss; false-success UI handling; wrong-mode configuration; actual migration reruns; pending and completed identity resurrection; real deletion/checkout/registration contention; final transaction rollback; verified/unverified/stale email profiles; welcome-email concurrency; unrelated support-message preservation; ambiguous legacy notifications, and shared-email webhook attribution (deleted owner suppressed while the other owner remains deliverable).
 
-The current webhook missing-account branch will retry late cancellation events after the user row is removed; the webhook owner should acknowledge verified tombstoned-customer events using the retained mapping in a follow-up. Pending-account events are already suppressed safely by the database guards.
+The required webhook follow-up acknowledges correctly correlated pending/completed deletion markers without changing billing or queuing mail. Unknown missing accounts and mismatched modes still fail for reconciliation. Database guards provide additional protection from stale writers.
 
 Hosted Neon connection-loss behavior and live Clerk/Stripe integration remain isolated-staging release checks. No real account reads, cancellations, deletions, emails, charges, migrations, pushes or deployments were performed.
