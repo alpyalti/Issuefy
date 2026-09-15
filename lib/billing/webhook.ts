@@ -57,6 +57,21 @@ export async function processBillingEvent(event: Stripe.Event, deps: Dependencie
     if (ref) {
       const accounts = await client.query("SELECT id, email, plan, stripe_subscription_id, subscription_status FROM users WHERE stripe_customer_id = $1 FOR UPDATE", [ref.customer]);
       const account = accounts.rows[0] as Account | undefined;
+      // Migration 0020 retains deletion markers after the users row is gone.
+      // Read AFTER locking the account: deletion initialization also locks it,
+      // so a committed pending marker is visible before any reconciliation.
+      // Do not lock the marker here: deletion finish locks marker -> users.
+      const deletions = await client.query(`SELECT livemode FROM account_deletions
+        WHERE stripe_customer_id = $1 OR user_id = $2`, [ref.customer, account?.id ?? null]);
+      if (deletions.rows.length) {
+        if (deletions.rows.some(row => row.livemode !== event.livemode)) {
+          throw new Error("Account deletion billing mode mismatch");
+        }
+        // Pending and completed deletion both prohibit billing/mail changes.
+        // Commit only the receipt, keeping retry/duplicate semantics intact.
+        await client.query("UPDATE stripe_webhook_events SET completed_at = now() WHERE id = $1", [event.id]);
+        return "processed";
+      }
       // Checkout customer mapping may still be committing. Do not acknowledge a lost update.
       if (!account) throw new Error("Billing account mapping unavailable");
       const sub = await deps.retrieveSubscription(ref.subscription);
@@ -84,8 +99,8 @@ export async function processBillingEvent(event: Stripe.Event, deps: Dependencie
         if (sub.status === "canceled" && account.subscription_status !== "canceled") kinds.push("canceled");
         if (sub.status === "past_due" && account.subscription_status !== "past_due") kinds.push("payment_failed");
         for (const kind of kinds) {
-          await client.query(`INSERT INTO billing_notification_outbox (event_id, kind, recipient, plan)
-            VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, [event.id, kind, account.email, plan ?? account.plan]);
+          await client.query(`INSERT INTO billing_notification_outbox (event_id, kind, recipient, plan, account_user_id)
+            VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`, [event.id, kind, account.email, plan ?? account.plan, account.id]);
         }
       }
     }

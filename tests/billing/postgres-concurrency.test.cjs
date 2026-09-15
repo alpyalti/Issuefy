@@ -79,6 +79,7 @@ test('billing migrations and multi-client transactions on disposable PostgreSQL 
     const expectedFiles = readdirSync(join(root, 'migrations')).filter(f => f.endsWith('.sql')).sort();
     for (let n = 1; n <= 16; n++) assert.ok(expectedFiles.some(f => f.startsWith(String(n).padStart(4, '0') + '_')));
     assert.ok(expectedFiles.some(f => f.startsWith('0018_')));
+    assert.ok(expectedFiles.some(f => f.startsWith('0020_')), 'Webhook requires deletion migration 0020');
     await t.test('complete migration chain applies once; concurrent reruns preserve history/data', async () => {
       assert.equal(await migrate(), 0, logs.join('\n'));
       const before = (await pool.query('SELECT filename,applied_at FROM _migrations ORDER BY filename')).rows;
@@ -115,7 +116,7 @@ test('billing migrations and multi-client transactions on disposable PostgreSQL 
         VALUES($1,$2,$3,$4,$5,$6)`, [id, id, user.email, mapped ? customer : null, mapped ? subscription : null, mapped ? 'active' : null]);
       const sub = { id: subscription, customer, livemode: false, status: 'active', created: 100, trial_start: null, trial_end: null,
         cancel_at_period_end: false, items: { data: [{ price: { id: 'price_growth' }, current_period_end: 300 }] } };
-      const event = (eventId = `evt_${randomUUID()}`) => ({ id: eventId, type: 'customer.subscription.updated', data: { object: sub } });
+      const event = (eventId = `evt_${randomUUID()}`) => ({ id: eventId, livemode: false, type: 'customer.subscription.updated', data: { object: sub } });
       const deps = { transaction: withTx, retrieveSubscription: async () => structuredClone(sub), planFromPriceId: () => 'growth' };
       return { user, customer, sub, event, deps };
     }
@@ -206,6 +207,86 @@ test('billing migrations and multi-client transactions on disposable PostgreSQL 
       const results = await Promise.all([first, second]); assert.ok(results.every(r => !r.error));
       assert.equal(sends, 1); assert.equal(await webhook.processBillingEvent(event, f.deps), 'duplicate');
       assert.ok((await pool.query('SELECT sent_at FROM billing_notification_outbox WHERE event_id=$1', [event.id])).rows[0].sent_at);
+    });
+
+    async function markDeleting(client, f, phase = 'pending', live = false) {
+      // Same relevant transaction order as deleteAccount initialization: user
+      // lock, marker insertion, attributed outbox cleanup, pending user status.
+      await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [f.user.id]);
+      await client.query(`INSERT INTO account_deletions(clerk_user_id,user_id,livemode,phase,stripe_customer_id)
+        VALUES($1,$2,$3,$4,$5)`, [f.user.clerk_user_id, f.user.id, live, phase, f.customer]);
+      await client.query('DELETE FROM billing_notification_outbox WHERE account_user_id=$1 AND sent_at IS NULL', [f.user.id]);
+      await client.query("UPDATE users SET subscription_status='deletion_pending' WHERE id=$1", [f.user.id]);
+    }
+    await t.test('completed deletion acknowledges late customer event without provider or user recreation', async () => {
+      const f = await fixture(); const event = f.event();
+      await withTx(async client => {
+        await markDeleting(client, f, 'completed');
+        await client.query('DELETE FROM users WHERE id=$1', [f.user.id]);
+      });
+      f.deps.retrieveSubscription = async () => { throw new Error('Unexpected provider call'); };
+      assert.equal(await webhook.processBillingEvent(event, f.deps), 'processed');
+      assert.equal(await webhook.processBillingEvent(event, f.deps), 'duplicate');
+      assert.equal((await pool.query('SELECT count(*)::int n FROM users WHERE id=$1', [f.user.id])).rows[0].n, 0);
+      assert.equal((await pool.query('SELECT count(*)::int n FROM billing_notification_outbox WHERE event_id=$1', [event.id])).rows[0].n, 0);
+    });
+    await t.test('deletion initialization wins race; blocked webhook sees marker before provider read', async () => {
+      const f = await fixture(); const client = await pool.connect(); const event = f.event(); let pending;
+      f.deps.retrieveSubscription = async () => { throw new Error('Unexpected provider call'); };
+      try {
+        await client.query('BEGIN'); await markDeleting(client, f);
+        pending = outcome(webhook.processBillingEvent(event, f.deps));
+        await waitingLocks();
+        await client.query('COMMIT');
+      } finally { await client.query('ROLLBACK'); client.release(); }
+      assert.equal((await pending).value, 'processed');
+      assert.equal((await pool.query('SELECT subscription_status,plan FROM users WHERE id=$1', [f.user.id])).rows[0].subscription_status, 'deletion_pending');
+      assert.equal((await pool.query('SELECT plan FROM users WHERE id=$1', [f.user.id])).rows[0].plan, 'starter');
+      assert.equal((await pool.query('SELECT count(*)::int n FROM billing_notification_outbox WHERE event_id=$1', [event.id])).rows[0].n, 0);
+    });
+    await t.test('deletion finish locks marker then user while webhook races without inverse-lock deadlock', async () => {
+      const f = await fixture(); await withTx(client => markDeleting(client, f, 'identity_deleted'));
+      const client = await pool.connect(); const event = f.event(); let pending;
+      f.deps.retrieveSubscription = async () => { throw new Error('Unexpected provider call'); };
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT * FROM account_deletions WHERE user_id=$1 FOR UPDATE', [f.user.id]);
+        await client.query('DELETE FROM users WHERE id=$1', [f.user.id]);
+        pending = outcome(webhook.processBillingEvent(event, f.deps));
+        await waitingLocks();
+        await client.query("UPDATE account_deletions SET phase='completed',completed_at=now() WHERE user_id=$1", [f.user.id]);
+        await client.query('COMMIT');
+      } finally { await client.query('ROLLBACK'); client.release(); }
+      assert.equal((await pending).value, 'processed');
+      assert.equal((await pool.query('SELECT count(*)::int n FROM users WHERE id=$1', [f.user.id])).rows[0].n, 0);
+    });
+    await t.test('shared email has explicit outbox ownership; deletion removes only its own mail and suppresses future events', async () => {
+      const f = await fixture(); const other = await fixture(); const hold = gate(); let reading = false;
+      await pool.query('UPDATE users SET email=$1 WHERE id=$2', [f.user.email, other.user.id]);
+      await webhook.processBillingEvent(other.event(), other.deps);
+      f.deps.retrieveSubscription = async () => { reading = true; await hold.waiting; return f.sub; };
+      const updating = outcome(webhook.processBillingEvent(f.event(), f.deps)); let deletion;
+      try {
+        await until(() => reading, 'webhook locked account before deletion');
+        deletion = outcome(withTx(client => markDeleting(client, f, 'billing_closed')));
+        await waitingLocks();
+      } finally { hold.release(); }
+      assert.equal((await updating).value, 'processed'); assert.ok(!(await deletion).error);
+      const rows = (await pool.query('SELECT account_user_id FROM billing_notification_outbox WHERE recipient=$1', [f.user.email])).rows;
+      assert.deepEqual(rows.map(row => row.account_user_id), [other.user.id]);
+      const late = f.event(); f.sub.status = 'canceled';
+      f.deps.retrieveSubscription = async () => { throw new Error('Unexpected provider call'); };
+      assert.equal(await webhook.processBillingEvent(late, f.deps), 'processed');
+      assert.equal((await pool.query('SELECT count(*)::int n FROM billing_notification_outbox WHERE event_id=$1', [late.id])).rows[0].n, 0);
+    });
+    await t.test('unknown missing user and wrong-mode tombstone do not consume receipt', async () => {
+      const f = await fixture(); const event = f.event();
+      await pool.query('DELETE FROM users WHERE id=$1', [f.user.id]);
+      await assert.rejects(webhook.processBillingEvent(event, f.deps), /mapping unavailable/);
+      await pool.query(`INSERT INTO account_deletions(clerk_user_id,user_id,livemode,phase,stripe_customer_id)
+        VALUES($1,$2,true,'completed',$3)`, [f.user.clerk_user_id, f.user.id, f.customer]);
+      await assert.rejects(webhook.processBillingEvent(event, f.deps), /mode mismatch/);
+      assert.equal((await pool.query('SELECT count(*)::int n FROM stripe_webhook_events WHERE id=$1', [event.id])).rows[0].n, 0);
     });
 
     function stripe(f) {

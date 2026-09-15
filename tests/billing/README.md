@@ -46,7 +46,7 @@ The webhook verifies the signature, rejects invalid configuration with HTTP 503 
 
 ## PostgreSQL 17 concurrency harness
 
-Run on the integrated branch containing checkout, the current migration runner, and migrations 0001–0016 plus 0018:
+Run on the integrated branch containing checkout, account deletion, the current migration runner, and migrations through 0020:
 
 ```sh
 ISSUEFY_TEST_PG_BIN=/opt/homebrew/opt/postgresql@17/bin \
@@ -69,3 +69,15 @@ Validated against stabilization source `292a757a0e5b79ed313ae5ae0b1d43b18ee3a54e
 - Checkout's advisory/journal connections can overlap webhook's account lock and converge without deadlock or another subscription checkout.
 
 These results replace the earlier separate-connection PostgreSQL validation gap. They do not validate Neon connection/pooler loss, real Stripe/Resend idempotency retention, or hosted auth/provider integration. Existing hosted staging restrictions remain.
+
+## Deletion correlation and explicit notification ownership
+
+**Deployment dependency:** `0020_account_deletion.sql` and account lifecycle commit `2eee6ee0be22d3d90372a9fa60cca749a1b84437` must be integrated/applied before this webhook version. This patch adds no migration and executes none outside disposable tests. Retain the marker and attribution columns on rollback.
+
+After locking a matching user, the webhook reads `account_deletions` by customer or that user's ID. A matching billing-mode marker in any phase (`pending` through `completed`) acknowledges the event by completing its receipt in the existing transaction, with no subscription retrieval, account mutation, or new outbox row. An unknown missing user still returns a retryable processing error. A marker with mismatched mode also fails without consuming the event. The route's signature and strict billing-mode guard still execute first.
+
+The marker read deliberately takes no row lock: deletion finish locks marker then user, so locking marker after user would invert the order. Under the existing READ COMMITTED transactions, a webhook waiting on deletion's user lock sees the committed marker on its next statement. If the webhook wins first, deletion initialization waits and then removes that account's pending outbox rows. Receipt completion failures still roll back and retry normally.
+
+All new notifications explicitly write `account_user_id` from the locked user row. This removes dependence on email inference when two accounts share an address, allowing migration 0020's suppression and deletion cleanup to act on the intended account. No legacy outbox rows are reattributed by this patch.
+
+Validation: 22 mocked processing tests, 20 route/mode tests, optional PGlite SQL smoke, and 18 real PostgreSQL 17 checks (including the parent) pass. PostgreSQL used a temporary export of integrated source `09ef16c` plus this webhook change and the actual full migration chain through 0020. New cases cover deleted users, deletion initialization and finish racing with delivery, webhook-first/shared-email cleanup preserving another user's mail, and unknown/wrong-mode markers. The PostgreSQL harness now requires 0020. No Stripe, Clerk, Resend, or hosted database calls were made.

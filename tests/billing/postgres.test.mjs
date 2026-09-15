@@ -16,6 +16,8 @@ test('additive migration and atomic billing SQL run in disposable PostgreSQL', {
     await db.exec(await fs.readFile(new URL('../../migrations/0005_stripe.sql', import.meta.url), 'utf8'));
     const migration = await fs.readFile(new URL('../../migrations/0016_billing_webhook_completion.sql', import.meta.url), 'utf8');
     await db.exec(migration); await db.exec(migration);
+    await db.exec('ALTER TABLE billing_notification_outbox ADD COLUMN account_user_id text');
+    await db.exec('CREATE TABLE account_deletions (user_id text, stripe_customer_id text, livemode boolean)');
     await db.exec("UPDATE users SET stripe_customer_id = 'cus_1', stripe_subscription_id = 'sub_1', subscription_status = 'active'");
     const source = await fs.readFile(new URL('../../lib/billing/webhook.ts', import.meta.url), 'utf8');
     const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;

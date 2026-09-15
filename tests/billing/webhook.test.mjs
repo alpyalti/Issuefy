@@ -9,7 +9,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.Scri
 const { processBillingEvent, deliverBillingNotifications } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 
 function fixture() {
-  let state = { receipts: {}, outbox: [], account: { id: 'user_1', email: 'test@example.invalid', plan: 'starter', stripe_subscription_id: 'sub_1', subscription_status: 'active' }, writes: 0 };
+  let state = { receipts: {}, outbox: [], deletions: [], account: { id: 'user_1', email: 'test@example.invalid', plan: 'starter', stripe_subscription_id: 'sub_1', subscription_status: 'active' }, writes: 0 };
   let queue = Promise.resolve();
   let fail = null;
   const subscriptions = { sub_1: { id: 'sub_1', customer: 'cus_1', status: 'active', created: 100, cancel_at_period_end: false, items: { data: [{ price: { id: 'price_starter' }, current_period_end: 300 }] } } };
@@ -29,13 +29,14 @@ function fixture() {
         if (sql.startsWith('INSERT INTO stripe_webhook_events')) state.receipts[values[0]] ??= { completed_at: null };
         else if (sql.startsWith('SELECT completed_at')) return { rows: [state.receipts[values[0]]] };
         else if (sql.startsWith('SELECT id, email')) return { rows: state.account ? [structuredClone(state.account)] : [] };
+        else if (sql.startsWith('SELECT livemode FROM account_deletions')) return { rows: state.deletions.filter(d => d.stripe_customer_id === values[0] || (values[1] && d.user_id === values[1])) };
         else if (sql.startsWith('UPDATE users')) {
           const [sub, status, period, cancel, plan] = values;
           Object.assign(state.account, { stripe_subscription_id: sub, subscription_status: status, current_period_end: period, cancel_at_period_end: cancel, plan: plan ?? state.account.plan });
           state.writes++;
         } else if (sql.startsWith('INSERT INTO billing_notification')) {
-          const [event_id, kind, recipient, plan] = values;
-          if (!state.outbox.some(n => n.event_id === event_id && n.kind === kind)) state.outbox.push({ event_id, kind, recipient, plan, sent_at: null });
+          const [event_id, kind, recipient, plan, account_user_id] = values;
+          if (!state.outbox.some(n => n.event_id === event_id && n.kind === kind)) state.outbox.push({ event_id, kind, recipient, plan, account_user_id, sent_at: null });
         } else if (sql.startsWith('UPDATE stripe_webhook_events')) state.receipts[values[0]].completed_at = 'committed';
         else if (sql.startsWith('SELECT event_id')) return { rows: state.outbox.filter(n => n.event_id === values[0] && !n.sent_at) };
         else if (sql.startsWith('UPDATE billing_notification')) state.outbox.find(n => n.event_id === values[0] && n.kind === values[1]).sent_at = 'sent';
@@ -46,7 +47,7 @@ function fixture() {
     finally { release(); }
   }
   const deps = { transaction, retrieveSubscription: async id => { assert.ok(subscriptions[id]); return structuredClone(subscriptions[id]); }, planFromPriceId: id => ({ price_starter: 'starter', price_growth: 'growth' }[id] ?? null) };
-  const event = (eventId = 'evt_1', type = 'customer.subscription.updated', object = { id: 'sub_1', customer: 'cus_1' }) => ({ id: eventId, type, created: 50, data: { object } });
+  const event = (eventId = 'evt_1', type = 'customer.subscription.updated', object = { id: 'sub_1', customer: 'cus_1' }) => ({ id: eventId, type, livemode: false, created: 50, data: { object } });
   return { deps, event, subscriptions, queries, get state() { return state; }, fail: sql => { fail = sql; } };
 }
 
@@ -149,4 +150,39 @@ test('provider subscription customer mismatch rolls back receipt', async () => {
   const f = fixture(); f.subscriptions.sub_1.customer = 'cus_other';
   await assert.rejects(processBillingEvent(f.event(), f.deps), /correlation failed/);
   assert.deepEqual(f.state.receipts, {}); assert.equal(f.state.writes, 0);
+});
+
+for (const phase of ['pending', 'billing_closed', 'identity_deleted', 'completed']) {
+  test(`known ${phase} deletion acknowledges event without provider, entitlement, or outbox effects`, async () => {
+    const f = fixture();
+    f.state.deletions.push({ user_id: 'user_1', stripe_customer_id: 'cus_1', livemode: false, phase });
+    if (phase === 'completed') f.state.account = null;
+    f.deps.retrieveSubscription = async () => { throw new Error('Must not call Stripe for deleted account'); };
+    assert.equal(await processBillingEvent(f.event(), f.deps), 'processed');
+    assert.equal(await processBillingEvent(f.event(), f.deps), 'duplicate');
+    assert.equal(f.state.writes, 0); assert.deepEqual(f.state.outbox, []);
+    assert.equal(f.state.receipts.evt_1.completed_at, 'committed');
+  });
+}
+test('missing account with unrelated or wrong-mode deletion marker remains retryable', async () => {
+  const f = fixture(); f.state.account = null;
+  f.state.deletions.push({ stripe_customer_id: 'cus_other', livemode: false });
+  await assert.rejects(processBillingEvent(f.event(), f.deps), /mapping unavailable/);
+  f.state.deletions.push({ stripe_customer_id: 'cus_1', livemode: true });
+  await assert.rejects(processBillingEvent(f.event(), f.deps), /mode mismatch/);
+  assert.deepEqual(f.state.receipts, {});
+});
+test('receipt completion failure for deleted account rolls back and retries', async () => {
+  const f = fixture(); f.state.account = null;
+  f.state.deletions.push({ stripe_customer_id: 'cus_1', livemode: false });
+  f.fail('UPDATE stripe_webhook_events');
+  await assert.rejects(processBillingEvent(f.event(), f.deps), /Injected/);
+  assert.deepEqual(f.state.receipts, {});
+  assert.equal(await processBillingEvent(f.event(), f.deps), 'processed');
+});
+
+test('new plan notification uses locked account ID, independent of recipient email', async () => {
+  const f = fixture(); f.subscriptions.sub_1.items.data[0].price.id = 'price_growth';
+  await processBillingEvent(f.event(), f.deps);
+  assert.equal(f.state.outbox[0].account_user_id, 'user_1');
 });
