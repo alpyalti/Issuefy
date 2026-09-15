@@ -44,6 +44,7 @@ test('actual SERP extraction returns publisher URLs before ingestion and drops u
   process.env.SCRAPERAPI_KEY = 'fixture-not-a-provider-key';
   try {
     const scraper = loadTs('lib/scraperapi.ts', {
+      './env': loadTs('lib/env.ts'),
       './serp-url': { serpPublisherUrl },
       './fetch': { fetchWithTimeout: async () => ({ ok: true, json: async () => ({ organic_results: [
         { title: 'Unsafe', link: goto('https://127.0.0.1') },

@@ -31,7 +31,7 @@ for (const value of [undefined, DISABLED]) {
   });
   test(`disabled/absent provider credentials do not reach a transport: ${value}`, async (t) => {
     setEnv(t, { SCRAPERAPI_KEY: value, APIFY_TOKEN: value, OPENROUTER_API_KEY: value });
-    const mocks = { './env': env, './fetch': noFetch };
+    const mocks = { './env': env, './fetch': noFetch, './serp-url': loadTs('lib/serp-url.ts', { './social-url': loadTs('lib/social-url.ts') }) };
     const scraper = loadTs('lib/scraperapi.ts', mocks);
     await assert.rejects(scraper.standardScrape({ url: 'https://test.invalid' }), /SCRAPERAPI_KEY is not configured/);
     const apify = loadTs('lib/apify.ts', mocks);
