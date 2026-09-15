@@ -11,7 +11,7 @@ The existing findings were confirmed in code: receipt committed before effects, 
 - `node --test tests/billing/*.test.mjs`: 15 mocked regression tests; optional PostgreSQL test skips unless enabled. Covers concurrent duplicate success, rollback/retry at account/outbox/completion writes, legacy receipts, unrelated subscriptions/invoices, reordered payloads, actual plan changes, checkout metadata, replacement subscriptions, invoice trial preservation, provider/mapping failure, and notification retries.
 - Optional in-memory PostgreSQL SQL/migration smoke test: install `@electric-sql/pglite` into a disposable directory outside this repo, then run `BILLING_PGLITE_MODULE=/absolute/path/to/@electric-sql/pglite/dist/index.js node --test tests/billing/*.test.mjs`. All 16 passed locally. This executes migration 0005 and additive 0016 twice against memory, injects a real PostgreSQL trigger failure, verifies rollback and retry, and verifies notification persistence. No `DATABASE_URL` is read.
 - `npx tsc --noEmit --incremental false` and `npm run build` passed on the original lockfile (Next.js 16.2.7). Dependency remediation belongs to IFY-002; integration must rerun these checks on its patched lockfile.
-- The concurrency regression uses a serialized transaction double. PGlite checks PostgreSQL SQL/rollback, not multiple independent PostgreSQL connections. Independent preview QA should exercise parallel requests against a disposable Neon/PostgreSQL database.
+- The original concurrency regression uses a serialized transaction double. PGlite checks PostgreSQL SQL/rollback, not multiple independent connections. The PostgreSQL 17 harness below now verifies separate-connection locking and rollback; Neon/hosted preview behavior still needs environment-specific QA.
 
 ## Rollout requirements
 
@@ -43,3 +43,29 @@ References: [Stripe webhook ordering and duplicate guidance](https://docs.stripe
 The webhook verifies the signature, rejects invalid configuration with HTTP 503 or mismatched/missing event mode with HTTP 400, then enters billing processing. Rejections cannot insert even a receipt, reconcile users, retrieve subscriptions, or drain email. Checkout metadata cannot override event mode.
 
 `node --test tests/billing/webhook-mode.test.mjs` passes 20 actual-route/shared-helper mocked cases. The tests use isolated VM environment values and no provider credentials; both live and test success cases are mocked. No hosted integration test was performed. **Current Preview shares production data: do not set isolated_test there.** Hosted test-mode staging remains blocked until separate database, auth, Stripe/webhook resources are provisioned and verified. This code permits that future isolated Preview; it does not provision or verify isolation. No environment values were changed by this patch.
+
+## PostgreSQL 17 concurrency harness
+
+Run on the integrated branch containing checkout, the current migration runner, and migrations 0001–0016 plus 0018:
+
+```sh
+ISSUEFY_TEST_PG_BIN=/opt/homebrew/opt/postgresql@17/bin \
+  node --test tests/billing/postgres-concurrency.test.cjs
+```
+
+The harness defaults to the repository containing the test. When validating from an older isolated worktree, `ISSUEFY_BILLING_TEST_SOURCE_ROOT=/absolute/path/to/integrated/checkout` selects application source and migrations read-only. Omit that override in CI. The only other input is `ISSUEFY_TEST_PG_BIN`; missing binaries cause a skip in the ordinary test suite, so the dedicated PostgreSQL CI job must require binaries and reject skips. PostgreSQL major 17 is asserted.
+
+The harness launches its own temporary cluster with trust authentication and **Unix sockets only**, verifies the empty TCP listen setting, and passes explicit connection parameters to every client. No existing database URL or application environment file is read. Stripe and email are mocked; the database and all application SQL are real. The actual migration runner receives an isolated environment, empty temporary working directory, and a Client class pinned to the private socket; its placeholder URL cannot select a destination. Child processes receive a sanitized environment. Cleanup closes the pool, stops the server, and removes the temporary cluster; if stopping fails it reports failure and retains the directory rather than removing a running server's files.
+
+Validated against stabilization source `292a757a0e5b79ed313ae5ae0b1d43b18ee3a54e` with 13 passing tests (12 nested cases plus the parent), no failures/skips:
+
+- Entire migration chain into a blank database; simultaneous reruns preserve migration names/timestamps and a sentinel user.
+- Simultaneous duplicate receipts and distinct account events visibly wait in separate `pg_stat_activity` sessions; reconciliation reads occur only after the row lock.
+- An in-flight failed webhook releases its duplicate waiter, which recovers successfully.
+- Real PostgreSQL trigger failures on account update, outbox insert, and receipt completion roll back all webhook effects; retry succeeds.
+- Concurrent outbox drains serialize; failed sends remain retryable without rebilling.
+- A checkout holds a real transaction advisory lock during its mocked provider call; concurrent checkout returns `checkout_busy`; later checkout reuses the persisted identity/session.
+- Checkout customer-mapping and session-stamp database failures preserve the separately committed operation journal; retry recovers without minting another customer/session.
+- Checkout's advisory/journal connections can overlap webhook's account lock and converge without deadlock or another subscription checkout.
+
+These results replace the earlier separate-connection PostgreSQL validation gap. They do not validate Neon connection/pooler loss, real Stripe/Resend idempotency retention, or hosted auth/provider integration. Existing hosted staging restrictions remain.
