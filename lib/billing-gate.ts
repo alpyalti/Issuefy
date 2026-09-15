@@ -169,10 +169,17 @@ export async function ensureProjectSubscriptionApi(
   return subscriptionRequired();
 }
 
-/** Worker entry guard: caller membership/subscription cannot authorize spend. */
-export async function ensureProjectWorkerSubscription(projectId: string): Promise<void> {
+/** Paid work on existing data requires owner billing, even while scans are paused. */
+export async function ensureProjectOwnerSubscription(projectId: string): Promise<ProjectBillingContext> {
   const context = await getProjectBillingContext(projectId);
-  if (!context || !context.isActive || !hasBillingAccess(context)) {
-    throw new Error("Project inactive or owner subscription required");
+  if (!context || !hasBillingAccess(context)) {
+    throw new Error("Project owner subscription required");
   }
+  return context;
+}
+
+/** Scan entry guard additionally respects the project's daily-scan pause. */
+export async function ensureProjectWorkerSubscription(projectId: string): Promise<void> {
+  const context = await ensureProjectOwnerSubscription(projectId);
+  if (!context.isActive) throw new Error("Project inactive");
 }

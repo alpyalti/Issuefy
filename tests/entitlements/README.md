@@ -13,9 +13,10 @@ points stop before provider calls or writes.
 
 ## Validation
 
-- 126 tests pass.
+- 135 tests pass, including composed route/draft/guard coverage for paused projects.
 - `tsc --noEmit --incremental false` passes.
-- `next build --webpack` passes, with existing middleware/Edge runtime warnings.
+- Initial increment: `next build --webpack` passes, with existing middleware/Edge runtime warnings.
+  Paused-project follow-up validated with the full entitlement suite and TypeScript.
 - Default Turbopack build cannot use this worktree's symlink to the existing
   installation outside its filesystem root. Integration should run the normal
   build with platform's clean local dependency installation.
@@ -38,8 +39,9 @@ No schema or production data changes. Revert the commit to roll back.
   endpoints. A future project-scoped enrichment flow can supply owner usage.
 - Worker rejection throws before provider calls/writes. Existing internal route
   wrappers may report that as an error; durable dispatch/skip reporting belongs
-  to the worker increment. Draft replies/reclassification also require an active
-  project at entry.
+  to the worker increment. Draft replies and reclassification operate on existing
+  leads, so they require owner billing but remain available while daily scans are
+  paused. Discovery/scan workers still require an active project.
 - Project/watchlist/invitation/refresh concurrency races and source/signal quota
   accounting remain deferred. This increment does not claim atomic quotas.
 - Cancellation during an already-running pipeline is not interrupted; entitlement

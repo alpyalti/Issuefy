@@ -123,6 +123,7 @@ for (const [file, entry, args] of [
     mocks['@/lib/billing-gate'] = { ensureProjectWorkerSubscription: async id => {
       assert.equal(id, 'project'); checked = true; throw new Error('denied owner');
     } };
+    mocks['@/lib/billing-gate'].ensureProjectOwnerSubscription = mocks['@/lib/billing-gate'].ensureProjectWorkerSubscription;
     mocks['@/lib/db'] = { requireSql: () => async strings => {
       assert.match(strings.join(''), /SELECT/);
       return [{ id: 'project', user_id: 'target-owner', is_active: true }];
@@ -152,4 +153,86 @@ test('lapsed owner can still pause a project', async () => {
   const s = setup({ status: 'canceled', body: { is_active: false } });
   const response = await s.route('').PATCH(new Request('https://test'), { params: Promise.resolve({ id: 'project' }) });
   assert.equal(response.status, 200);
+});
+
+// Composed regression: real route -> real draft -> real billing guards.
+// Only identity, SQL, and external provider boundaries are mocked.
+function pausedLeadFlow(status, role = 'owner', missing = false) {
+  let providerCalls = 0;
+  let writes = 0;
+  let billingReads = 0;
+  const project = { id: 'project', user_id: 'target-owner', is_active: false,
+    company_name: 'Example', company_description: 'A useful product', track_company: true,
+    industry: 'software', business_type: 'B2B', target_market: null };
+  const lead = { id: 'lead', keyword_id: 'keyword', keyword: 'test', platform: 'reddit',
+    context: 'r/test', post_title: 'Looking for a tool', post_excerpt: 'Please recommend one', author: 'poster', ...project };
+  const sql = async (strings, ...values) => {
+    const query = strings.join('?');
+    if (query.includes('AS "ownerId"')) {
+      billingReads++;
+      assert.equal(values[0], 'project');
+      return missing ? [] : [{ ownerId: 'target-owner', plan: 'agency', role: 'user', subscription_status: status, isActive: false }];
+    }
+    if (query.includes('subscription_status, role FROM users')) return [{ role: 'user', subscription_status: 'active' }];
+    if (query.includes('SELECT p.*, pm.role')) return role === 'viewer' ? [] : [{ ...project, current_user_role: role }];
+    if (query.includes('SELECT id FROM keyword_leads')) return [{ id: 'lead' }];
+    if (query.includes('SELECT p.id, p.user_id')) return [project];
+    if (query.includes('SELECT kl.id')) return [lead];
+    if (query.includes('UPDATE keyword_leads')) { writes++; return []; }
+    throw new Error(`Unexpected SQL: ${query}`);
+  };
+  const billing = load('lib/billing-gate.ts', {
+    react: { cache: f => f }, 'next/navigation': {}, '@/lib/stripe': { stripe: {} }, '@/lib/db': { requireSql: () => sql },
+  });
+  const leads = load('lib/leads.ts', {
+    '@/lib/billing-gate': billing, zod: require('zod'), './db': { requireSql: () => sql },
+    './openrouter': { chatJson: async () => { providerCalls++; return {
+      data: { reply_text: 'Draft recommendation', leads: [{ ref: 0, is_lead: true, score: 90, intent: 'researching', reason: 'Good fit' }] }, modelUsed: 'mock',
+    }; } },
+    './usage-counters': {}, './usage': {}, './markets': { resolveMarket: () => ({ canonicalName: 'Global' }) },
+    './lead-sources': {}, './apify': {}, './sentry': {},
+  });
+  const route = load('app/api/projects/[id]/leads/[leadId]/draft-reply/route.ts', {
+    '@/lib/clerk-user': { requireUser: async () => ({ id: 'caller' }) },
+    '@/lib/billing-gate': billing, '@/lib/db': { requireSql: () => sql },
+    '@/lib/api': load('lib/api.ts', { zod: require('zod'), './db': { sql } }),
+    '@/lib/leads': leads, '@/lib/sentry': { captureError() {} },
+  });
+  return { leads, billing, run: () => route.POST(new Request('https://test'), { params: Promise.resolve({ id: 'project', leadId: 'lead' }) }),
+    counts: () => ({ providerCalls, writes, billingReads }) };
+}
+
+for (const role of ['owner', 'editor', 'viewer']) {
+  for (const status of ['active', 'canceled']) {
+    test(`paused project draft composed flow: ${role}, ${status}`, async () => {
+      const s = pausedLeadFlow(status, role);
+      const response = await s.run();
+      const permitted = role !== 'viewer' && status === 'active';
+      assert.equal(response.status, role === 'viewer' ? 404 : permitted ? 200 : 402);
+      if (permitted) assert.equal((await response.json()).reply, 'Draft recommendation');
+      assert.equal(s.counts().providerCalls, permitted ? 1 : 0);
+      assert.equal(s.counts().writes, permitted ? 1 : 0);
+      if (permitted) assert.equal(s.counts().billingReads, 2);
+    });
+  }
+}
+for (const status of ['active', 'canceled']) {
+  test(`paused project reclassification keeps owner billing check: ${status}`, async () => {
+    const s = pausedLeadFlow(status);
+    if (status === 'active') {
+      const result = await s.leads.reclassifyExistingLeads('project');
+      assert.equal(result.kept, 1);
+    } else await assert.rejects(s.leads.reclassifyExistingLeads('project'), /owner subscription/);
+    assert.equal(s.counts().providerCalls, status === 'active' ? 1 : 0);
+    assert.equal(s.counts().writes, status === 'active' ? 1 : 0);
+  });
+}
+test('paused scan still rejected; direct existing-data draft fails closed for missing or lapsed owner', async () => {
+  await assert.rejects(pausedLeadFlow('active').billing.ensureProjectWorkerSubscription('project'), /inactive/);
+  for (const [status, missing] of [['canceled', false], ['active', true]]) {
+    const s = pausedLeadFlow(status, 'owner', missing);
+    await assert.rejects(s.leads.draftLeadReply('lead', 'project'), /owner subscription/);
+    assert.equal(s.counts().providerCalls, 0);
+    assert.equal(s.counts().writes, 0);
+  }
 });
