@@ -6,15 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "migrate": "node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "test": "node scripts/test.mjs",
+    "typecheck": "next typegen && tsc --noEmit --incremental false",
+    "check": "npm run test && npm run typecheck && npm run build",
+    "audit:production": "npm audit --omit=dev"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.726.0",
     "@clerk/nextjs": "^7.4.3",
-    "@hugeicons/core-free-icons": "latest",
+    "@hugeicons/core-free-icons": "^4.2.0",
     "@neondatabase/serverless": "^1.1.0",
     "@sentry/nextjs": "^10.56.0",
-    "next": "^16.2.7",
+    "next": "^16.3.5",
     "ogl": "^1.0.11",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
