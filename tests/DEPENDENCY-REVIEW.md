@@ -53,6 +53,37 @@ CI reproduces installation, tests, typecheck, build and production audit on
 Ubuntu with Node 22. The workflow is added but has not run on GitHub yet.
 Test authoring and isolation conventions are in [README](README.md).
 
+### Independent QA correction: npm configuration isolation
+
+The initial local checks inherited a host `legacy-peer-deps=true` npm setting.
+Independent QA found that the initial lockfile failed default `npm ci` with
+missing webpack peers and mismatched picomatch versions. This was reproduced on
+Node 22.23.2 with an empty HOME and isolated user/global npm configuration.
+The original local install result therefore did not establish CI reproducibility.
+
+The follow-up regenerates the lockfile using default peer resolution and adds
+project `.npmrc` with `legacy-peer-deps=false` to override inherited user config.
+It restores webpack's peer dependency tree without changing direct dependency
+ranges. Validation must use default peer resolution; do not bypass the failure
+by adding legacy-peer flags to CI.
+
+Corrected verification on Node 22.23.2/npm 10.9.2 passed:
+
+- `npm ci --userconfig=/dev/null --globalconfig=<empty-global.npmrc>` under
+  `env -i`, with only Node 22 PATH and a temporary HOME: **328 packages installed**,
+  lifecycle scripts enabled, **0 audit vulnerabilities**. User and global config
+  must use distinct files because npm rejects loading the same file twice.
+- With the same isolated configuration, `npm run check`: **10/10 tests**, typecheck
+  and production build passed (26 static pages), using the synthetic Clerk key.
+- `npm run audit:production`, `npm audit` and `npm ls --all`: all passed;
+  **zero vulnerabilities** and no invalid/missing peer dependencies.
+- `npm config get legacy-peer-deps` in the normally configured host now reports
+  **false**, confirming the project setting overrides the host user setting.
+
+The repair adds the webpack 5.111.0 peer tree, hoists picomatch 4.0.7 and retains
+nested picomatch 2.3.2 where required. GitHub-hosted execution still remains a
+coordinator release gate; these results are isolated local verification.
+
 ## Release limits and rollback
 
 No unresolved version matches remain in the current npm audit. This does not

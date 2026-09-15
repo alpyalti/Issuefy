@@ -2,6 +2,10 @@
 
 Use Node 22 LTS and the committed npm lockfile:
 
+The project `.npmrc` explicitly keeps default peer dependency resolution enabled.
+Do not generate the lockfile with `--legacy-peer-deps`; it omits required peers
+and can make clean CI installs fail even when a configured local install passes.
+
 ```sh
 npm ci
 npm test
