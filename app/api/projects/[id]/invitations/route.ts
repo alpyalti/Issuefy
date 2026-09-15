@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/clerk-user";
-import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { ensureProjectSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
 import { adminProject, conflict, json, notFound, parseJson } from "@/lib/api";
 import { getLimits } from "@/lib/usage";
@@ -26,17 +26,17 @@ const bodySchema = z.object({
 export async function POST(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
-  const guard = await ensureActiveSubscriptionApi(user.id);
-  if (guard) return guard;
   const { id: projectId } = await params;
   const proj = await adminProject<{ id: string; name: string; user_id: string }>(user.id, projectId);
   if (!proj) return notFound();
+  const billing = await ensureProjectSubscriptionApi(user.id, projectId);
+  if (billing instanceof Response) return billing;
 
   const body = await parseJson(req, bodySchema);
   if (body instanceof Response) return body;
 
   const sql = requireSql();
-  const limits = getLimits(user.plan);
+  const limits = getLimits(billing.plan);
 
   // Inviting your own email is silly — also a footgun against the same-email
   // accept flow which expects a distinct user.
@@ -93,12 +93,12 @@ export async function POST(req: Request, { params }: Ctx) {
       (SELECT COUNT(DISTINCT pm.user_id)::int
          FROM project_members pm
          JOIN projects p ON p.id = pm.project_id
-        WHERE p.user_id = ${user.id})
+        WHERE p.user_id = ${billing.ownerId})
       +
       (SELECT COUNT(*)::int
          FROM project_invitations pi
          JOIN projects p ON p.id = pi.project_id
-        WHERE p.user_id = ${user.id}
+        WHERE p.user_id = ${billing.ownerId}
           AND pi.accepted_at IS NULL
           AND pi.canceled_at IS NULL
           AND pi.expires_at > now())

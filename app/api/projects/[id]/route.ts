@@ -1,3 +1,4 @@
+import { ensureProjectSubscriptionApi } from "@/lib/billing-gate";
 import { requireUser } from "@/lib/clerk-user";
 import { requireSql } from "@/lib/db";
 import { adminProject, json, manageableProject, notFound, ownedProject, parseJson } from "@/lib/api";
@@ -29,6 +30,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   const body = await parseJson(req, projectUpdateSchema);
   if (body instanceof Response) return body;
+
+  if (body.is_active === true) {
+    const billing = await ensureProjectSubscriptionApi(user.id, id);
+    if (billing instanceof Response) return billing;
+  }
 
   // The company profile drives every AI prompt (signals, briefs, replies) —
   // editing it is an owner decision, not an editor one.

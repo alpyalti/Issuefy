@@ -34,31 +34,6 @@ export const getSubscriptionStatus = cache(async (userId: string): Promise<GateR
   }
 });
 
-/**
- * Is this user an EDITOR / VIEWER of any project whose OWNER has an active
- * subscription? Teams (migration 0009): invited members don't pay — they ride
- * on the inviter's plan. So if the user is a non-owner member somewhere and
- * the inviter is in good standing, let them in.
- */
-async function isMemberOfSubscribedProject(userId: string): Promise<boolean> {
-  try {
-    const sql = requireSql();
-    const rows = (await sql`
-      SELECT 1
-        FROM project_members pm
-        JOIN projects p ON p.id = pm.project_id
-        JOIN users    u ON u.id = p.user_id
-       WHERE pm.user_id = ${userId}
-         AND pm.role IN ('editor','viewer')
-         AND u.subscription_status = ANY(${["trialing", "active", "past_due", "paused"]}::text[])
-       LIMIT 1
-    `) as Array<{ "?column?": number }>;
-    return rows.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 /** Full billing picture for a user — drives the Plan card on /account and the
  *  "Manage subscription" entry in the profile menu. Combines the user's own
  *  Stripe state with the list of projects they ride on as editor/viewer when
@@ -144,34 +119,60 @@ export async function requireActiveSubscription(
   redirect("/upgrade?required=1");
 }
 
-/**
- * API-route variant of `requireActiveSubscription`. Same gating rules — admin
- * bypass, member-of-subscribed-project bypass, Stripe-not-configured bypass —
- * but returns a `Response` (402 Payment Required) instead of redirecting.
- *
- * Used on mutating API routes (POST /api/projects, /enrich, /refresh, etc.)
- * to close the gap where a scripted caller could burn ScraperAPI / OpenRouter
- * budget without ever loading a gated dashboard page.
- *
- * Pattern:
- *
- *     const guard = await ensureActiveSubscriptionApi(user.id);
- *     if (guard) return guard;
- *
- * Returns `null` when the user is allowed through (so the route continues
- * normally).
- */
+/** Personal paid operations require the caller's own subscription. Team
+ * membership only grants dashboard access and target-project operations. */
 export async function ensureActiveSubscriptionApi(userId: string): Promise<Response | null> {
   if (!stripe) return null;
-  const { subscription_status, role } = await getSubscriptionStatus(userId);
-  if (role === "admin") return null;
-  if (subscription_status && ACTIVE_STATUSES.has(subscription_status)) return null;
-  if (await isMemberOfSubscribedProject(userId)) return null;
-  return new Response(
-    JSON.stringify({
-      error: "Subscription required",
-      detail: "Your plan isn't active. Open /upgrade to start or restart a plan.",
-    }),
-    { status: 402, headers: { "content-type": "application/json" } },
-  );
+  return hasBillingAccess(await getSubscriptionStatus(userId)) ? null : subscriptionRequired();
+}
+
+function subscriptionRequired(): Response {
+  return new Response(JSON.stringify({
+    error: "Subscription required",
+    detail: "Your plan isn't active. Open /upgrade to start or restart a plan.",
+  }), { status: 402, headers: { "content-type": "application/json" } });
+}
+
+function hasBillingAccess(owner: GateRow): boolean {
+  return !stripe || owner.role === "admin" ||
+    (!!owner.subscription_status && ACTIVE_STATUSES.has(owner.subscription_status));
+}
+
+export interface ProjectBillingContext extends GateRow {
+  ownerId: string;
+  plan: string;
+  isActive: boolean;
+}
+
+/** Uncached: workers must recheck the target owner at execution time. Missing
+ * owners fail closed, including in development. Never resolves other memberships. */
+export async function getProjectBillingContext(projectId: string): Promise<ProjectBillingContext | null> {
+  const sql = requireSql();
+  const rows = (await sql`
+    SELECT p.user_id AS "ownerId", p.is_active AS "isActive",
+           u.plan, u.role, u.subscription_status
+      FROM projects p JOIN users u ON u.id = p.user_id
+     WHERE p.id = ${projectId} LIMIT 1
+  `) as ProjectBillingContext[];
+  return rows[0] ?? null;
+}
+
+/** Call after the route's membership/role check. The admin caller bypass is
+ * retained, but plan and usage always belong to the target project's owner. */
+export async function ensureProjectSubscriptionApi(
+  userId: string, projectId: string,
+): Promise<ProjectBillingContext | Response> {
+  const context = await getProjectBillingContext(projectId);
+  if (!context) return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+  if (hasBillingAccess(context)) return context;
+  if ((await getSubscriptionStatus(userId)).role === "admin") return context;
+  return subscriptionRequired();
+}
+
+/** Worker entry guard: caller membership/subscription cannot authorize spend. */
+export async function ensureProjectWorkerSubscription(projectId: string): Promise<void> {
+  const context = await getProjectBillingContext(projectId);
+  if (!context || !context.isActive || !hasBillingAccess(context)) {
+    throw new Error("Project inactive or owner subscription required");
+  }
 }

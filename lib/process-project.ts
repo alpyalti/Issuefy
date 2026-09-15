@@ -1,3 +1,4 @@
+import { ensureProjectWorkerSubscription } from "@/lib/billing-gate";
 /**
  * Per-project worker (PRD §13.10).
  *
@@ -116,6 +117,8 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
       errors: ["project is paused"],
     };
   }
+
+  await ensureProjectWorkerSubscription(projectId);
 
   const userRows = (await sql`
     SELECT id, email, plan, email_brief_enabled, email_brief_unsubscribe_token

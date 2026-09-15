@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/clerk-user";
-import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { ensureProjectSubscriptionApi } from "@/lib/billing-gate";
 import { isAdmin } from "@/lib/admin";
 import { requireSql } from "@/lib/db";
 import { json, manageableProject, notFound, rateLimited } from "@/lib/api";
@@ -26,11 +26,11 @@ const HOUR_MS = 60 * 60 * 1_000;
 export async function POST(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
-  const guard = await ensureActiveSubscriptionApi(user.id);
-  if (guard) return guard;
   const { id: projectId, competitorId } = await params;
   const proj = await manageableProject(user.id, projectId);
   if (!proj) return notFound();
+  const billing = await ensureProjectSubscriptionApi(user.id, projectId);
+  if (billing instanceof Response) return billing;
 
   const sql = requireSql();
   const compRows = (await sql`

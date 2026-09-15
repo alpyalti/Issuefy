@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/clerk-user";
-import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { ensureProjectSubscriptionApi } from "@/lib/billing-gate";
 import { isAdmin } from "@/lib/admin";
 import { requireSql } from "@/lib/db";
 import { json, manageableProject, notFound, rateLimited } from "@/lib/api";
@@ -34,15 +34,15 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function POST(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
-  const guard = await ensureActiveSubscriptionApi(user.id);
-  if (guard) return guard;
   const { id: projectId } = await params;
   // Editors + owners can burn a refresh; viewers can't trigger billable scrapes.
   const proj = await manageableProject<{ id: string; last_manual_refresh_at: string | null }>(user.id, projectId);
   if (!proj) return notFound();
+  const billing = await ensureProjectSubscriptionApi(user.id, projectId);
+  if (billing instanceof Response) return billing;
 
   const sql = requireSql();
-  const limits = getLimits(user.plan);
+  const limits = getLimits(billing.plan);
 
   // Admins bypass the refresh limits entirely (testing convenience).
   const admin = await isAdmin(user.id);
@@ -61,7 +61,7 @@ export async function POST(_req: Request, { params }: Ctx) {
       SELECT COUNT(*)::int AS n
       FROM scrape_jobs sj
       JOIN projects p ON p.id = sj.project_id
-      WHERE p.user_id = ${user.id}
+      WHERE p.user_id = ${billing.ownerId}
         AND sj.job_type = 'manual'
         AND sj.created_at >= ${new Date(Date.now() - DAY_MS).toISOString()}
     `) as { n: number }[];
@@ -70,8 +70,7 @@ export async function POST(_req: Request, { params }: Ctx) {
     }
   }
 
-  // Stamp last_manual_refresh_at BEFORE running so concurrent clicks don't
-  // both pass the per-hour gate.
+  // Stamp before running. Atomic refresh claims remain a separate increment.
   await sql`UPDATE projects SET last_manual_refresh_at = now() WHERE id = ${projectId}`;
 
   try {
