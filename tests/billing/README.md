@@ -31,3 +31,15 @@ The existing findings were confirmed in code: receipt committed before effects, 
 - Rollback: retain additive schema/outbox data and revert the application commit if required. The old handler's unrecoverable-retry defect returns on rollback; do not run old/new handlers concurrently as a steady state, and reconcile failed/pending deliveries after restoring the corrected handler. Never remove receipt/outbox rows to force retries.
 
 References: [Stripe webhook ordering and duplicate guidance](https://docs.stripe.com/webhooks), [Resend idempotency retention](https://resend.com/docs/dashboard/emails/idempotency-keys).
+
+## Shared billing mode guard (integration follow-up)
+
+`lib/billing-mode.ts` exports `expectedBillingLivemode(): boolean` for webhook, checkout, and checkout completion. It throws on invalid configuration. The exact contract is:
+
+- `BILLING_DATA_ENVIRONMENT` unset or `production`: requires `sk_live_`/`rk_live_`; expects strict boolean `livemode === true`.
+- `isolated_test`: allowed only when `VERCEL_ENV !== production`, requires `sk_test_`/`rk_test_`; expects strict boolean `livemode === false`.
+- Unknown environment, missing/unrecognized key, mismatched key, malformed/missing event mode fail closed. A test key alone never establishes isolation.
+
+The webhook verifies the signature, rejects invalid configuration with HTTP 503 or mismatched/missing event mode with HTTP 400, then enters billing processing. Rejections cannot insert even a receipt, reconcile users, retrieve subscriptions, or drain email. Checkout metadata cannot override event mode.
+
+`node --test tests/billing/webhook-mode.test.mjs` passes 20 actual-route/shared-helper mocked cases. The tests use isolated VM environment values and no provider credentials; both live and test success cases are mocked. No hosted integration test was performed. **Current Preview shares production data: do not set isolated_test there.** Hosted test-mode staging remains blocked until separate database, auth, Stripe/webhook resources are provisioned and verified. This code permits that future isolated Preview; it does not provision or verify isolation. No environment values were changed by this patch.

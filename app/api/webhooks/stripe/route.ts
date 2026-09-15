@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { stripe, planFromPriceId } from "@/lib/stripe";
 import { withTx } from "@/lib/db";
+import { expectedBillingLivemode } from "@/lib/billing-mode";
 import { captureError } from "@/lib/sentry";
 import { processBillingEvent, deliverBillingNotifications } from "@/lib/billing/webhook";
 import { sendBillingNotification } from "@/lib/billing/notifications";
@@ -18,6 +19,15 @@ export async function POST(req: Request) {
   } catch (err) {
     captureError(err, { stage: "stripe.signature" });
     return new Response("Invalid signature", { status: 400 });
+  }
+  let expectedMode: boolean;
+  try {
+    expectedMode = expectedBillingLivemode();
+  } catch {
+    return new Response("Stripe webhook billing environment mismatch", { status: 503 });
+  }
+  if (event.livemode !== expectedMode) {
+    return new Response("Stripe event mode mismatch", { status: 400 });
   }
   try {
     const result = await processBillingEvent(event, {
