@@ -23,7 +23,8 @@ function publicWebsite(raw: string): URL | null {
 }
 
 /** Unwrap only established Google result wrappers, with one query decoding pass.
- * Invalid known wrappers are discarded rather than scraping the redirect itself.
+ * Observed opaque Google goto tokens remain unresolved wrappers. Unsafe explicit
+ * destinations are discarded; no token decoding or network expansion is attempted.
  * Ordinary publisher URLs are never inspected for redirect-like query parameters. */
 export function serpPublisherUrl(raw: string): string | null {
   const outer = publicWebsite(raw);
@@ -32,6 +33,12 @@ export function serpPublisherUrl(raw: string): string | null {
   const keys = outer.pathname === "/goto" ? ["url"] : ["url", "q"];
   const destinations = keys.flatMap((key) => outer.searchParams.getAll(key));
   if (destinations.length !== 1) return null;
+  // Google also emits opaque encoded tokens (observed CAES/base64url shape).
+  // Their publisher cannot be inferred locally. Preserve the validated wrapper
+  // rather than silently dropping the result or inventing a publisher identity.
+  if (outer.pathname === "/goto" && /^CAES[A-Za-z0-9_-]{20,}$/.test(destinations[0])) {
+    return outer.toString();
+  }
   // URLSearchParams already decoded the enclosing query. Never decode again:
   // a double-encoded scheme must fail, while article path escapes remain intact.
   const destination = publicWebsite(destinations[0]);

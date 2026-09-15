@@ -3,14 +3,22 @@ const assert = require('node:assert/strict');
 const { loadTs } = require('../helpers/load-ts.cjs');
 const { serpPublisherUrl } = loadTs('lib/serp-url.ts', { './social-url': loadTs('lib/social-url.ts') });
 const { domainOf, normalizeUrl } = loadTs('lib/url-normalize.ts');
+const opaqueDemoUrl = 'https://google.com/goto?url=CAESYgHrOzAVMQb81KhCsxLfU3KoBClXnzlzO8fyvsmAc6g2P3-NIlEXzFvvmVxqt90WWCZFIVSiu_2X6X-Wz-0pFC547f4GC1KDjLkrDPUiZSDc0xhUEFhAmtBF66d6eJALuQCn';
 const goto = (target) => `https://google.com/goto?url=${encodeURIComponent(target)}`;
 
-test('real goto query shape resolves publisher and preserves article path/query', () => {
+test('plain destination goto query shape resolves publisher and preserves article path/query', () => {
   const target = 'https://monday.com/blog/project-management/issue-tracking/?edition=Pro&lang=en';
   const actual = `${goto(target)}&source=web&sa=U`;
   assert.equal(serpPublisherUrl(actual), target);
   assert.equal(domainOf(serpPublisherUrl(actual)), 'monday.com');
   assert.equal(normalizeUrl(serpPublisherUrl(actual)), normalizeUrl(target));
+});
+test('exact demo opaque goto token remains unresolved with Google identity', () => {
+  assert.equal(serpPublisherUrl(opaqueDemoUrl), opaqueDemoUrl);
+  assert.equal(domainOf(serpPublisherUrl(opaqueDemoUrl)), 'google.com');
+  for (const token of ['CAESshort', 'CAES' + 'a'.repeat(20) + '%3Ahttps%3A%2F%2F127.0.0.1', 'javascript:alert(1)']) {
+    assert.equal(serpPublisherUrl(`https://google.com/goto?url=${token}`), null);
+  }
 });
 test('Google url q/url formats decode exactly once, preserving escaped article components', () => {
   const target = 'https://example.org/News/Issue%2FTracking?id=one%26two&part=1&part=2';
@@ -50,11 +58,13 @@ test('actual SERP extraction returns publisher URLs before ingestion and drops u
         { title: 'Unsafe', link: goto('https://127.0.0.1') },
         { title: 'Issue tracking', link: goto('https://monday.com/blog/issue-tracking?edition=Pro'), snippet: 'A comparison', position: 2 },
         { title: 'Guide', url: 'https://zendesk.com/blog/issue-tracking/' },
+        { title: 'Opaque demo', link: opaqueDemoUrl },
       ] }) }) },
     });
-    const results = await scraper.serpDiscover({ query: 'issue tracking', topN: 2 });
-    assert.equal(results.length, 2);
+    const results = await scraper.serpDiscover({ query: 'issue tracking', topN: 3 });
+    assert.equal(results.length, 3);
     assert.deepEqual(results[0], { title: 'Issue tracking', url: 'https://monday.com/blog/issue-tracking?edition=Pro', snippet: 'A comparison', position: 2 });
     assert.equal(domainOf(results[1].url), 'zendesk.com');
+    assert.equal(results[2].url, opaqueDemoUrl);
   } finally { if (original === undefined) delete process.env.SCRAPERAPI_KEY; else process.env.SCRAPERAPI_KEY = original; }
 });
