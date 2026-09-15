@@ -1,0 +1,11 @@
+# IFY-017 — publisher URL extraction
+
+Base: `6687bc9`. Real demo SERP results used `https://google.com/goto?url=...`. `serpDiscover` returned the wrapper unchanged, causing new source identity/domain and scrape targets to use Google instead of the article publisher.
+
+`serpPublisherUrl` now unwraps only exact `google.com` / `www.google.com` hosts at `/goto` (`url`) and `/url` (`url` or `q`). It accepts exactly one destination parameter and decodes the enclosing query once via URLSearchParams. Destination path case, meaningful query parameters, repeated query values and percent-encoded article components are preserved. Existing source normalization subsequently handles ordinary deduplication. Invalid/unsafe/ambiguous/nested wrappers are omitted before top-N selection. Publisher URLs and Google-looking foreign hosts are never treated as trusted redirect wrappers.
+
+The existing `safeSocialUrl('website')` policy supplies HTTP(S), credentials/port/whitespace and length checks plus HTTPS canonicalization. No stronger reusable public-HTTP policy existed at this base. The source-only helper adds absolute URL, malformed-escape, backslash, literal-IP and local/reserved-hostname exclusions. It does not weaken or alter the shared validator. No DNS lookup or redirect following occurs here; DNS rebinding and arbitrary publisher redirect-chain safety remain fetch-boundary concerns. Host recognition is deliberately limited to these two Google hosts, not a regex over arbitrary country domains.
+
+Validation: five realistic regression tests pass, including the actual `serpDiscover` module with mocked provider response, publisher domain/canonical identity, Google goto/url shapes, meaningful queries, double encoding, unsafe/private/malformed/nested destinations and ambiguous parameters. `npm run typecheck` passes. Full suite: 313 passed, one existing integration test skipped. No real provider calls, data writes, migrations or destructive backfill. Existing stored wrapper rows and historical citations remain unchanged; original discovery wrappers are not stored in a new field in this bounded change.
+
+Rollback: revert the code commit; already stored publisher URLs remain compatible with current source normalization and scraping.

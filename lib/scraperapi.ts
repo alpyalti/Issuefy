@@ -16,6 +16,7 @@ import { configuredEnv } from "./env";
  * logs to scrape_jobs + Sentry and continues with the next URL (PRD §13.2).
  */
 
+import { serpPublisherUrl } from "./serp-url";
 import { fetchWithTimeout as fetchWithTimeoutMs } from "./fetch";
 
 const KEY = configuredEnv(process.env.SCRAPERAPI_KEY) || "";
@@ -128,7 +129,7 @@ export async function serpDiscover(opts: SerpDiscoverOptions): Promise<SerpResul
     .map((r, i): SerpResult => ({
       position: r.position ?? i + 1,
       title: r.title ?? "",
-      url: r.link ?? r.url ?? "",
+      url: serpPublisherUrl(r.link ?? r.url ?? "") ?? "",
       snippet: r.snippet ?? "",
     }))
     .filter((r) => !!r.url)
