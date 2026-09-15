@@ -15,38 +15,40 @@ Scope: patched Next.js/transitive dependencies, reproducible default-peer lockfi
 
 Rollback reference: prior Vercel artifact `9KYEmRfmshDG4HTDPidQ9DHGKfrY`. Prior dependencies contain known advisories, so prefer forward correction. No rollback executed.
 
-## Stabilization branch: implemented, not deployed
+## Stabilization branch: implemented, not released to production
 
-`codex/issuefy-stabilization` integrates:
+`codex/issuefy-stabilization` at `56c0207` includes recoverable webhook/outbox processing (migration 0016), serialized recoverable checkout (0018), strict live/test separation, checkout-first activation, atomic project setup, owner entitlements, refresh reservations and invitation-seat serialization, durable account deletion and identity synchronization (0020), full-response HTTP timeouts, metadata-only source preservation, migration environment handling and a generic no-store health failure response.
 
-| Scope | Source commit | Evidence / remaining limits |
-| --- | --- | --- |
-| Recoverable Stripe webhook and outbox | 7a9401b | Independent mocked and disposable SQL rollback/retry checks; migration 0016 required |
-| Shared strict live/test boundary | cf0a805 | 20 independent actual-route/helper tests; reject before billing DB access |
-| Serialized recoverable checkout | 96470ea | 35 tests, disposable journal SQL; migration 0018 required |
-| Checkout-first activation and atomic project setup | fa2ef01, 54b9bd2 | 22 independent activation tests; actual SQL rollback/retry/quota checks |
-| Project owner entitlements | 0cc53cc, 18ae89f | 135 tests; paused paid-project drafting regression closed; atomic quota accounting remains |
-| Full response timeout and cancellation | 5712435 | Seven real local-server tests on Node 22/23; broader scrape efficiency remains |
+Latest billing/account corrections: `2ac7e91` attributes notices to the locked account and recognizes correct-mode deletion tombstones; `ec87406` reproduces shared-email suppression. Independent review PASS with migration 0020 and lifecycle code prerequisites. Immediate account cancellation uses no proration or invoice; actual production subscriptions have not been canceled. Stripe contact-email synchronization remains deferred.
 
-Combined validation: 237 tests passed and one optional SQL smoke test skipped in sandbox. Seven local-server tests initially could not bind loopback (EPERM); all seven passed when rerun with loopback permission. Thus 244 executed tests passed across these runs. Combined typecheck and Node 22 production build passed. The first sandbox build stalled and was stopped before the successful Node 22 build with subprocess permissions. Existing middleware/Edge deprecation warnings remain.
+### Final local validation
 
-## Mandatory billing release gates
+- `npm run check`: 302 unit tests passed, 1 legacy optional smoke skipped; typecheck and Node 22 production build passed.
+- Mandatory disposable PostgreSQL 17 integration suite: 40 passed, 0 failed/skipped/TODO. Billing, account lifecycle, refresh reservations and invitation races run against real isolated databases. CI now requires these harnesses and rejects skipped tests.
+- Source preservation: five SQL-contract tests pass; execution of this specific upsert against PostgreSQL remains unverified.
+- Logs: `/private/tmp/issuefy-final-check.log`, `/private/tmp/issuefy-final-pg.log`.
 
-1. Provision/verify isolated database, Clerk and Stripe test resources. Current Vercel Preview shares production variables; do not run state-changing test flows there.
-2. `BILLING_DATA_ENVIRONMENT` unset or `production` requires live keys/objects. `isolated_test` requires test keys/objects and cannot be enabled on Vercel production. This marker does not prove data isolation; never enable it on current shared Preview.
-3. Apply and validate additive migrations 0016 and 0018 before new handlers, with production backup/recovery readiness and isolated multi-connection PostgreSQL testing first. No production migration executed.
-4. Validate real test-mode checkout, webhook retry/concurrency, onboarding and authorization end-to-end in isolated staging.
-5. Unknown checkout operations older than 23 hours require operator reconciliation; never delete journals or reset idempotency keys blindly. Keep journal tables on rollback; disable checkout rather than restore unsafe handlers.
+## Isolated staging and remaining release gates
 
-## Open work
+Created Neon schema-only branch `issuefy-staging` and blank database `issuefy_staging`. Initial copied-schema users/projects counts were zero. Applied the complete migration chain plus 0020 successfully to the blank staging database. No production migration or customer-data copy performed.
 
-Account deletion/Stripe cancellation/identity and trial tombstones; atomic quota reservations; durable pipeline jobs; source versioning and analysis backlog; citation/storage retention; migration tooling and observability; full accessibility/end-to-end QA. Existing orphan Stripe customers and external Stripe writers require separate reconciliation. Pending outbox recipient retention must be addressed with deletion workflow.
+Development Clerk keys and Stripe test products/prices are stored with staging credentials in ignored mode-0600 environment files. Local synthetic Clerk signup reached the checkout-first upgrade page with plan/cadence preserved. Real Stripe SANDBOX Checkout displayed the correct 14-day trial and monthly price. Trial submission and full onboarding are not yet validated.
 
-## Trello synchronization
+User explicitly approved uploading staging database credentials, development Clerk keys and Stripe test keys ONLY to the `codex/issuefy-stabilization` Vercel Preview branch. Production was deselected in the environment dialog. Import has NOT succeeded: Chrome extension file upload requires Allow access to file URLs. Existing preview continues to inherit production configuration; do not perform state-changing tests there.
 
-Saved: IFY-002 Done (production deployed), IFY-014 Doing with release/rollback evidence; IFY-003, IFY-005 and IFY-007 Review & Test; IFY-004 and IFY-009 Doing; IFY-013 Doing with QA evidence.
+1. Finish branch-only Vercel import and redeploy; verify isolated configuration before hosted writes.
+2. Register an actual Stripe TEST webhook and store its endpoint secret for this branch. Current local webhook secret is only for a signed local relay, not proof of remote delivery.
+3. Validate test checkout completion, webhook retries, onboarding, authorization and provider-failure recovery end to end.
+4. Verify production backup/recovery readiness before additive migrations 0016, 0018 and 0020 and production code rollout. Retain journals/tombstones on rollback.
+5. Unknown checkout operations older than 23 hours require operator reconciliation; never reset their journals/idempotency keys blindly.
 
-Browser connection failed during the last updates. Pending synchronization: move IFY-009 timeout increment to Review & Test; update IFY-004 to conditional QA pass/Review & Test; append final completion-mode and shared-helper review results to IFY-003/005/013. These are code-complete increments, not completed broader cards or a deployed billing release.
+`BILLING_DATA_ENVIRONMENT=isolated_test` requires test keys/objects and is forbidden on Vercel production. The marker itself does not prove isolation.
+
+## Open work and Trello
+
+Trello remains the delivery tracker: https://trello.com/b/bm7BA77r/issuefy. Updated billing/account, entitlement, source and QA cards with this batch. Account and entitlement increments are in Review & Test. IFY-015 landing-page header flickering is saved in To Do: https://trello.com/c/GYW1zsRX.
+
+Broader durable pipeline jobs, source versioning/fair analysis backlog, signal/source quota accounting, citation/storage retention, accessibility and hosted end-to-end QA remain open. No new feature scope has been approved; present feature ideas after stabilization.
 
 ## Task IDs
 
