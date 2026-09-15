@@ -43,6 +43,7 @@ export interface UpsertSourceInput {
   sourceType: SourceType;
   scrapedAt?: Date;
   contentSnippet?: string | null;
+  /** Omitted/null means metadata-only; a string replaces the content snapshot. */
   cleanedText?: string | null;
   r2RawHtmlKey?: string | null;
 }
@@ -67,6 +68,8 @@ export async function upsertSource(input: UpsertSourceInput): Promise<UpsertSour
   // This is the standard Postgres trick for "was this an insert?".
   //
   // prior_cleaned_text + last_changed_at semantics (migration 0008):
+  //   - Metadata-only UPDATE (no cleaned_text): retain the content snapshot,
+  //     its scrape timestamp, and change history while refreshing metadata.
   //   - First INSERT: content_hash = newHash; prior_cleaned_text = NULL;
   //     last_changed_at = NULL (nothing to compare against yet).
   //   - UPDATE with same hash: no change → keep prior_cleaned_text and
@@ -99,19 +102,23 @@ export async function upsertSource(input: UpsertSourceInput): Promise<UpsertSour
       title           = EXCLUDED.title,
       domain          = EXCLUDED.domain,
       source_type     = EXCLUDED.source_type,
-      scraped_at      = EXCLUDED.scraped_at,
+      scraped_at      = CASE WHEN EXCLUDED.cleaned_text IS NOT NULL
+                         THEN EXCLUDED.scraped_at ELSE sources.scraped_at END,
       content_snippet = EXCLUDED.content_snippet,
       prior_cleaned_text = CASE
-        WHEN EXCLUDED.content_hash IS DISTINCT FROM sources.content_hash
+        WHEN EXCLUDED.cleaned_text IS NOT NULL
+         AND EXCLUDED.content_hash IS DISTINCT FROM sources.content_hash
          AND sources.content_hash IS NOT NULL
          AND sources.cleaned_text IS NOT NULL
         THEN sources.cleaned_text
         ELSE sources.prior_cleaned_text
       END,
-      cleaned_text    = EXCLUDED.cleaned_text,
-      content_hash    = EXCLUDED.content_hash,
+      cleaned_text    = COALESCE(EXCLUDED.cleaned_text, sources.cleaned_text),
+      content_hash    = CASE WHEN EXCLUDED.cleaned_text IS NOT NULL
+                         THEN EXCLUDED.content_hash ELSE sources.content_hash END,
       last_changed_at = CASE
-        WHEN EXCLUDED.content_hash IS DISTINCT FROM sources.content_hash
+        WHEN EXCLUDED.cleaned_text IS NOT NULL
+         AND EXCLUDED.content_hash IS DISTINCT FROM sources.content_hash
          AND sources.content_hash IS NOT NULL
         THEN now()
         ELSE sources.last_changed_at
