@@ -17,7 +17,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Client } from "pg";
-import { loadMigrationEnv, migrationTarget } from "./migration-env.mjs";
+import { loadMigrationEnv, migrationTarget, validateMigrationUrl } from "./migration-env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(__dirname, "..", "migrations");
@@ -34,8 +34,9 @@ export async function runMigrations({
     await loadMigrationEnv({ cwd, env });
     const connectionString = env.DATABASE_URL;
     if (!connectionString) throw new Error("DATABASE_URL is required");
-    logger.log("[migrate] target", JSON.stringify(migrationTarget(connectionString)));
+    validateMigrationUrl(connectionString);
     client = new ClientClass({ connectionString });
+    logger.log("[migrate] target", JSON.stringify(migrationTarget(client.connectionParameters)));
     await client.connect();
 
     await client.query("SELECT pg_advisory_lock($1)", [LOCK_KEY]);

@@ -1,9 +1,10 @@
 import test from "node:test";
+import { Client } from "pg";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadMigrationEnv, migrationTarget } from "../../scripts/migration-env.mjs";
+import { loadMigrationEnv, migrationTarget, validateMigrationUrl } from "../../scripts/migration-env.mjs";
 import { runMigrations } from "../../scripts/migrate.mjs";
 
 async function fixture(t, files = {}) {
@@ -42,18 +43,21 @@ test("unreadable env fails without partially mutating the environment", async (t
 });
 
 test("target excludes credentials and query parameters; invalid targets fail", () => {
-  assert.deepEqual(migrationTarget("postgresql://secret-user:secret-password@db.example.test:6432/app?sslmode=require&token=secret-token"), {
-    host: "db.example.test", port: "6432", database: "app",
+  assert.deepEqual(migrationTarget(new Client({ connectionString: "postgresql://secret-user:secret-password@db.example.test:6432/app?sslmode=require&token=secret-token" }).connectionParameters), {
+    host: "db.example.test", port: 6432, database: "app",
   });
   for (const url of ["not a url", "https://db.example.test/app", "postgres://db.example.test"]) {
-    assert.throws(() => migrationTarget(url));
+    assert.throws(() => validateMigrationUrl(url));
   }
 });
 
 function fakeDatabase({ failBody = false, failConnect = false } = {}) {
   const calls = [];
   class FakeClient {
-    constructor(options) { calls.push(["config", options.connectionString]); }
+    constructor(options) {
+      calls.push(["config", options.connectionString]);
+      this.connectionParameters = new Client(options).connectionParameters;
+    }
     async connect() { calls.push(["connect"]); if (failConnect) throw new Error("secret-connection-details"); }
     async query(sql, params) {
       calls.push([sql, params]);
@@ -116,4 +120,22 @@ test("explicit empty or invalid shell URL fails before constructing a client", a
     assert.deepEqual(fake.calls, []);
     assert.doesNotMatch(fake.output.join("\n"), /invalid-secret-value/);
   }
+});
+
+
+test("runner logs pg's effective query overrides and decoded database before connecting", async (t) => {
+  const cwd = await fixture(t);
+  const fake = fakeDatabase({ failConnect: true });
+  const connectionString = "postgres://secret-user:secret-password@display.test:5432/app%20database?host=actual.test&port=6432&application_name=secret-query";
+  class ObserveClient extends fake.ClientClass {
+    async connect() {
+      assert.deepEqual(JSON.parse(fake.output[0].slice("[migrate] target ".length)), {
+        host: "actual.test", port: 6432, database: "app database",
+      });
+      return super.connect();
+    }
+  }
+  assert.equal(await runMigrations({ cwd, env: { DATABASE_URL: connectionString }, ...fake, ClientClass: ObserveClient }), 1);
+  assert.doesNotMatch(fake.output.join("\n"), /secret-user|secret-password|secret-query|display\.test|app%20database/);
+  assert.deepEqual(fake.calls.map(([sql]) => sql), ["config", "connect", "end"]);
 });

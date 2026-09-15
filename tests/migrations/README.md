@@ -15,7 +15,9 @@ checkout's environment files. No database migration was executed for this change
   Dotenv values are parsed literally (no shell/variable expansion).
 - Confirm the approved database and backup/recovery plan before `npm run migrate`.
   The command is a write operation, not a dry run. It prints the host, port and
-  database before connecting; credentials and URL query parameters are omitted.
+  database from the constructed pg client’s effective connection parameters before
+  connecting. Query host/port overrides and pg database-name decoding are reflected;
+  userinfo and unrelated query parameters are omitted.
 - The runner keeps its advisory lock, filename ordering and per-file transactions.
   `_migrations` records completion in the same transaction as each SQL file.
   Failed files are rolled back, return exit code 1, and may be retried after the

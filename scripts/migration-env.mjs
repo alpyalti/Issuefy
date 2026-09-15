@@ -19,12 +19,17 @@ export async function loadMigrationEnv({ cwd = process.cwd(), env = process.env 
   return env;
 }
 
-export function migrationTarget(connectionString) {
+export function validateMigrationUrl(connectionString) {
   let url;
   try { url = new URL(connectionString); } catch { throw new Error("Invalid DATABASE_URL"); }
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !url.hostname || !url.pathname.slice(1)) {
     throw new Error("DATABASE_URL must specify a PostgreSQL host and database");
   }
-  // Never print userinfo, query parameters, or the complete connection string.
-  return { host: url.hostname, port: url.port || "5432", database: url.pathname.slice(1) };
+}
+
+export function migrationTarget(connectionParameters) {
+  // Read the driver's effective destination, including query overrides and
+  // decoding. Whitelist only destination fields, never serialize the client.
+  const { host, port, database } = connectionParameters;
+  return { host, port, database };
 }
