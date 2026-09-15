@@ -36,11 +36,11 @@ Linear is the demo company context; the pipeline does not automatically scrape t
 
 Vercel cron invokes production deployments; local/preview does not inherit a daily schedule. Current production daily scrape is 06:00 UTC (10:00 Dubai). Verify a separately isolated ingestion path before promising tomorrow's brief. Do not invoke production cron for this demo.
 
-A one-shot staging operator runner is being prepared: pin exact database and owner/project, preserve billing/quotas, allow only required existing scraper/LLM credentials in memory, disable email/storage/social effects, and document expected request bounds. These are workload bounds, not hard provider-dollar caps. Default dry-run; explicit execution after review. No first real signal batch has been produced yet.
+The one-shot operator runner is `scripts/demo-brief.mjs` (default read-only preflight; see scripts/demo-brief.md): pin exact database and owner/project, preserve billing/quotas, allow only required existing scraper/LLM credentials in memory, disable email/storage/social effects, and document expected request bounds. These are workload bounds, not hard provider-dollar caps. Default dry-run; explicit execution after review. The first real batch is complete and all four signals were reviewed; see DEMO-QUALITY-LOG.md. Website mismatch was fixed in code and corrected through Settings. The fresh-only runner now intentionally refuses further execution; configure a separately isolated daily ingestion path before claiming ongoing delivery.
 
 ## Initial observations
 
 - PASS: chosen checkout plan survived signup, sandbox checkout and confirmation into onboarding.
 - PASS: manual company setup and competitor URL fallback allowed completion without LLM enrichment.
 - UX observation: empty dashboard promises tomorrow's brief and email unconditionally, although this isolated environment has no verified scheduler/email configuration. Track under IFY-008/013; do not interpret as an operational guarantee.
-- Pending: first real ingestion, citation quality, saved/filter workflows and longitudinal quality trends.
+- First ingestion and citation review complete; source expansion and Saved view verified. Pending: daily ingestion scheduling, broader filters and longitudinal quality trends.

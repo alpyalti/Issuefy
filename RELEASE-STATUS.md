@@ -50,7 +50,7 @@ Trello remains the delivery tracker: https://trello.com/b/bm7BA77r/issuefy. Upda
 
 Header restored-scroll hydration fix integrated as `b504436`; targeted browser fixture and project typecheck pass. Full-page pricing anchor rendered the floating header correctly; pre-hydration cold-load/WebGL flicker remains unverified.
 
-The user requested a demo account and recurring signal quality evaluation. Demo project and 11:00 Dubai daily follow-up are created; see DEMO-QUALITY-PLAN.md and DEMO-QUALITY-LOG.md. First real ingestion is being prepared, not yet scored.
+The user requested a demo account and recurring signal quality evaluation. Demo project and 11:00 Dubai daily follow-up are created; see DEMO-QUALITY-PLAN.md and DEMO-QUALITY-LOG.md. First real ingestion completed with four signals and one scrape timeout. All four were reviewed; quality problems and prioritized corrections are documented in DEMO-QUALITY-LOG.md and Trello IFY-017. Automatic daily staging ingestion is still unconfigured.
 
 Broader durable pipeline jobs, source versioning/fair analysis backlog, signal/source quota accounting, citation/storage retention, accessibility and hosted end-to-end QA remain open. No new feature scope has been approved; present feature ideas after stabilization.
 
@@ -65,3 +65,11 @@ Broader durable pipeline jobs, source versioning/fair analysis backlog, signal/s
 - Timeout (Astra low): 01a0a5b7-36f5-7e22-88c2-636ecb094e32
 
 Main baseline merged into stabilization as bb55774. Only duplicate CI additions conflicted; resolved tree was byte-identical to the already tested stabilization tree. No production merge performed.
+
+## Demo-driven fixes and evidence
+
+- `6fe005c`: preserve authoritative monitored website in onboarding and Settings; Settings reports Saved only after successful request. Six focused regressions pass; full source-branch suite 308 pass/1 existing skip, typecheck/build pass. Root URL+runner checks:10/10. Actual demo Settings edits and guarded persisted-URL preflight pass.
+- Removed unconditional Cross-verified from signal cards; display Source linked and singular source count. Four live labels, citation expansion and Saved workflow verified; final project typecheck passes.
+- First demo job `1b37a978-64cf-4004-8101-6f1d7b6ad22e`:4signals, summary created,3SERP,7successful scrapes;10source rows/7usable, one aborted scrape. Normal quota claim preserved. No email delivery or production writes.
+- Draft PR2 passed all4checks at bb55774, with no merge conflicts. Later pushes require fresh CI verification; production remains unchanged.
+- Quality remediation backlog: https://trello.com/c/Qg2awmCH (IFY-017). Current batch shows stale/evergreen claims, lost pricing qualifiers, self-competitor action, repeated generic advice and Google redirect publisher labels. This small sample is not an overall accuracy estimate.

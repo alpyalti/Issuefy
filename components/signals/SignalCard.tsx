@@ -171,10 +171,10 @@ export function SignalCard({
         <footer className="signal-foot">
           <button className="srcbtn" onClick={() => setSourcesOpen((o) => !o)}>
             <SourceStack sources={sig.sources} />
-            <span className="srcbtn-label">{sig.sources.length} sources</span>
+            <span className="srcbtn-label">{sig.sources.length} source{sig.sources.length === 1 ? "" : "s"}</span>
             <Icon name={sourcesOpen ? "ArrowUp01Icon" : "ArrowDown01Icon"} size={15} stroke={1.8} />
           </button>
-          <span className="verified"><Icon name="CheckmarkBadge01Icon" size={15} stroke={1.7} /> Cross-verified</span>
+          <span className="verified"><Icon name="LinkSquare02Icon" size={15} stroke={1.7} /> {sig.sources.length ? "Source linked" : "No source linked"}</span>
         </footer>
 
         {sourcesOpen && (
