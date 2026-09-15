@@ -10,11 +10,13 @@ export function CompanyCard({
   onChange,
   onRemove,
   compact,
+  websiteRequired = false,
 }: {
   data: CompanyData;
   onChange: (d: CompanyData) => void;
   onRemove?: () => void;
   compact?: boolean;
+  websiteRequired?: boolean;
 }) {
   function toggle(i: number) {
     const s = data.socials.map((x, j) => (j === i ? { ...x, on: !x.on } : x));
@@ -42,9 +44,12 @@ export function CompanyCard({
         {data.socials.map((s, i) => (
           <div className={"co-social " + (s.on ? "on" : "off")} key={i}>
             <span className="co-social-ic"><Icon name={s.icon} size={15} stroke={1.7} /></span>
-            <span className="co-social-kind">{s.kind}</span>
+            <span className="co-social-kind">{s.kind}{websiteRequired && s.kind.toLowerCase() === "website" ? " (required)" : ""}</span>
             <input className="co-social-val" value={s.value} onChange={(e) => edit(i, e.target.value)} spellCheck={false} />
-            <button className="co-social-toggle" onClick={() => toggle(i)} title={s.on ? "Tracking" : "Off"}>
+            <button className="co-social-toggle" onClick={() => toggle(i)}
+              disabled={websiteRequired && s.kind.toLowerCase() === "website"}
+              title={websiteRequired && s.kind.toLowerCase() === "website" ? "Website tracking is required for competitors" : s.on ? "Tracking" : "Off"}
+              aria-label={websiteRequired && s.kind.toLowerCase() === "website" ? "Website tracking is required for competitors" : `${s.kind} tracking ${s.on ? "on" : "off"}`}>
               <Icon name={s.on ? "CheckmarkBadge01Icon" : "Add01Icon"} size={16} stroke={1.7} />
             </button>
           </div>

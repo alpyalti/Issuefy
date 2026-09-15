@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
+import { competitorPayload, companyPayload, seedWebsite } from "./payload";
 import { CompanyCard } from "./CompanyCard";
 import { ChipInput } from "./ChipInput";
 import { MarketSelect } from "./MarketSelect";
@@ -71,18 +72,8 @@ function profileToCardData(profile: ServerProfile, fallbackUrl: string): Company
     tagline: profile.description.slice(0, 100),
     color: "#15171A",
     initials,
-    socials,
+    socials: seedWebsite(socials, fallbackUrl || profile.source_url),
   };
-}
-
-function cardToSocialsPayload(card: CompanyData): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const s of card.socials) {
-    if (!s.on || !s.value) continue;
-    const k = s.kind.toLowerCase();
-    out[k === "twitter" ? "x" : k] = s.value;
-  }
-  return out;
 }
 
 /**
@@ -192,7 +183,7 @@ export default function OnboardingFlow({
       tagline: manualDesc.trim().slice(0, 100),
       color: "#15171A",
       initials,
-      socials: [],
+      socials: seedWebsite([], companyUrl),
     });
     if (!projectName) setProjectName(name);
     setEnrichErr(null);
@@ -273,15 +264,7 @@ export default function OnboardingFlow({
     setSubmitErr(null);
     setSubmitting(true);
     try {
-      const companyBody = !skipCompany && companyData ? {
-        company_name: companyData.name,
-        // Omit when blank — a hand-entered company may have no website, and the
-        // API's url validator rejects "" (min length 3).
-        ...(companyData.domain ? { company_website: companyData.domain } : {}),
-        company_description: companyData.tagline,
-        company_socials: cardToSocialsPayload(companyData),
-        track_company: true,
-      } : {};
+      const companyBody = !skipCompany && companyData ? companyPayload(companyData) : {};
 
       const projRes = await fetch("/api/projects", {
         method: "POST",
@@ -293,7 +276,7 @@ export default function OnboardingFlow({
           target_market: targetMarket.trim(),
           ...companyBody,
           setup: {
-            competitors: competitors.map((c) => ({ website_url: c.domain, name: c.name, description: c.tagline, socials: cardToSocialsPayload(c) })),
+            competitors: competitors.map(competitorPayload),
             keywords: keywords.map((keyword) => ({ keyword })),
           },
         }),
@@ -496,7 +479,7 @@ export default function OnboardingFlow({
                 {competitors.map((c, i) => (
                   <CompanyCard
                     key={c.domain}
-                    data={c}
+                    websiteRequired data={c}
                     onChange={(d) => setCompetitors((prev) => prev.map((x, j) => (j === i ? d : x)))}
                     onRemove={() => setCompetitors((prev) => prev.filter((_, j) => j !== i))}
                     compact
