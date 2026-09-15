@@ -1,6 +1,6 @@
 /**
- * fetchWithTimeout — the one place the AbortController + setTimeout +
- * clearTimeout-in-finally dance lives. Before this, the identical block was
+ * fetchWithTimeout — the shared deadline for fetching headers and consuming
+ * the response body. Before this, the identical block was
  * hand-rolled in nine fetchers (scraperapi, apify, openrouter, social-stats,
  * social-monitor, lead-sources, the social-image proxy); a timer-leak or
  * signal bug meant nine fixes.
@@ -14,10 +14,12 @@ export async function fetchWithTimeout(
   ms = 25_000,
 ): Promise<Response> {
   const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), ms);
-  try {
-    return await fetch(url, { ...init, signal: ctl.signal });
-  } finally {
-    clearTimeout(t);
-  }
+  // Native deadlines do not keep Node alive. Keep this deadline active after
+  // headers arrive so the original Response's body (including clones) is covered.
+  // Translate TimeoutError to AbortError to preserve existing catch semantics.
+  AbortSignal.timeout(ms).addEventListener("abort", () => ctl.abort(), { once: true });
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, ctl.signal])
+    : ctl.signal;
+  return fetch(url, { ...init, signal });
 }
