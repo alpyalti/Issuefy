@@ -57,7 +57,7 @@ test("mandatory gate rejects skipped, TODO, empty and failed suites", t => {
   }
 });
 
-test("mandatory gate runs both files with locale C and removes credential/config variables", t => {
+test("mandatory gate runs every selected file with locale C and removes credential/config variables", t => {
   const f = fixture(t, `const test=require('node:test'),assert=require('node:assert/strict');
     test('sanitized',()=>{
       for(const key of ['DATABASE_URL','PGHOST','PGPASSWORD','STRIPE_SECRET_KEY','HOME','NODE_OPTIONS','ISSUEFY_BILLING_TEST_SOURCE_ROOT']) assert.equal(process.env[key],undefined,key);
@@ -70,5 +70,5 @@ test("mandatory gate runs both files with locale C and removes credential/config
     ISSUEFY_BILLING_TEST_SOURCE_ROOT: "synthetic", LC_ALL: "invalid",
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /Integration: 2 tests, 2 passed, 0 failed, 0 skipped/);
+  assert.ok(result.stdout.includes(`Integration: ${integrationTests.length} tests, ${integrationTests.length} passed, 0 failed, 0 skipped`), result.stdout);
 });
