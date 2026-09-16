@@ -29,7 +29,8 @@ test('durable jobs with disposable PostgreSQL (no external DB configuration)', {
     const migration=readFileSync(resolve(__dirname,'../../migrations/0021_durable_jobs.sql'),'utf8');
     await pool.query(migration); await pool.query(migration);
     const sql=async(strings,...values)=>(await pool.query(strings.reduce((s,part,i)=>s+(i?'$'+i:'')+part,''),values)).rows;
-    const withSession=async fn=>{const c=await pool.connect();try{return await fn(c);}finally{c.release(true);}};
+    let lastLeaseClient;
+    const withSession=async fn=>{const c=await pool.connect();lastLeaseClient=c;try{return await fn(c);}finally{c.release(true);}};
     const withTx=async fn=>{const c=await pool.connect();try{await c.query('BEGIN');const v=await fn(c);await c.query('COMMIT');return v;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}};
     const jobs=loadTs('lib/scrape-jobs.ts',{'./db':{requireSql:()=>sql,withSession},'./sentry':{captureError(){}}});
     async function project(active=true) {
@@ -73,12 +74,33 @@ test('durable jobs with disposable PostgreSQL (no external DB configuration)', {
       const row=(await pool.query('SELECT status,error_message FROM scrape_jobs WHERE project_id=$1',[id])).rows[0];
       assert.equal(row.status,'failed');assert.match(row.error_message,/uncertain/);
     });
+    await t.test('stale classification survives callback failure and lease rollback',async()=>{
+      const id=await project();
+      await pool.query("INSERT INTO scrape_jobs(project_id,status,job_type,started_at) VALUES($1,'running','daily',now()-interval '1 hour')",[id]);
+      await assert.rejects(jobs.withScrapeLease(id,async()=>{throw new Error('synthetic entry failure');}),/synthetic entry failure/);
+      assert.equal((await pool.query('SELECT status FROM scrape_jobs WHERE project_id=$1',[id])).rows[0].status,'failed');
+    });
+    await t.test('lost backend fails next checkpoint and fresh running journal blocks replacement',async()=>{
+      const id=await project();let paidStages=0;
+      await assert.rejects(jobs.withScrapeLease(id,async check=>{
+        await check();
+        await pool.query("INSERT INTO scrape_jobs(project_id,status,job_type,started_at) VALUES($1,'running','daily',now())",[id]);
+        const pid=(await lastLeaseClient.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        await pool.query('SELECT pg_terminate_backend($1)',[pid]);
+        await check();paidStages++;
+      }));
+      assert.equal(paidStages,0);
+      await assert.rejects(jobs.withScrapeLease(id,async()=>{paidStages++;}),jobs.ProjectBusyError);
+      assert.equal(paidStages,0);
+      assert.equal((await pool.query('SELECT status FROM scrape_jobs WHERE project_id=$1',[id])).rows[0].status,'running');
+    });
     const workerMocks={};
     for(const [,name] of readFileSync(resolve(__dirname,'../../lib/process-project.ts'),'utf8').matchAll(/from ["']([^"']+)["']/g)) {
       workerMocks[name]=new Proxy({}, {get:()=>()=>{throw new Error('Unexpected provider call');}});
     }
     Object.assign(workerMocks,{
       './db':{requireSql:()=>sql,withTx},'./scrape-jobs':jobs,'./usage':loadTs('lib/usage.ts'),
+      './scrape-targets':loadTs('lib/scrape-targets.ts',{'./url-normalize':loadTs('lib/url-normalize.ts')}),
       '@/lib/billing-gate':{ensureProjectWorkerSubscription:async()=>{}},
       './markets':{resolveMarket:()=>({matched:true,langs:['en']})},
       './sentry':{captureError(){},captureBreadcrumb(){}},
