@@ -20,7 +20,7 @@ import { requireSql, withTx } from "./db";
 import { standardScrape, serpDiscover } from "./scraperapi";
 import { cleanForStorage } from "./cleaner";
 import { upsertSource, type SourceType } from "./sources";
-import { archiveRawHtml } from "./storage";
+import { archiveRawHtml, sourceArchiveKey } from "./storage";
 import { reserveCalls, claimCapNotice } from "./usage-counters";
 import { getLimits } from "./usage";
 import { sendUsageNoticeEmail, sendDailyBriefEmail } from "./mailer";
@@ -593,7 +593,7 @@ async function scrapeAndStore(
   if (!cleaned.ok) return { skipped: true, inserted: false };
 
   // Best-effort raw HTML archival (PRD §10.6, R2_ENABLED).
-  const r2Key = await archiveRawHtml(`raw/${projectId}/${Date.now()}.html`, html);
+  const r2Key = await archiveRawHtml(sourceArchiveKey(projectId), html);
 
   const result = await upsertSource({
     projectId,

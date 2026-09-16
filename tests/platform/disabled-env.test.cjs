@@ -91,7 +91,7 @@ for (const key of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 
   test(`disabled ${key} prevents an R2 SDK call even when enabled`, async (t) => {
     setEnv(t, { R2_ENABLED: 'true', R2_ACCOUNT_ID: 'synthetic', R2_ACCESS_KEY_ID: 'synthetic', R2_SECRET_ACCESS_KEY: 'synthetic', R2_BUCKET: 'synthetic', [key]: DISABLED });
     let calls = 0;
-    const storage = loadTs('lib/storage.ts', { './env': env, '@aws-sdk/client-s3': { S3Client: class { constructor() { calls++; } } } });
+    const storage = loadTs('lib/storage.ts', { './db': { requireSql: () => { throw Error('Disabled storage must not query DB'); } }, './env': env, '@aws-sdk/client-s3': { S3Client: class { constructor() { calls++; } } } });
     assert.equal(await storage.archiveRawHtml('test', 'html'), null);
     assert.equal(calls, 0);
   });
