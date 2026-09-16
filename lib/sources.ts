@@ -104,7 +104,8 @@ export async function upsertSource(input: UpsertSourceInput): Promise<UpsertSour
       source_type     = EXCLUDED.source_type,
       scraped_at      = CASE WHEN EXCLUDED.cleaned_text IS NOT NULL
                          THEN EXCLUDED.scraped_at ELSE sources.scraped_at END,
-      content_snippet = EXCLUDED.content_snippet,
+      content_snippet = CASE WHEN EXCLUDED.cleaned_text IS NOT NULL OR sources.cleaned_text IS NULL
+                         THEN EXCLUDED.content_snippet ELSE sources.content_snippet END,
       prior_cleaned_text = CASE
         WHEN EXCLUDED.cleaned_text IS NOT NULL
          AND EXCLUDED.content_hash IS DISTINCT FROM sources.content_hash

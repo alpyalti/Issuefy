@@ -1,7 +1,7 @@
 /**
  * AI signal extraction (PRD §13.5 / §16.1).
  *
- * Pulls a batch of recent sources for a project, builds the prompt with the
+ * Claims a fair batch of immutable source versions for a project, builds the prompt with the
  * full project context (including the company profile when present, §16.1),
  * calls OpenRouter for strict JSON, validates with Zod, REJECTS any returned
  * signal whose `source_id` doesn't resolve to a source row we sent (i.e. AI
@@ -10,9 +10,10 @@
  * land orphan rows.
  *
  * Per-project/day safety rail: at most `maxSignalsPerProjectPerDay` signals
- * are written; further extracted signals are dropped (PRD §21.3).
+ * are written; remaining candidates are cached for a later day (PRD §21.3).
  */
-import { requireSql, withTx } from "./db";
+import { claimAnalysis, finishAnalysis, releaseAnalysis } from "./source-analysis";
+import { requireSql } from "./db";
 import { chatJson } from "./openrouter";
 import { reserveCalls } from "./usage-counters";
 import { getLimits } from "./usage";
@@ -47,21 +48,6 @@ interface CompetitorContext {
 
 interface KeywordContext {
   keyword: string;
-}
-
-interface BatchSource {
-  id: string;
-  title: string;
-  url: string;
-  cleaned_text: string | null;
-  content_snippet: string | null;
-  // Change detection (migration 0008). prior_cleaned_text holds the text
-  // from BEFORE the most recent change; last_changed_at is stamped when the
-  // hash flipped vs the previously stored hash. We treat a source as
-  // "freshly changed in this scrape cycle" when last_changed_at is within
-  // the last hour (cron + signals run back-to-back, so this is the cycle).
-  prior_cleaned_text: string | null;
-  last_changed_at: string | null;
 }
 
 export interface GenerateSignalsResult {
@@ -103,9 +89,8 @@ const SIGNAL_JSON_SCHEMA = {
 
 /**
  * Generate signals for a single project from the most recent unprocessed
- * sources. Idempotency: a re-run will surface new signals on top of existing
- * ones — we do not delete prior signals. Phase 5's daily summary regen IS
- * delete-then-insert; this is not.
+ * source versions. Empty successful analyses complete their version; failed
+ * attempts retry. Exact normalized duplicate signals are never republished.
  */
 export async function generateSignalsForProject(projectId: string): Promise<GenerateSignalsResult> {
   const sql = requireSql();
@@ -131,36 +116,25 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     SELECT keyword FROM keywords WHERE project_id = ${projectId} AND is_active = true
   `) as KeywordContext[];
 
-  // Pull the most recent N sources that still have cleaned text — empty/blocked
-  // pages are already filtered at scrape time (PRD §13.3), but we double-check.
-  // prior_cleaned_text + last_changed_at come from migration 0008 — used below
-  // to feed the model a before/after diff when a re-scrape changed the page.
-  const sources = (await sql`
-    SELECT id, title, url, cleaned_text, content_snippet,
-           prior_cleaned_text, last_changed_at
-    FROM sources
-    WHERE project_id = ${projectId}
-      AND cleaned_text IS NOT NULL
-      AND length(cleaned_text) >= 200
-    ORDER BY scraped_at DESC
-    LIMIT ${MAX_SOURCES_PER_BATCH}
-  `) as BatchSource[];
+  // Avoid paid analysis when today's publication budget is already exhausted.
+  // finishAnalysis repeats the cap check under a project lock before writing.
+  const counts = (await sql`SELECT COUNT(*)::int AS n FROM signals
+    WHERE project_id=${projectId} AND created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`) as { n: number }[];
+  if ((counts[0]?.n ?? 0) >= limits.maxSignalsPerProjectPerDay) {
+    return { inserted: 0, rejected: 0, modelUsed: null, errors: [] };
+  }
+  const claim = await claimAnalysis(projectId, MAX_SOURCES_PER_BATCH);
+  const sources = claim.versions;
+  const unprocessed = sources.filter((s) => s.result_signals === null);
 
   if (sources.length === 0) {
-    return { inserted: 0, rejected: 0, modelUsed: null, errors: ["no sources to analyze"] };
+    return { inserted: 0, rejected: 0, modelUsed: null, errors: [] };
   }
 
-  // A source is "freshly changed in this scrape cycle" when last_changed_at
-  // is within the last hour. The cron + signals run back-to-back; for manual
-  // refreshes the gap is seconds. One hour is generous enough to absorb any
-  // re-queue while still avoiding re-emitting old change-signals on subsequent
-  // days when nothing has actually changed since.
-  const FRESH_CHANGE_WINDOW_MS = 60 * 60 * 1_000;
-  const cycleCutoff = Date.now() - FRESH_CHANGE_WINDOW_MS;
-  const isFreshlyChanged = (s: BatchSource): boolean =>
-    !!s.last_changed_at &&
-    !!s.prior_cleaned_text &&
-    new Date(s.last_changed_at).getTime() >= cycleCutoff;
+  // A queued revision may wait behind older work. Preserve its before/after
+  // evidence regardless of today's scrape clock; observation time is explicit.
+  const hasPriorChange = (s: { prior_cleaned_text: string | null; cleaned_text: string }) =>
+    !!s.prior_cleaned_text && s.prior_cleaned_text !== s.cleaned_text;
 
   // Build the prompt. The model receives source_id explicitly so it can
   // attribute each signal back to a specific row — we use this to drop
@@ -169,9 +143,9 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
   // previous cleaned_text, text is the new one. The model is told (system
   // rule 9) to compare them and emit a signal only when the change is
   // materially business-relevant.
-  const sourcesJson = sources.map((s) => {
-    const text = (s.cleaned_text || s.content_snippet || "").slice(0, MAX_CHARS_PER_SOURCE);
-    const fresh = isFreshlyChanged(s);
+  const sourcesJson = unprocessed.map((s) => {
+    const text = (s.cleaned_text || "").slice(0, MAX_CHARS_PER_SOURCE);
+    const fresh = hasPriorChange(s);
     return fresh
       ? {
           source_id: s.id,
@@ -179,6 +153,7 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
           url: s.url,
           text,
           changed_since_last_scrape: true,
+          observed_change_at: s.last_changed_at,
           text_before: (s.prior_cleaned_text ?? "").slice(0, MAX_CHARS_PER_SOURCE),
         }
       : { source_id: s.id, title: s.title, url: s.url, text };
@@ -194,6 +169,7 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     "You are Issuefy, a market-intelligence analyst that extracts actionable business signals from public web sources.",
     "Output strict JSON only — no prose, no markdown.",
     "Rules:",
+    "  VERSION CONTEXT: inputs are queued immutable source revisions, possibly older than today. changed_since_last_scrape compares the stored previous revision; observed_change_at is an observation timestamp, NOT an event date or proof that an event happened today.",
     "  1. Use ONLY information present in the provided source texts. Never invent facts.",
     "  2. Each signal must cite ONE specific source_id from the input set.",
     "  3. If no useful business signal exists, return an empty signals array.",
@@ -226,7 +202,7 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
 
   let ai;
   try {
-    ai = await chatJson({
+    ai = unprocessed.length ? await chatJson({
       schemaName: "issuefy_signals",
       jsonSchema: SIGNAL_JSON_SCHEMA,
       zodSchema: signalExtractionResponseSchema,
@@ -235,69 +211,39 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
         { role: "user", content: userPrompt },
       ],
       maxTokens: 2_500,
-    });
+    }) : { data: { signals: [] }, modelUsed: null };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     captureError(e, { stage: "openrouter:signals", projectId });
+    await releaseAnalysis(claim.token).catch((releaseError) => captureError(releaseError, { stage: "analysis:release", projectId }));
     return { inserted: 0, rejected: 0, modelUsed: null, errors: [msg] };
   }
 
-  // Reject any signal whose source_id wasn't in the batch we just sent —
-  // those are model hallucinations and would otherwise orphan/contaminate.
-  const validSourceIds = new Set(sources.map((s) => s.id));
+  // Prompt IDs identify immutable version snapshots; publication links them to
+  // their original source rows. Multiple queued revisions never share prompt IDs.
+  const validSourceIds = new Set(unprocessed.map((s) => s.id));
   const accepted = ai.data.signals.filter((s) => validSourceIds.has(s.source_id));
   let rejected = ai.data.signals.length - accepted.length;
-
-  // Per-project/day safety rail on signals (PRD §21.3).
-  const todayCountRows = (await sql`
-    SELECT COUNT(*)::int AS n FROM signals
-    WHERE project_id = ${projectId} AND created_at >= date_trunc('day', now())
-  `) as { n: number }[];
-  let remainingToday = Math.max(0, limits.maxSignalsPerProjectPerDay - (todayCountRows[0]?.n ?? 0));
-  if (accepted.length > remainingToday) rejected += accepted.length - remainingToday;
-  const toInsert = accepted.slice(0, remainingToday);
-
-  if (toInsert.length === 0) {
-    return { inserted: 0, rejected, modelUsed: ai.modelUsed, errors };
-  }
-
-  // Write signals + signal_sources atomically. Bumping the signals_generated
-  // counter happens outside the transaction so a duplicate-attribution conflict
-  // doesn't double-count.
-  let insertedIds: string[] = [];
+  const results = new Map(unprocessed.map((s) => [s.id, accepted.filter((sig) => sig.source_id === s.id).map((sig) => ({ ...sig, suggested_action: sig.suggested_action ?? "" }))]));
+  let inserted = 0;
   try {
-    insertedIds = await withTx(async (client) => {
-      const ids: string[] = [];
-      for (const sig of toInsert) {
-        const { rows } = await client.query<{ id: string }>(
-          `INSERT INTO signals
-            (project_id, title, category, description, importance, confidence_score, suggested_action)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING id`,
-          [projectId, sig.title, sig.category, sig.description, sig.importance, sig.confidence_score, sig.suggested_action || null],
-        );
-        const signalId = rows[0].id;
-        await client.query(
-          `INSERT INTO signal_sources (signal_id, source_id) VALUES ($1, $2)
-           ON CONFLICT (signal_id, source_id) DO NOTHING`,
-          [signalId, sig.source_id],
-        );
-        ids.push(signalId);
-      }
-      return ids;
-    });
+    const committed = await finishAnalysis(projectId, claim.token, results, limits.maxSignalsPerProjectPerDay);
+    inserted = committed.inserted;
+    rejected += committed.duplicates;
+    if (committed.finalized !== sources.length) errors.push("Source analysis claim expired; uncommitted versions remain retryable.");
   } catch (e) {
     captureError(e, { stage: "insert:signals", projectId });
+    await releaseAnalysis(claim.token).catch((releaseError) => captureError(releaseError, { stage: "analysis:release", projectId }));
     return { inserted: 0, rejected, modelUsed: ai.modelUsed, errors: [e instanceof Error ? e.message : "insert failed"] };
   }
 
   // Bump the signals_generated usage counter (PRD §21.3 — value/fair-use limit).
   try {
-    await reserveCalls(project.user_id, "signals_generated", insertedIds.length);
+    if (inserted) await reserveCalls(project.user_id, "signals_generated", inserted);
   } catch (e) {
     // Non-fatal: counter increment shouldn't roll back the writes.
     captureError(e, { stage: "increment:signals_generated", projectId });
   }
 
-  return { inserted: insertedIds.length, rejected, modelUsed: ai.modelUsed, errors };
+  return { inserted: inserted, rejected, modelUsed: ai.modelUsed, errors };
 }
