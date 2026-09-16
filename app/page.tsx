@@ -408,7 +408,7 @@ export default function LandingPage() {
       <section className="cta-final">
         <div className="wrap">
           <h2>Start every morning <em>ahead</em> of the market.</h2>
-          <p>Set up your watchlist in minutes. Your first brief lands tomorrow at 7am.</p>
+          <p>Set up your watchlist in minutes. Monitoring runs daily while your project is active; briefs appear when there are supported signals.</p>
           <div className="acts">
             <Link href="/sign-up" className="btn btn-accent btn-lg">Start free<Icon name="ArrowRight01Icon" size={18} stroke={2} /></Link>
             <a href="#product" className="btn btn-ghost btn-lg">See a sample brief</a>
