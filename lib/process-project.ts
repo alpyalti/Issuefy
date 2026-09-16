@@ -222,6 +222,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
 
       const merged: { title: string; url: string; snippet: string }[] = [];
       const seen = new Set<string>();
+      let successfulQueries = 0;
 
       for (const v of variants) {
         const afterReserve = await reserveCalls(user.id, "serp_calls");
@@ -240,6 +241,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
             hl: v.label,
             topN: TOP_N,
           });
+          successfulQueries++;
           for (const r of results) {
             if (seen.has(r.url)) continue;
             seen.add(r.url);
@@ -267,10 +269,9 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
         sourceType: "Article",
         contentSnippet: r.snippet,
       })));
-      // Only stamp last_discovered_at when at least one variant landed real
-      // results — if the very first variant exhausted the budget with zero
-      // results, leave the keyword due so the next cycle picks it back up.
-      if (!serpBudgetExhausted || merged.length > 0) {
+      // A valid empty response is a completed search. Failed/denied requests
+      // are not discovery: keep the keyword due when no query succeeded.
+      if (successfulQueries > 0) {
         await sql`UPDATE keywords SET last_discovered_at = now() WHERE id = ${kw.id}`;
       }
     }

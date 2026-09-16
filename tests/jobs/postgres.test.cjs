@@ -130,6 +130,36 @@ test('durable jobs with disposable PostgreSQL (no external DB configuration)', {
       assert.equal(calls,1);
       assert.equal((await pool.query('SELECT status FROM scrape_jobs WHERE id=$1',[job])).rows[0].status,'completed');
     });
+    for (const scenario of [
+      { name: 'all SERP queries fail', responses: ['fail','fail'], budgets: [1,2], stamped: false, calls: 2 },
+      { name: 'valid empty SERP responses', responses: [[],[]], budgets: [1,2], stamped: true, calls: 2 },
+      { name: 'budget denied before any query', responses: [], budgets: [Infinity], stamped: false, calls: 0 },
+      { name: 'empty success then budget denied', responses: [[]], budgets: [1,Infinity], stamped: true, calls: 1 },
+      { name: 'one failed and one empty success', responses: ['fail',[]], budgets: [1,2], stamped: true, calls: 2 },
+    ]) {
+      await t.test(`discovery timestamp: ${scenario.name}`, async()=>{
+        const id=await project();
+        const keyword=(await pool.query("INSERT INTO keywords(project_id,keyword) VALUES($1,'test keyword') RETURNING id",[id])).rows[0].id;
+        const job=(await pool.query("INSERT INTO scrape_jobs(project_id,status,job_type) VALUES($1,'pending','manual') RETURNING id",[id])).rows[0].id;
+        let calls=0,reservations=0;
+        const mocks={...workerMocks,
+          './markets':{resolveMarket:()=>({matched:true,langs:['en','fr']})},
+          './translation':{translateKeyword:async()=> 'translated keyword'},
+          './usage-counters':{reserveCalls:async()=>scenario.budgets[reservations++],claimCapNotice:async()=>false},
+          './scraperapi':{serpDiscover:async()=>{
+            const response=scenario.responses[calls++];
+            if(response==='fail')throw new Error('synthetic network failure');
+            return response;
+          },standardScrape:async()=>assert.fail('no scrape targets expected')},
+          './signals':{generateSignalsForProject:async()=>({inserted:0,rejected:0,modelUsed:null,errors:[]})},
+        };
+        const result=await loadTs('lib/process-project.ts',mocks).processProject(id,'manual',job);
+        assert.equal(calls,scenario.calls);assert.equal(reservations,scenario.budgets.length);
+        assert.equal(result.errors.filter(e=>e.startsWith('serp:')).length,scenario.responses.filter(r=>r==='fail').length);
+        const row=(await pool.query('SELECT last_discovered_at FROM keywords WHERE id=$1',[keyword])).rows[0];
+        assert.equal(row.last_discovered_at!==null,scenario.stamped);
+      });
+    }
     await t.test('expired never-started daily job is retained as failed, not replayed',async()=>{
       const id=await project();await pool.query("INSERT INTO competitors(project_id,name,website_url) VALUES($1,'Test','https://example.com')",[id]);
       const old=(await pool.query("INSERT INTO scrape_jobs(project_id,status,job_type,daily_key) VALUES($1,'pending','daily',(now() AT TIME ZONE 'UTC')::date-1) RETURNING id",[id])).rows[0].id;
