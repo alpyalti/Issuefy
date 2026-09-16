@@ -69,12 +69,12 @@ export default function FirstRunCard({
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 22, fontWeight: 500, letterSpacing: "-0.01em", color: "var(--ink)", lineHeight: 1.2 }}>
           {running
             ? "Building your first brief now."
-            : "Your project is live. Your first brief lands tomorrow morning."}
+            : "Your project is ready for its first scan."}
         </h2>
         <p style={{ fontSize: 14.5, color: "var(--ink-2)", lineHeight: 1.55, maxWidth: 560 }}>
           {running
             ? <>Scanning your sources{firstCompetitorName ? ` — starting with ${firstCompetitorName}` : ""}. This usually takes 60&ndash;90 seconds. You can navigate around; the dashboard will refresh on its own when it&apos;s ready.</>
-            : <>Issuefy runs its daily scan around 06:00 UTC and emails you the summary{firstCompetitorName ? ` — starting with what's new at ${firstCompetitorName}` : ""}. Or trigger one now to see it sooner.</>}
+            : <>Daily monitoring runs while your subscription is active. Email delivery follows your notification settings. Run a scan now to look for your first signals{firstCompetitorName ? `, starting with ${firstCompetitorName}` : ""}.</>}
         </p>
       </div>
 

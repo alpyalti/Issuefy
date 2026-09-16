@@ -117,6 +117,14 @@ export default function LandingChrome() {
         pricing.setAttribute("data-billing", mode);
         billA.classList.toggle("on", mode === "annual");
         billM.classList.toggle("on", mode === "monthly");
+        billA.setAttribute("aria-pressed", String(mode === "annual"));
+        billM.setAttribute("aria-pressed", String(mode === "monthly"));
+        // Native anchors navigate using this href, including open-in-new-tab.
+        // A Next Link would retain its original annual href in the click handler.
+        pricing.querySelectorAll<HTMLAnchorElement>("a[data-pricing-plan]").forEach((link) => {
+          const query = new URLSearchParams({ plan: link.dataset.pricingPlan!, billing: mode });
+          link.setAttribute("href", `/sign-up?${query}`);
+        });
       };
       const toM = () => setBilling("monthly");
       const toA = () => setBilling("annual");
