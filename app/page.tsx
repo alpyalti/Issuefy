@@ -32,7 +32,7 @@ export default function LandingPage() {
           <div className="nav-cta">
             <Link href="/sign-in" className="btn btn-quiet nav-signin">Sign in</Link>
             <Link href="/sign-up" className="btn btn-accent btn-sm">Start free</Link>
-            <button className="nav-burger" id="navBurger" aria-label="Open menu" aria-expanded="false">
+            <button className="nav-burger" id="navBurger" aria-controls="mobileMenu" aria-label="Open menu" aria-expanded="false">
               <Icon name="Menu01Icon" size={22} />
             </button>
           </div>
@@ -40,7 +40,7 @@ export default function LandingPage() {
       </div>
 
       {/* ============ MOBILE MENU ============ */}
-      <div className="mobile-menu" id="mobileMenu" aria-hidden="true">
+      <div className="mobile-menu" id="mobileMenu" role="dialog" aria-modal="true" aria-label="Navigation menu" aria-hidden="true">
         <button className="mm-close" id="mmClose" aria-label="Close menu"><Icon name="Cancel01Icon" size={24} /></button>
         <nav className="mm-links">
           <a href="#product">Product</a>
@@ -347,10 +347,10 @@ export default function LandingPage() {
                 ["Can I choose what to monitor?", "Yes. Set the competitors, keywords and target market you care about in your watchlist, and adjust them anytime. Your brief adapts the next morning."],
                 ["Is my data secure?", "Issuefy only reads public sources — never your private systems. Your watchlist and workspace stay private to your team, and SSO with white-label is available on Enterprise."],
                 ["Do you offer a free trial?", "Yes — Starter comes with a 14-day free trial. We collect a card upfront, but you won't be charged until day 15. Cancel anytime before then and you pay nothing."],
-              ].map(([q, a]) => (
+              ].map(([q, a], index) => (
                 <div className="faq-item" key={q}>
-                  <button className="faq-q">{q}<span className="faq-ic"><Icon name="Add01Icon" size={16} stroke={1.8} /></span></button>
-                  <div className="faq-a"><div className="faq-a-inner">{a}</div></div>
+                  <button className="faq-q" aria-expanded="false" aria-controls={`faq-answer-${index}`}>{q}<span className="faq-ic"><Icon name="Add01Icon" size={16} stroke={1.8} /></span></button>
+                  <div className="faq-a" id={`faq-answer-${index}`} aria-hidden="true"><div className="faq-a-inner">{a}</div></div>
                 </div>
               ))}
             </div>
@@ -369,13 +369,14 @@ export default function LandingPage() {
                 <p>Questions about plans, security, or a custom setup? Reach out — a real person replies within one business day.</p>
                 <a href="mailto:hello@issuefy.app" className="contact-mail"><Icon name="Mail01Icon" size={20} />hello@issuefy.app</a>
                 <div className="contact-channels">
-                  <Link href="/sign-up" className="c-chip">Book a demo <Icon name="ArrowUpRight01Icon" size={14} /></Link>
+                  <Link href="/sign-up" className="c-chip">Start free trial <Icon name="ArrowUpRight01Icon" size={14} /></Link>
                   <a href="#faq" className="c-chip">Browse FAQ <Icon name="ArrowUpRight01Icon" size={14} /></a>
                   <a href="mailto:support@issuefy.app" className="c-chip">Support <Icon name="ArrowUpRight01Icon" size={14} /></a>
                 </div>
               </div>
               <div>
-                <form className="contact-form" id="contactForm" noValidate>
+                <form className="contact-form" id="contactForm">
+                  <p>This form opens a draft in your email app. You send it from there.</p>
                   <div className="cf-row">
                     <div className="cf-field">
                       <label htmlFor="cf-name">Name</label>
@@ -390,12 +391,12 @@ export default function LandingPage() {
                     <label htmlFor="cf-msg">How can we help?</label>
                     <textarea className="cf-input" id="cf-msg" placeholder="Tell us what you'd like to monitor…" required />
                   </div>
-                  <button type="submit" className="btn btn-accent btn-lg">Send message<Icon name="ArrowRight01Icon" size={18} stroke={2} /></button>
+                  <button type="submit" className="btn btn-accent btn-lg">Open email draft<Icon name="ArrowRight01Icon" size={18} stroke={2} /></button>
                 </form>
-                <div className="contact-success">
+                <div className="contact-success" role="status">
                   <span className="ok"><Icon name="CheckmarkBadge01Icon" size={24} /></span>
-                  <h4>Thanks — message received.</h4>
-                  <p>We&apos;ll get back to you within one business day. In the meantime, your first brief is just a trial away.</p>
+                  <h4>Finish sending in your email app.</h4>
+                  <p>Opening a draft does not send your message. If your email app did not open, email hello@issuefy.app directly.</p>
                 </div>
               </div>
             </div>
@@ -445,9 +446,6 @@ export default function LandingPage() {
             </div>
             <div className="foot-col">
               <h4>Company</h4>
-              <a href="#">About</a>
-              <a href="#">Careers</a>
-              <a href="#">Security</a>
               <a href="#faq">FAQ</a>
               <a href="#contact">Contact</a>
             </div>
