@@ -21,6 +21,9 @@ function setup({ status = 'active', ownerPlan = 'starter', callerPlan = 'agency'
   const caller = { id: 'caller', plan: callerPlan, email: 'caller@example.test' };
   const sql = async (strings, ...values) => {
     const query = strings.join('?'); queries.push({ query, values });
+    if (query.includes('SET TRANSACTION')) return [];
+    if (query.includes('SELECT id FROM projects')) return [{ id: 'project' }];
+    if (query.includes('SELECT role FROM project_members')) return [{ role: callerRole }];
     if (query.includes('AS "ownerId"')) return missing ? [] : [{ ownerId: 'target-owner', plan: ownerPlan, subscription_status: status, role: ownerRole, isActive: active }];
     if (query.includes('subscription_status, role FROM users')) return [{ subscription_status: callerStatus, role: admin ? 'admin' : 'user' }];
     if (query.includes('SELECT p.*, pm.role')) return ['owner', 'editor'].includes(callerRole) ? [{ id: 'project', current_user_role: callerRole, last_manual_refresh_at: null }] : [];
@@ -45,6 +48,7 @@ function setup({ status = 'active', ownerPlan = 'starter', callerPlan = 'agency'
     'next/server': { after: fn => { void fn(); } },
     '@/lib/scrape-jobs': { runQueuedJob: async (id, type, job, worker) => worker(id, type, job) },
     '@/lib/entitlement-claims': claims,
+    '@/lib/watchlist-claims': load('lib/watchlist-claims.ts', { './api': api, './db': { withTx: async fn => fn({ query: async (query, values = []) => ({ rows: await sql([query], ...values) }) }) } }),
     '@/lib/clerk-user': { requireUser: async () => caller }, '@/lib/billing-gate': billing,
     '@/lib/db': { requireSql: () => sql }, '@/lib/api': { ...api, parseJson: async () => ({ keyword: 'test', website_url: 'https://example.test', ...body }) },
     '@/lib/usage': load('lib/usage.ts', { './db': { requireSql: () => sql } }),
@@ -177,6 +181,9 @@ function pausedLeadFlow(status, role = 'owner', missing = false) {
     context: 'r/test', post_title: 'Looking for a tool', post_excerpt: 'Please recommend one', author: 'poster', ...project };
   const sql = async (strings, ...values) => {
     const query = strings.join('?');
+    if (query.includes('SET TRANSACTION')) return [];
+    if (query.includes('SELECT id FROM projects')) return [{ id: 'project' }];
+    if (query.includes('SELECT role FROM project_members')) return [{ role: callerRole }];
     if (query.includes('AS "ownerId"')) {
       billingReads++;
       assert.equal(values[0], 'project');
