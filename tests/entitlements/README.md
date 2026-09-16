@@ -86,3 +86,44 @@ mocked in the composed route/worker case.
   refreshes can still overlap. Social/keyword refresh cooldowns, project/watchlist
   creation caps, and source/signal accounting remain out of scope. The latter still
   misses discovery source accounting and atomic signal-cap enforcement.
+
+## Atomic watchlist additions — 2026-09-16
+
+This increment supersedes the watchlist/accounting deferrals above. Both existing
+project add routes now use a short READ COMMITTED transaction: lock the target
+project with NO KEY UPDATE, verify the expected billing owner, recheck and hold
+owner/editor membership, count in a fresh statement, then insert. All competing
+additions use the same project lock; no provider work occurs inside it. Success
+payloads and 409 cap messages, inactive-item counting, target-owner plan limits,
+and existing billing/admin/development policy remain unchanged. A revoked member
+waiting on the project lock cannot insert. An insert failure rolls back and frees
+the slot for another attempt. No schema migration or existing-row rewrite.
+
+Mutation-path review: the only other competitor/keyword inserts are initial
+`createProjectSetup` writes. They validate the complete watchlist and create a new
+project, owner membership and items within one transaction; the project is not
+visible to competing add routes until commit. PATCH routes cannot move an item
+between projects and do not add rows; DELETE only reduces the count. Future
+existing-project insert paths must use the shared helper.
+
+Real PostgreSQL route regressions exercise owner/editor competition for the last
+competitor and keyword slot, target-owner plan instead of editor plan,
+viewer/unrelated-owner rejection, membership revocation during an observed lock
+wait, and failed-insert retry. Original 82f4315 routes fail four new concurrency /
+revocation cases; fixed routes pass. Validation on Node22.23.2: 372 unit passes,
+one existing optional smoke skipped; 80 mandatory PostgreSQL passes, zero skipped;
+TypeScript passes. The entitlement harness includes 18 subtests plus its parent.
+
+PR5 already fixed source accounting: `upsertSource` stores and increments the
+owner's UTC-month `sources_stored` in one SQL statement only on new-row insertion.
+Mandatory `tests/sources/accounting-postgres.test.cjs` verifies discovery/metadata
+inserts, scrape refresh without double counting, concurrent conflicts and rollback
+on counter failure. Signal publication similarly commits owner usage with accepted
+signals and caches cap-deferred results (`tests/source-analysis`). No source
+accounting implementation change is needed here.
+
+No remaining code gap is identified in the card's stated refresh/seat/watchlist
+and monthly source/signal scope after integrating this increment. Release/CI and
+hosted confirmation belong to the coordinator; this branch has not been deployed.
+This does not introduce quota enforcement for external SQL writers or change
+subscription downgrade behavior while an already admitted operation is in flight.

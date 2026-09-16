@@ -41,7 +41,7 @@ test('atomic entitlement claims with concurrent PostgreSQL transactions', {
     pool = new Pool({ host: dir, user: 'postgres', database: 'postgres', max: 8 });
     // Real production DDL for the relevant tables and constraints.
     const schema = readFileSync(resolve(__dirname, '../../migrations/0001_init.sql'), 'utf8');
-    for (const table of ['users', 'projects', 'scrape_jobs']) {
+    for (const table of ['users', 'projects', 'scrape_jobs', 'competitors', 'keywords']) {
       const ddl = schema.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\([\\s\\S]*?\\n\\);`))[0];
       await pool.query(ddl);
     }
@@ -97,6 +97,82 @@ test('atomic entitlement claims with concurrent PostgreSQL transactions', {
       } finally { await blocker.query('COMMIT'); blocker.release(); }
       return Promise.all(pending);
     }
+
+    const watchlist = load('lib/watchlist-claims.ts', { './db': { withTx }, './api': api });
+    const sql = async (strings, ...values) => (await pool.query(
+      strings.reduce((q,part,i) => q+(i ? `$${i}` : '')+part, ''), values)).rows;
+    function watchlistRoute(kind, caller) {
+      return load(`app/api/projects/[id]/${kind}/route.ts`, {
+        '@/lib/clerk-user': { requireUser: async () => ({ id: caller }) },
+        '@/lib/billing-gate': { ensureProjectSubscriptionApi: async (_, project) => {
+          const {rows} = await pool.query('SELECT p.user_id AS "ownerId",u.plan FROM projects p JOIN users u ON u.id=p.user_id WHERE p.id=$1', [project]);
+          return rows[0];
+        } },
+        '@/lib/api': { ...load('lib/api.ts', { zod: {}, './db': { sql } }), parseJson: async () => ({keyword:'test',website_url:'https://example.test/path',socials:{website:'https://example.test/path'}}) },
+        '@/lib/db': { requireSql: () => sql },
+        '@/lib/watchlist-claims': watchlist, '@/lib/usage': load('lib/usage.ts', {}), '@/lib/schemas/api': {},
+      });
+    }
+    const post = (route, project) => route.POST(new Request('https://test'), {params:Promise.resolve({id:project})});
+    async function seedItems(kind, project, n) {
+      for(let i=0;i<n;i++) await pool.query(kind === 'keywords'
+        ? "INSERT INTO keywords(project_id,keyword) VALUES($1,'seed')"
+        : "INSERT INTO competitors(project_id,name,website_url) VALUES($1,'seed','https://seed.test')", [project]);
+    }
+    async function projectBlocked(project, operations, beforeRelease = async () => {}) {
+      const blocker = await pool.connect(); await blocker.query('BEGIN');
+      await blocker.query('SELECT id FROM projects WHERE id=$1 FOR NO KEY UPDATE',[project]);
+      const pending = operations.map(fn => fn());
+      try {
+        let waiting=0;
+        for(let i=0;i<150;i++) {
+          waiting=(await pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'")).rows[0].n;
+          if(waiting>=operations.length) break;
+          await new Promise(resolve=>setTimeout(resolve,10));
+        }
+        assert.equal(waiting,operations.length,'actual route writers wait on project lock');
+        await beforeRelease();
+      } finally { await blocker.query('COMMIT'); blocker.release(); }
+      return Promise.all(pending);
+    }
+    for(const [kind,cap] of [['competitors',3],['keywords',10]]) {
+      await t.test(`${kind}: concurrent owner/editor routes admit one final slot using owner plan`,async()=>{
+        const f=await fixture('starter'); const editor=await user(`${randomUUID()}@test.invalid`);
+        await pool.query("UPDATE users SET plan='agency' WHERE id=$1",[editor]);
+        await pool.query("INSERT INTO project_members(project_id,user_id,role) VALUES($1,$2,'editor')",[f.projects[0],editor]);
+        await seedItems(kind,f.projects[0],cap-1);
+        const results=await projectBlocked(f.projects[0],[f.owner,editor].map(id=>()=>post(watchlistRoute(kind,id),f.projects[0])));
+        assert.deepEqual(results.map(r=>r.status).sort(),[201,409]);
+        assert.equal((await pool.query(`SELECT count(*)::int n FROM ${kind} WHERE project_id=$1`,[f.projects[0]])).rows[0].n,cap);
+        const created=await results.find(r=>r.status===201).json();
+        assert.equal(created[kind==='keywords'?'keyword':'competitor'].project_id,f.projects[0]);
+        if(kind==='competitors') assert.equal(created.competitor.website_url,'https://example.test/path');
+      });
+      await t.test(`${kind}: viewers and unrelated owners cannot add to target`,async()=>{
+        const f=await fixture(); const outsider=(await fixture()).owner;
+        assert.equal((await post(watchlistRoute(kind,outsider),f.projects[0])).status,404);
+        await pool.query("INSERT INTO project_members(project_id,user_id,role) VALUES($1,$2,'viewer')",[f.projects[0],outsider]);
+        assert.equal((await post(watchlistRoute(kind,outsider),f.projects[0])).status,404);
+        assert.equal((await pool.query(`SELECT count(*)::int n FROM ${kind} WHERE project_id=$1`,[f.projects[0]])).rows[0].n,0);
+      });
+      await t.test(`${kind}: membership revoked during lock wait cannot write`,async()=>{
+        const f=await fixture(); const editor=await user(`${randomUUID()}@test.invalid`);
+        await pool.query("INSERT INTO project_members(project_id,user_id,role) VALUES($1,$2,'editor')",[f.projects[0],editor]);
+        const results=await projectBlocked(f.projects[0],[()=>post(watchlistRoute(kind,editor),f.projects[0])],async()=>{
+          await pool.query('DELETE FROM project_members WHERE project_id=$1 AND user_id=$2',[f.projects[0],editor]);
+        });
+        assert.equal(results[0].status,404);
+        assert.equal((await pool.query(`SELECT count(*)::int n FROM ${kind} WHERE project_id=$1`,[f.projects[0]])).rows[0].n,0);
+      });
+    }
+    await t.test('failed insertion rolls back and releases slot for a retry',async()=>{
+      const f=await fixture('starter'); await seedItems('keywords',f.projects[0],9);
+      await pool.query("ALTER TABLE keywords ADD CONSTRAINT injected_failure CHECK(keyword <> 'test') NOT VALID");
+      try { await assert.rejects(post(watchlistRoute('keywords',f.owner),f.projects[0]),/injected_failure/); }
+      finally { await pool.query('ALTER TABLE keywords DROP CONSTRAINT injected_failure'); }
+      assert.equal((await post(watchlistRoute('keywords',f.owner),f.projects[0])).status,201);
+      assert.equal((await post(watchlistRoute('keywords',f.owner),f.projects[0])).status,409);
+    });
 
     await t.test('same-project refresh admits one and persists one pending job', async () => {
       const f = await fixture();

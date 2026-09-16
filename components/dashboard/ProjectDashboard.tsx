@@ -291,7 +291,7 @@ export default function ProjectDashboard({
           <div className="rail-sources">
             {recentSources.length === 0 && (
               <p style={{ fontSize: 13, color: "var(--ink-3)", padding: "8px 6px" }}>
-                No sources yet. The first scrape lands tomorrow morning.
+                No sources yet. Run a scan from the dashboard to start collecting them.
               </p>
             )}
             {recentSources.map((s, i) => (
