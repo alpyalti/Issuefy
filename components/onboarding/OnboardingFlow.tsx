@@ -505,7 +505,7 @@ export default function OnboardingFlow({
               <p>
                 Tracking <b>{skipCompany ? projectName : companyData?.name || projectName}</b> in {industry || "your industry"},
                 with <b>{competitors.length}</b> competitor{competitors.length === 1 ? "" : "s"} and <b>{keywords.length}</b> keyword{keywords.length === 1 ? "" : "s"}.
-                Your first brief will arrive tomorrow morning, or you can trigger a refresh from the dashboard at any time.
+                Your project is ready. Open the dashboard to start a scan and check its progress.
               </p>
               {submitErr && <p className="modal-hint" style={{ color: "var(--neg)" }}>{submitErr}</p>}
             </div>

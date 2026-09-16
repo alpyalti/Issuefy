@@ -31,7 +31,7 @@ export default async function SourcesPage({ params }: Ctx) {
       <div className="page-wrap">
         <EmptyState
           icon="News01Icon"
-          message="No sources yet. The first scrape lands tomorrow morning, or run a manual refresh from the dashboard."
+          message="No sources yet. Run a scan from the dashboard to start collecting them."
         />
       </div>
     );
