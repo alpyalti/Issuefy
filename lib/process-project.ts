@@ -374,9 +374,9 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
         storedToday++; // Both inserts and refreshes mutate a source.
         if (value.inserted) {
           sourcesNew++;
-          // Increment sources_stored counter on each NEW source (cost-control
+          // Read atomically recorded source usage on each NEW source (cost-control
           // metric; re-scrape upserts don't burn this budget).
-          const after = await reserveCalls(user.id, "sources_stored");
+          const after = (await getUsage(user.id)).sources_stored;
           if (after > limits.sourcesPerMonth && !pausedKeywordDiscovery) {
             pausedKeywordDiscovery = true;
             await maybeSendCapNotice(user, "sources");
