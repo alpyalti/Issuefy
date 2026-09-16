@@ -22,7 +22,7 @@ import { standardScrape, serpDiscover } from "./scraperapi";
 import { cleanForStorage } from "./cleaner";
 import { upsertSource, type SourceType } from "./sources";
 import { archiveRawHtml, sourceArchiveKey } from "./storage";
-import { reserveCalls, claimCapNotice } from "./usage-counters";
+import { reserveCalls, claimCapNotice, getUsage } from "./usage-counters";
 import { getLimits } from "./usage";
 import { sendUsageNoticeEmail, sendDailyBriefEmail } from "./mailer";
 import { captureBreadcrumb, captureError } from "./sentry";
