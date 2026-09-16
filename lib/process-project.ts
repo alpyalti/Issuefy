@@ -382,7 +382,9 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
           if (reason === "BUDGET_EXHAUSTED") {
             scrapesPaused = true;
             await maybeSendCapNotice(user, "budget");
-            break;
+            // Every promise has already settled. Retain later successful
+            // outcomes even if reservations completed out of input order.
+            continue;
           }
           continue;
         }
@@ -401,8 +403,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
             captureBreadcrumb("monthly source cap reached", { userId: user.id });
           }
           if (storedToday >= dailyCap) {
-            scrapesPaused = true; // per-project/day safety rail
-            break;
+            scrapesPaused = true; // Stop future batches, still account for settled results.
           }
         } else {
           sourcesRefreshed++;
