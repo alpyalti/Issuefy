@@ -24,9 +24,24 @@ export const SIGNAL_CATEGORIES = [
 
 export const IMPORTANCE = ["Low", "Medium", "High"] as const;
 
+export const signalEvidenceSchema = z.object({
+  kind: z.enum(["dated_event", "scheduled_event", "material_change"]),
+  subject: z.string().trim().min(2).max(100),
+  attribute: z.enum(["product_launch", "partnership", "pricing", "policy", "funding", "leadership", "availability", "capability", "industry_event"]),
+  action_relation: z.enum(["compete", "review", "none"]),
+  action_target: z.string().max(100).nullable(),
+  quote: z.string().trim().min(20).max(700),
+  event_date: z.string().nullable(),
+  date_text: z.string().nullable(),
+  before_quote: z.string().max(700).nullable(),
+  before_value: z.string().max(80).nullable(),
+  after_value: z.string().max(80).nullable(),
+}).strict();
+
 /** Per-signal payload returned by the model (PRD §16.1). */
 export const signalItemSchema = z.object({
   source_id: z.string().min(1, "source_id is required"),
+  evidence: signalEvidenceSchema,
   title: z.string().trim().min(3).max(200),
   category: z.enum(SIGNAL_CATEGORIES),
   description: z.string().trim().min(1).max(1_000),

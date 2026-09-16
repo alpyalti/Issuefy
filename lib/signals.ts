@@ -12,6 +12,7 @@
  * Per-project/day safety rail: at most `maxSignalsPerProjectPerDay` signals
  * are written; further extracted signals are dropped (PRD §21.3).
  */
+import { groundSignal, CHANGE_WINDOW_MS, EVENT_MAX_AGE_DAYS } from "./signal-grounding";
 import { requireSql, withTx } from "./db";
 import { chatJson } from "./openrouter";
 import { reserveCalls } from "./usage-counters";
@@ -86,9 +87,24 @@ const SIGNAL_JSON_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["source_id", "title", "category", "description", "importance", "confidence_score", "suggested_action"],
+        required: ["source_id", "title", "category", "description", "importance", "confidence_score", "suggested_action", "evidence"],
         properties: {
           source_id: { type: "string", minLength: 1 },
+          evidence: {
+            type: "object", additionalProperties: false,
+            required: ["kind", "subject", "attribute", "quote", "event_date", "date_text", "before_quote", "before_value", "after_value", "action_relation", "action_target"],
+            properties: {
+              kind: { type: "string", enum: ["dated_event", "scheduled_event", "material_change"] },
+              action_relation: { type: "string", enum: ["compete", "review", "none"] },
+              action_target: { type: ["string", "null"], maxLength: 100 },
+              subject: { type: "string", minLength: 2, maxLength: 100 },
+              attribute: { type: "string", enum: ["product_launch", "partnership", "pricing", "policy", "funding", "leadership", "availability", "capability", "industry_event"] },
+              quote: { type: "string", minLength: 20, maxLength: 700 },
+              event_date: { type: ["string", "null"] }, date_text: { type: ["string", "null"] },
+              before_quote: { type: ["string", "null"], maxLength: 700 },
+              before_value: { type: ["string", "null"], maxLength: 80 }, after_value: { type: ["string", "null"], maxLength: 80 },
+            },
+          },
           title: { type: "string", minLength: 3, maxLength: 200 },
           category: { type: "string", enum: SIGNAL_CATEGORIES as unknown as string[] },
           description: { type: "string", minLength: 1, maxLength: 1_000 },
@@ -155,12 +171,13 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
   // refreshes the gap is seconds. One hour is generous enough to absorb any
   // re-queue while still avoiding re-emitting old change-signals on subsequent
   // days when nothing has actually changed since.
-  const FRESH_CHANGE_WINDOW_MS = 60 * 60 * 1_000;
-  const cycleCutoff = Date.now() - FRESH_CHANGE_WINDOW_MS;
+  const extractionNow = Date.now();
+  const cycleCutoff = extractionNow - CHANGE_WINDOW_MS;
   const isFreshlyChanged = (s: BatchSource): boolean =>
     !!s.last_changed_at &&
     !!s.prior_cleaned_text &&
-    new Date(s.last_changed_at).getTime() >= cycleCutoff;
+    new Date(s.last_changed_at).getTime() >= cycleCutoff &&
+    new Date(s.last_changed_at).getTime() <= extractionNow;
 
   // Build the prompt. The model receives source_id explicitly so it can
   // attribute each signal back to a specific row — we use this to drop
@@ -194,6 +211,10 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     "You are Issuefy, a market-intelligence analyst that extracts actionable business signals from public web sources.",
     "Output strict JSON only — no prose, no markdown.",
     "Rules:",
+    `  EVIDENCE CONTRACT: Today UTC is ${new Date(extractionNow).toISOString().slice(0, 10)}. Every signal needs evidence with kind, subject, attribute, quote, event_date, date_text, before_quote, before_value, after_value, action_relation, action_target. Use null for inapplicable fields.`,
+    `  DATED EVENT: dated_event requires an exact complete sentence from text (quote), containing the subject, the concrete development and its explicit event date within the past ${EVENT_MAX_AGE_DAYS} days. event_date is YYYY-MM-DD, date_text is the exact ISO, unambiguous dotted day.month.year or supported localized long-date spelling in that sentence. A page update, scrape or discovery date is NOT an event date. No evergreen statements. For a legitimate future Industry Event use scheduled_event with the exact scheduled date in the quote. title must be an exact substring of quote.`,
+    "  MATERIAL CHANGE: identify a material changed business attribute, not cosmetic text or rotating page furniture. Require changed_since_last_scrape=true, exact complete before_quote and quote sentences identifying the same subject/plan and identical surrounding terms except one changed value. before_value/after_value must be exact values from those quotes. No first-discovery or cosmetic text changes.",
+    "  Preserve complete sentences and explicit pricing units/billing qualifiers. Do not categorize the customer as a competitor. Classify action_relation (compete/review/none) and identify action_target; never recommend competing against the customer itself. The server publishes grounded extractive descriptions, preserving your suggested action unless demonstrably self-competing.",
     "  1. Use ONLY information present in the provided source texts. Never invent facts.",
     "  2. Each signal must cite ONE specific source_id from the input set.",
     "  3. If no useful business signal exists, return an empty signals array.",
@@ -221,7 +242,7 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     "Sources:",
     JSON.stringify(sourcesJson, null, 2),
     "",
-    "Return strict JSON: { \"signals\": [ { source_id, title, category, description, importance, confidence_score, suggested_action } ] }",
+    "Return strict JSON: { \"signals\": [ { source_id, title, category, description, importance, confidence_score, suggested_action, evidence } ] }",
   ].join("\n");
 
   let ai;
@@ -242,10 +263,13 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     return { inserted: 0, rejected: 0, modelUsed: null, errors: [msg] };
   }
 
-  // Reject any signal whose source_id wasn't in the batch we just sent —
-  // those are model hallucinations and would otherwise orphan/contaminate.
-  const validSourceIds = new Set(sources.map((s) => s.id));
-  const accepted = ai.data.signals.filter((s) => validSourceIds.has(s.source_id));
+  // Ground against exactly the source snapshots sent to the model, before any
+  // signal write. Unknown IDs, fabricated spans/dates and stale claims abstain.
+  const suppliedSources = new Map(sourcesJson.map((s) => [s.source_id, s]));
+  const accepted = ai.data.signals.flatMap((signal) => {
+    const grounded = groundSignal({ ...signal, suggested_action: signal.suggested_action ?? "" }, suppliedSources.get(signal.source_id), project, extractionNow);
+    return grounded ? [grounded] : [];
+  });
   let rejected = ai.data.signals.length - accepted.length;
 
   // Per-project/day safety rail on signals (PRD §21.3).
