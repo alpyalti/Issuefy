@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, type RefObject } from "react";
+import { trapDialogKey } from "@/lib/focus-scope";
 import Link from "next/link";
 import { Icon } from "@/components/icons/Icon";
 import { useAccountActions, type AccountRiderInfo } from "./ProfileMenu";
@@ -24,9 +25,10 @@ interface AccessibleProject {
 
 export default function MobileDrawer({
   open, onClose, projectId, projectName, userName, competitors, keywords, initials,
-  projects = [], rider,
+  projects = [], rider, triggerRef,
 }: {
   open: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   projectId: string;
   projectName: string;
@@ -43,28 +45,35 @@ export default function MobileDrawer({
 }) {
   const { manageSubscription, signOut, helpHref, busy } = useAccountActions(rider);
 
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const dialog = dialogRef.current;
+    if (!open || !dialog) return;
+    const previousOverflow = document.body.style.overflow;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => trapDialogKey(e, dialog, onClose);
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden"; // prevent background scroll while open
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
+      triggerRef.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open, onClose, triggerRef]);
 
   if (!open) return null;
 
   return (
     <div className="mobile-drawer-overlay" onClick={onClose}>
-      <aside className="mobile-drawer" onClick={(e) => e.stopPropagation()} aria-label="Project menu">
+      <aside ref={dialogRef} id="project-mobile-menu" role="dialog" aria-modal="true" className="mobile-drawer" onClick={(e) => e.stopPropagation()} aria-label="Project menu">
         <header className="mobile-drawer-head">
           <Link href="/dashboard" className="brand" onClick={onClose} aria-label="Issuefy dashboard">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/logo-ink.svg" className="brand-logo" alt="Issuefy" />
           </Link>
-          <button className="mobile-drawer-close" onClick={onClose} aria-label="Close menu">
+          <button ref={closeRef} className="mobile-drawer-close" onClick={onClose} aria-label="Close menu">
             <Icon name="Cancel01Icon" size={20} stroke={1.7} />
           </button>
         </header>
