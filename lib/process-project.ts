@@ -30,6 +30,7 @@ import { generateDailySummaryForProject } from "./daily-summary";
 import { pickSocialScrapeTargets, ingestRedditActivity } from "./social-monitor";
 import { resolveMarket } from "./markets";
 import { translateKeyword } from "./translation";
+import { dedupeScrapeTargets } from "./scrape-targets";
 
 interface ProjectRow {
   id: string;
@@ -318,7 +319,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
       captureBreadcrumb("social: pickSocialScrapeTargets failed", { projectId, msg: e instanceof Error ? e.message : "?" });
     }
 
-    const targets: ScrapeTarget[] = [
+    const targets: ScrapeTarget[] = dedupeScrapeTargets([
       ...competitors.map((c): ScrapeTarget => ({
         url: c.website_url, sourceType: "Competitor Website", competitorId: c.id, keywordId: null,
       })),
@@ -329,7 +330,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
         keywordId: s.keyword_id,
       })),
       ...socialTargets,
-    ];
+    ]);
 
     // Per-project/day safety rail (PRD §21.3): cap how many sources this run
     // can MUTATE. We still iterate everything, but stop storing once the cap
@@ -347,8 +348,11 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
 
     // Capped parallel scraping via allSettled — one failure does not abort
     // the batch (PRD §13.2 acceptance).
-    for (let i = 0; i < targets.length && !scrapesPaused; i += SCRAPE_CONCURRENCY) {
-      const batch = targets.slice(i, i + SCRAPE_CONCURRENCY);
+    for (let i = 0; i < targets.length && !scrapesPaused;) {
+      const remaining = Math.max(0, dailyCap - storedToday);
+      if (!remaining) break;
+      const batch = targets.slice(i, i + Math.min(SCRAPE_CONCURRENCY, remaining));
+      i += batch.length;
       const results = await Promise.allSettled(batch.map((t) => scrapeAndStore(t, projectId, user.id, limits, () => storedToday)));
       for (let j = 0; j < results.length; j++) {
         const r = results[j];
@@ -367,9 +371,9 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
         const value = r.value;
         if (value.skipped) continue;
         scrapeCallsUsed++;
+        storedToday++; // Both inserts and refreshes mutate a source.
         if (value.inserted) {
           sourcesNew++;
-          storedToday++;
           // Increment sources_stored counter on each NEW source (cost-control
           // metric; re-scrape upserts don't burn this budget).
           const after = await reserveCalls(user.id, "sources_stored");
@@ -573,10 +577,11 @@ async function scrapeAndStore(
   limits: ReturnType<typeof getLimits>,
   storedTodayGet: () => number,
 ): Promise<ScrapeOutcome> {
+  // Work already excluded by the daily cap must not consume paid quota.
+  if (storedTodayGet() >= limits.maxSourcesPerProjectPerDay) return { skipped: true, inserted: false };
   // Reserve scrape call atomically before issuing — abort if over budget.
   const after = await reserveCalls(userId, "scrape_calls");
   if (after > limits.scrapeCallsPerCycle) throw new Error("BUDGET_EXHAUSTED");
-  if (storedTodayGet() >= limits.maxSourcesPerProjectPerDay) return { skipped: true, inserted: false };
 
   // Per-target options let LinkedIn use premium+render proxies (5× cost from
   // ScraperAPI's side, 1 budget tick from the user's). Defaults keep the
