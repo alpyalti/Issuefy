@@ -17,6 +17,7 @@ import { ensureProjectWorkerSubscription } from "@/lib/billing-gate";
  *   - Increment `sources_stored` only when a brand-new row was created.
  */
 import { requireSql, withTx } from "./db";
+import { withScrapeLease, JobEntryError } from "./scrape-jobs";
 import { standardScrape, serpDiscover } from "./scraperapi";
 import { cleanForStorage } from "./cleaner";
 import { upsertSource, type SourceType } from "./sources";
@@ -77,7 +78,7 @@ export type ProcessJobType = "daily" | "manual";
 
 export interface ProcessProjectResult {
   jobId: string;
-  status: "completed" | "failed";
+  status: "completed" | "partial" | "failed";
   sourcesNew: number;
   sourcesRefreshed: number;
   serpCallsUsed: number;
@@ -106,11 +107,11 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
   const projRows = (await sql`SELECT id, user_id, name, target_market, is_active FROM projects WHERE id = ${projectId} LIMIT 1`) as Array<ProjectRow & { is_active: boolean }>;
   const project = projRows[0];
   if (!project) {
-    throw new Error(`processProject: project ${projectId} not found`);
+    throw new JobEntryError(`processProject: project ${projectId} not found`);
   }
   // Paused project — short-circuit before any external API calls.
   if (!project.is_active) {
-    if (claimedJobId) throw new Error("Project is paused");
+    if (claimedJobId) throw new JobEntryError("Project is paused");
     return {
       jobId: "skipped-paused", status: "completed",
       sourcesNew: 0, sourcesRefreshed: 0, serpCallsUsed: 0, scrapeCallsUsed: 0,
@@ -120,14 +121,21 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
     };
   }
 
-  await ensureProjectWorkerSubscription(projectId);
+  try { await ensureProjectWorkerSubscription(projectId); }
+  catch (error) {
+    // Distinguish explicit eligibility refusal from transient DB/network errors.
+    if (error instanceof Error && ["Project owner subscription required", "Project inactive"].includes(error.message)) {
+      throw new JobEntryError(error.message);
+    }
+    throw error;
+  }
 
   const userRows = (await sql`
     SELECT id, email, plan, email_brief_enabled, email_brief_unsubscribe_token
     FROM users WHERE id = ${project.user_id} LIMIT 1
   `) as UserRow[];
   const user = userRows[0];
-  if (!user) throw new Error(`processProject: user ${project.user_id} not found`);
+  if (!user) throw new JobEntryError(`processProject: user ${project.user_id} not found`);
 
   const limits = getLimits(user.plan);
 
@@ -146,24 +154,30 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
     });
   }
 
-  // Manual routes reserve quota first. Consume that row once; cron keeps its
-  // existing job creation path. A duplicate claim cannot start paid stages.
+  return withScrapeLease(projectId, async checkpoint => {
+  // Routes reserve a durable job first. Direct operator calls retain the
+  // legacy creation path. Duplicate deliveries cannot start paid stages.
   const jobRows = (claimedJobId
     ? await sql`
-        UPDATE scrape_jobs SET status = 'running', started_at = now()
+        UPDATE scrape_jobs SET status = 'running', started_at = now(), stage = 'discovery', dispatch_error = NULL
         WHERE id = ${claimedJobId} AND project_id = ${projectId}
           AND job_type = ${jobType} AND status = 'pending'
         RETURNING id
       `
     : await sql`
-        INSERT INTO scrape_jobs (project_id, status, job_type, started_at)
-        VALUES (${projectId}, 'running', ${jobType}, now())
+        INSERT INTO scrape_jobs (project_id, status, job_type, started_at, stage)
+        VALUES (${projectId}, 'running', ${jobType}, now(), 'discovery')
         RETURNING id
       `) as { id: string }[];
   if (!jobRows[0]) throw new Error("Refresh claim already consumed or invalid");
   const jobId = jobRows[0].id;
 
+  const stage = async (name: string) => {
+    await checkpoint();
+    await sql`UPDATE scrape_jobs SET stage=${name} WHERE id=${jobId} AND status='running'`;
+  };
   try {
+    await stage("discovery");
     // ── Stage 1: SERP discovery (weekly cadence) ──────────────────────────
     // Keywords with NULL last_discovered_at are due immediately (just added).
     const dueKeywords = (await sql`
@@ -184,6 +198,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
     const TOP_N = 3;
     let serpBudgetExhausted = false;
     for (const kw of dueKeywords) {
+      await checkpoint();
       if (serpBudgetExhausted) break;
 
       // Build the query variants for this keyword. langs[0] is always "en"
@@ -260,6 +275,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
       }
     }
 
+    await stage("scrape");
     // ── Stage 2: scrape the known URL set (competitors + discovered URLs) ──
     const competitors = (await sql`
       SELECT id, website_url, is_active, socials
@@ -316,6 +332,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
       }));
     } catch (e) {
       // Non-fatal — the main competitor-website + SERP discovery loop still runs.
+      errors.push(`social: ${e instanceof Error ? e.message : "failed"}`);
       captureBreadcrumb("social: pickSocialScrapeTargets failed", { projectId, msg: e instanceof Error ? e.message : "?" });
     }
 
@@ -349,6 +366,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
     // Capped parallel scraping via allSettled — one failure does not abort
     // the batch (PRD §13.2 acceptance).
     for (let i = 0; i < targets.length && !scrapesPaused;) {
+      await checkpoint();
       const remaining = Math.max(0, dailyCap - storedToday);
       if (!remaining) break;
       const batch = targets.slice(i, i + Math.min(SCRAPE_CONCURRENCY, remaining));
@@ -392,6 +410,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
       }
     }
 
+    await stage("social");
     // ── Stage 2.6: Reddit ingestion (free, direct JSON fetch) ─────────────
     // Reddit exposes a public `.json` variant of every URL. We hit it directly
     // so it costs nothing against the user's ScraperAPI budget. Each fresh
@@ -403,9 +422,11 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
         captureBreadcrumb("reddit ingestion", { projectId, scanned: redditResult.scanned, inserted: redditResult.inserted });
       }
     } catch (e) {
+      errors.push(`reddit: ${e instanceof Error ? e.message : "failed"}`);
       captureBreadcrumb("reddit ingestion failed", { projectId, msg: e instanceof Error ? e.message : "?" });
     }
 
+    await stage("signals");
     // ── Stage 3: AI signal extraction (PRD §13.5 / §16.1) ──────────────────
     // Run regardless of whether Stage 2 created NEW sources — re-running on
     // refreshed sources is fine; insertions are append-only.
@@ -423,6 +444,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
       captureError(e, { stage: "signals", projectId });
     }
 
+    await stage("summary");
     // ── Stage 4: Daily summary (PRD §13.6 / §16.2) ────────────────────────
     // Upsert on (project_id, summary_date) so manual refresh later today
     // updates the row in place. The unique constraint enforces this.
@@ -440,6 +462,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
       captureError(e, { stage: "summary", projectId });
     }
 
+    await stage("email");
     // ── Stage 5: Send the daily brief email (P0 sprint) ───────────────────
     // Sent ONCE per (project, day), guarded by daily_summaries.email_sent_at.
     // Only fires when:
@@ -523,24 +546,27 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
     }
     void emailSent;
 
+    await checkpoint();
+    const usefulResult = sourcesNew + sourcesRefreshed > 0 || modelUsed !== null ||
+      summaryStatus === "created" || summaryStatus === "updated";
+    const status = errors.length ? (usefulResult ? "partial" as const : "failed" as const) : "completed" as const;
+    const failedStages = [...new Set(errors.map(error => {
+      const prefix = error.split(":")[0];
+      return ["serp", "scrape", "social", "reddit", "signals", "summary", "email"].includes(prefix) ? prefix : "worker";
+    }))];
+    const result = { jobId, status, failedStages, sourcesNew, sourcesRefreshed, serpCallsUsed, scrapeCallsUsed,
+      signalsInserted, signalsRejected, modelUsed, summaryStatus, summaryDate, errors };
     await withTx(async (client) => {
+      // This timestamp means the scan completed successfully, not merely tried.
+      if (status === "completed") await client.query(
+        `UPDATE projects SET last_scraped_at = now() WHERE id = $1`, [projectId]);
       await client.query(
-        `UPDATE projects SET last_scraped_at = now() WHERE id = $1`,
-        [projectId],
-      );
-      await client.query(
-        `UPDATE scrape_jobs SET status = 'completed', finished_at = now() WHERE id = $1`,
-        [jobId],
-      );
+        `UPDATE scrape_jobs SET status=$2, finished_at=now(), result=$3::jsonb,
+          error_message=$4, stage=$5 WHERE id=$1 AND status='running'`,
+        [jobId, status, JSON.stringify(result), errors.length ? errors.join("\n").slice(0,4000) : null,
+          status === "completed" ? "finished" : failedStages[0] || "worker"]);
     });
-
-    return {
-      jobId, status: "completed",
-      sourcesNew, sourcesRefreshed, serpCallsUsed, scrapeCallsUsed,
-      signalsInserted, signalsRejected, modelUsed,
-      summaryStatus, summaryDate,
-      errors,
-    };
+    return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     captureError(e, { stage: "worker", projectId });
@@ -559,6 +585,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType,
       errors: [...errors, msg],
     };
   }
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────

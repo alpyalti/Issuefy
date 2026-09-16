@@ -10,6 +10,7 @@ import { EmptyState, EMPTY_SUMMARY_MESSAGE } from "@/components/ui/EmptyState";
 import { useDashboardView } from "./dashboard-view-context";
 import { useDashboardRole } from "./dashboard-role-context";
 import FirstRunCard from "./FirstRunCard";
+import ScanStatus from "./ScanStatus";
 import type { IconName } from "@/components/icons/registry";
 import type { SignalItem, SourceItem } from "@/lib/types";
 
@@ -215,6 +216,7 @@ export default function ProjectDashboard({
   return (
     <div className="main-grid">
       <div className="feed">
+        <ScanStatus projectId={project.id} />
         {/* First-run activation card sits ABOVE the summary card when the
             project has never been scraped — gives concrete timing + a CTA
             instead of the passive "awaiting" empty state. */}
