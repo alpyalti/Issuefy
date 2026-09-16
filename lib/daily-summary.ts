@@ -48,6 +48,7 @@ interface RecentSignal {
   /** Primary source domain — used to label social-derived signals in the
    *  prompt so the brief can name the channel ("…announced on Instagram"). */
   source_domain: string | null;
+  source_id: string;
 }
 
 interface RecentSource {
@@ -119,34 +120,50 @@ export async function generateDailySummaryForProject(projectId: string): Promise
   const project = projRows[0];
   if (!project) throw new Error(`generateDailySummary: project ${projectId} not found`);
 
-  // The most recent live signals (excluding dismissed) — that's what "today"
-  // is about. PRD §13.6: summarize the most important RECENT signals.
+  // Only today's accepted, sourced signals may drive today's brief. A newly
+  // scraped page is not itself a new event or an accepted signal.
   const signals = (await sql`
     SELECT s.id, s.title, s.category, s.description, s.importance, s.confidence_score,
+           (SELECT src.id FROM signal_sources ss
+              JOIN sources src ON src.id = ss.source_id
+             WHERE ss.signal_id = s.id AND src.project_id = s.project_id
+             ORDER BY src.scraped_at DESC, src.id LIMIT 1) AS source_id,
            (SELECT src.domain FROM signal_sources ss
               JOIN sources src ON src.id = ss.source_id
-             WHERE ss.signal_id = s.id
-             ORDER BY src.scraped_at DESC LIMIT 1) AS source_domain
+             WHERE ss.signal_id = s.id AND src.project_id = s.project_id
+             ORDER BY src.scraped_at DESC, src.id LIMIT 1) AS source_domain
     FROM signals s
     WHERE s.project_id = ${projectId}
       AND s.dismissed_at IS NULL
+      AND s.created_at >= (${summaryDate}::date::timestamp AT TIME ZONE 'UTC')
+      AND s.created_at < ((${summaryDate}::date + 1)::timestamp AT TIME ZONE 'UTC')
+      AND EXISTS (
+        SELECT 1 FROM signal_sources ss JOIN sources src ON src.id = ss.source_id
+        WHERE ss.signal_id = s.id AND src.project_id = ${projectId}
+      )
     ORDER BY s.created_at DESC
     LIMIT ${MAX_SIGNALS_IN_PROMPT}
   `) as RecentSignal[];
 
-  const sources = (await sql`
-    SELECT id, title, url, domain, content_snippet
-    FROM sources
-    WHERE project_id = ${projectId}
-      AND scraped_at >= now() - interval '7 days'
-    ORDER BY scraped_at DESC
+  const signalIds = signals.map((signal) => signal.id);
+  const primarySourceIds = [...new Set(signals.map((signal) => signal.source_id))];
+  const sources = signals.length ? (await sql`
+    SELECT src.id, src.title, src.url, src.domain, src.content_snippet
+    FROM sources src
+    WHERE src.project_id = ${projectId}
+      AND src.id = ANY(${primarySourceIds}::uuid[])
+      AND EXISTS (
+        SELECT 1 FROM signal_sources ss
+        WHERE ss.source_id = src.id AND ss.signal_id = ANY(${signalIds}::uuid[])
+      )
+    ORDER BY src.scraped_at DESC
     LIMIT ${MAX_SOURCES_IN_PROMPT}
-  `) as RecentSource[];
+  `) as RecentSource[] : [];
 
-  if (signals.length === 0 && sources.length === 0) {
-    // PRD §13.6 empty state — we still write a row so the dashboard can render
-    // a stable card; the worker can decide whether to skip. Here we just
-    // signal "skipped" and let the caller handle it.
+  const availableSourceIds = new Set(sources.map((source) => source.id));
+  if (signals.length === 0 || sources.length === 0 || primarySourceIds.some((id) => !availableSourceIds.has(id))) {
+    // Leave historical briefs intact. The worker skips email for this result;
+    // missing evidence is not a claim that nothing happened in the market.
     return {
       status: "skipped",
       summaryDate,
@@ -155,7 +172,7 @@ export async function generateDailySummaryForProject(projectId: string): Promise
       wordCount: 0,
       wordCountInRange: false,
       modelUsed: null,
-      errors: ["no signals or sources to summarize"],
+      errors: ["no current sourced signals to summarize"],
     };
   }
 
@@ -173,8 +190,8 @@ export async function generateDailySummaryForProject(projectId: string): Promise
     return "";
   };
   const signalsBlock = signals.length
-    ? signals.map((s, i) => `${i + 1}. [${s.category} · ${s.importance}]${channelOf(s.source_domain)} ${s.title}: ${s.description}`).join("\n")
-    : "(No live signals — base the summary on the source snippets below.)";
+    ? signals.map((s, i) => `${i + 1}. [${s.category} · ${s.importance}]${channelOf(s.source_domain)} ${s.title}: ${s.description} [source_id: ${s.source_id}]`).join("\n")
+    : "";
 
   const sourcesBlock = sources.map((s) => ({
     source_id: s.id,
@@ -194,8 +211,8 @@ export async function generateDailySummaryForProject(projectId: string): Promise
     "  1. summary_text MUST be ONE paragraph between 80 and 140 words. No bullets, no lists, no headings.",
     "  2. Summarize the most important recent signals — what changed, what matters, what to watch.",
     "  3. Include ONE simple recommended action when possible.",
-    "  4. Use ONLY facts present in the signals and source snippets. Do not invent.",
-    "  5. source_ids: include 2-5 source_id values from the sources block that DIRECTLY support claims in the summary.",
+    "  4. Summarize ONLY the accepted signals. Source snippets provide citation context, not permission to add new claims or turn evergreen advice into a new development. Preserve pricing/billing qualifiers and never invent dates or launches.",
+    "  5. source_ids: include 1-5 source_id values from the sources block that DIRECTLY support claims in the summary. One genuinely supporting source is sufficient; never pad citations.",
     "  6. If there's not enough data, say so clearly — do not fabricate context.",
     "  7. When a company profile is provided, frame opportunities and risks RELATIVE TO that company.",
     "  8. TARGET MARKET PRIORITY: lead with signals and developments most relevant to the user's target market. Local-market context (regulations, competitors, customers, news in that region) outranks generic global commentary.",
@@ -270,10 +287,15 @@ export async function generateDailySummaryForProject(projectId: string): Promise
     };
   }
 
-  // Drop any hallucinated source IDs that weren't in the batch we sent.
-  const validSourceIds = (summary.source_ids || []).filter((id) => allowedSourceIds.has(id));
-  if (validSourceIds.length !== summary.source_ids.length) {
-    errors.push(`dropped ${summary.source_ids.length - validSourceIds.length} hallucinated source_id(s)`);
+  // Do not turn unsupported output into an apparently cited brief by silently
+  // dropping invented IDs. Preserve any existing summary on validation failure.
+  const validSourceIds = [...new Set(summary.source_ids)];
+  if (validSourceIds.length === 0 || validSourceIds.some((id) => !allowedSourceIds.has(id))) {
+    return {
+      status: "skipped", summaryDate, summaryText: "", sourceIds: [],
+      wordCount: 0, wordCountInRange: false, modelUsed,
+      errors: [...errors, "summary has missing or unsupported source citations"],
+    };
   }
 
   // Upsert + delete-then-insert sources atomically. The unique constraint on
