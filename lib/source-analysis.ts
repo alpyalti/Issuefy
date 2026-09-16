@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { currentPeriodStart } from "./usage";
 import { withTx } from "./db";
 import type { SignalItem } from "./schemas/ai";
 
@@ -41,7 +42,9 @@ export async function releaseAnalysis(token: string) {
  * Results deferred by the cap are cached, so tomorrow need not call the model. */
 export async function finishAnalysis(projectId: string, token: string, results: Map<string, SignalItem[]>, dailyLimit: number) {
   return withTx(async (client) => {
-    await client.query("SELECT id FROM projects WHERE id=$1 FOR UPDATE", [projectId]);
+    const { rows: owners } = await client.query<{ user_id: string; publication_time: Date }>(
+      "SELECT user_id, now() AS publication_time FROM projects WHERE id=$1 FOR UPDATE", [projectId]);
+    if (!owners[0]) throw new Error("Analysis project unavailable");
     const { rows: versions } = await client.query<AnalysisVersion>(`SELECT * FROM source_analysis_versions
       WHERE project_id=$1 AND claim_token=$2 AND lease_until>clock_timestamp() AND completed_at IS NULL AND expired_at IS NULL
       ORDER BY created_at,id FOR UPDATE`, [projectId, token]);
@@ -81,6 +84,14 @@ export async function finishAnalysis(projectId: string, token: string, results: 
         completed_at=CASE WHEN $4 THEN now() ELSE NULL END, claim_token=NULL, lease_until=NULL,
         available_at=CASE WHEN $4 THEN now() ELSE (date_trunc('day',now() AT TIME ZONE 'UTC')+interval '1 day') AT TIME ZONE 'UTC' END
         WHERE id=$1`, [version.id, JSON.stringify(candidates), cursor, complete]);
+    }
+    if (inserted) {
+      // Same owner and UTC-month period semantics as reserveCalls, committed with
+      // the publication transaction. A counter failure rolls back everything.
+      await client.query(`INSERT INTO usage_counters(user_id,period_start,signals_generated)
+        VALUES ($1,$2,$3) ON CONFLICT(user_id,period_start) DO UPDATE
+        SET signals_generated=usage_counters.signals_generated+EXCLUDED.signals_generated,updated_at=now()`,
+      [owners[0].user_id, currentPeriodStart(new Date(owners[0].publication_time)), inserted]);
     }
     return { inserted, duplicates, finalized: versions.length };
   });

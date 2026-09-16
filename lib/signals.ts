@@ -15,7 +15,6 @@
 import { claimAnalysis, finishAnalysis, releaseAnalysis } from "./source-analysis";
 import { requireSql } from "./db";
 import { chatJson } from "./openrouter";
-import { reserveCalls } from "./usage-counters";
 import { getLimits } from "./usage";
 import { captureError } from "./sentry";
 import { resolveMarket } from "./markets";
@@ -224,6 +223,11 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
   const validSourceIds = new Set(unprocessed.map((s) => s.id));
   const accepted = ai.data.signals.filter((s) => validSourceIds.has(s.source_id));
   let rejected = ai.data.signals.length - accepted.length;
+  if (rejected > 0) {
+    // Unknown attribution is a malformed batch, not a successful empty result.
+    await releaseAnalysis(claim.token).catch((e) => captureError(e, { stage: "analysis:release", projectId }));
+    return { inserted: 0, rejected, modelUsed: ai.modelUsed, errors: ["Invalid source attribution; analysis batch remains retryable."] };
+  }
   const results = new Map(unprocessed.map((s) => [s.id, accepted.filter((sig) => sig.source_id === s.id).map((sig) => ({ ...sig, suggested_action: sig.suggested_action ?? "" }))]));
   let inserted = 0;
   try {
@@ -235,14 +239,6 @@ export async function generateSignalsForProject(projectId: string): Promise<Gene
     captureError(e, { stage: "insert:signals", projectId });
     await releaseAnalysis(claim.token).catch((releaseError) => captureError(releaseError, { stage: "analysis:release", projectId }));
     return { inserted: 0, rejected, modelUsed: ai.modelUsed, errors: [e instanceof Error ? e.message : "insert failed"] };
-  }
-
-  // Bump the signals_generated usage counter (PRD §21.3 — value/fair-use limit).
-  try {
-    if (inserted) await reserveCalls(project.user_id, "signals_generated", inserted);
-  } catch (e) {
-    // Non-fatal: counter increment shouldn't roll back the writes.
-    captureError(e, { stage: "increment:signals_generated", projectId });
   }
 
   return { inserted: inserted, rejected, modelUsed: ai.modelUsed, errors };

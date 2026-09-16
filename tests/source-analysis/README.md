@@ -10,7 +10,7 @@ Migration `0022_source_analysis_versions.sql` adds a monotonic content revision 
 
 Prompt IDs identify immutable version rows and map back to original source rows when storing citations. Delayed versions retain their before/after evidence; observation time is explicit and is not presented as an event date. This is not the strict/freshness extraction experiment.
 
-Publication serializes on the project row, rechecks daily capacity and atomically stores signals, citation links, fingerprint keys, result payloads and progress cursor. Beyond-cap candidates remain cached until the next UTC day, then resume without another model call. Expired/reclaimed tokens cannot publish. Exact duplicates across revisions and within a model batch are skipped. Fingerprints use source + category + NFKC/case/whitespace-normalized title and description; importance/confidence/action variations do not re-publish the same claim. Matching historical signals are recorded into the fingerprint ledger without editing the signal. Fingerprints survive ordinary signal deletion (`signal_id ON DELETE SET NULL`); explicit source/project deletion cascades.
+Publication serializes on the project row, rechecks daily capacity and atomically stores signals, citation links, fingerprint keys, result payloads, progress cursor and the owner’s signals_generated usage increment (existing UTC-month period semantics). Counter failure rolls back publication. Beyond-cap candidates remain cached until the next UTC day, then resume without another model call. Expired/reclaimed tokens cannot publish. Exact duplicates across revisions and within a model batch are skipped. Fingerprints use source + category + NFKC/case/whitespace-normalized title and description; importance/confidence/action variations do not re-publish the same claim. Matching historical signals are recorded into the fingerprint ledger without editing the signal. Fingerprints survive ordinary signal deletion (`signal_id ON DELETE SET NULL`); explicit source/project deletion cascades.
 
 ## Migration and retention coordination
 
@@ -22,18 +22,18 @@ Analyzer version is explicitly `signals-v1` in both application and queue trigge
 
 ## Verification
 
-- `node --test tests/source-analysis/extraction.test.cjs tests/sources/*.test.cjs`: 9 passed.
-- `RUN_LOCAL_ANALYSIS_DB=1 node --test tests/source-analysis/postgres.test.cjs`: 11 passed including parent suite. Creates its own temporary **socket-only** PostgreSQL instance using local `initdb`/`pg_ctl`, then removes it; never reads DATABASE_URL or contacts an existing database.
+- `node --test tests/source-analysis/extraction.test.cjs tests/sources/*.test.cjs`: 10 passed.
+- `RUN_LOCAL_ANALYSIS_DB=1 node --test tests/source-analysis/postgres.test.cjs`: 12 passed including parent suite. Creates its own temporary **socket-only** PostgreSQL instance using local `initdb`/`pg_ctl`, then removes it; never reads DATABASE_URL or contacts an existing database.
 - PostgreSQL checks cover intermediate versions, concurrent disjoint claims and ninth/later progress, empty completion, retry backoff/reclaim, exact dedup across revisions, fingerprint survival, cap caching/resumption, expiry/rehydration, publication rollback, lease expiry while waiting on project lock, and actual source upsert preservation after metadata rediscovery.
-- `npm test`: 347 passed, two skipped (existing optional integration plus this explicitly gated disposable DB suite). `npm run typecheck` and `npm run build` pass; existing middleware/Edge deprecation warnings. `git diff --check` passes.
+- `npm test`: 348 passed, two skipped (existing optional integration plus this explicitly gated disposable DB suite). `npm run typecheck` and `npm run build` pass; existing middleware/Edge deprecation warnings. `git diff --check` passes.
 - No real provider calls, remote DB writes, production changes, root-checkout edits, deployment, or experimental extraction changes.
 
 ## Limits requiring release review
 
 Deduplication does **not** detect semantic paraphrases or consolidate claims across different source URLs. Legacy candidates only match existing signals when normalized title/description/category agree. Normal source URL identity policy is unchanged.
 
-FIFO ensures progress under bounded arrivals, not unlimited throughput: eight versions per invocation can still fall behind incoming volume and some may explicitly expire under retention. Malformed provider responses retry; schema-valid empty/rejected-attribution outputs complete their version. No additional provider or queue service is introduced.
+FIFO ensures progress under bounded arrivals, not unlimited throughput: eight versions per invocation can still fall behind incoming volume and some may explicitly expire under retention. Malformed provider responses retry; schema-valid empty outputs complete their version. Any unknown attribution ID rejects/releases the whole batch, including a mixture of valid and unknown IDs; it is never treated as an empty success. No additional provider or queue service is introduced.
 
-Lease loss can waste a provider response but cannot commit stale results. A transaction failure before caching can require another provider call. The existing post-commit usage-counter error behavior remains (not made atomic by this task). The daily cap is serialized among this helper's publishers; other independent signal writers must adopt the same lock to obtain a global concurrency guarantee.
+Lease loss can waste a provider response but cannot commit stale results. A transaction failure before caching can require another provider call. Usage now commits atomically with publication; failed accounting keeps the version retryable. The daily cap is serialized among this helper's publishers; other independent signal writers must adopt the same lock to obtain a global concurrency guarantee.
 
 The PostgreSQL tests use a minimal disposable schema around real migration/helper SQL, not a full production migration-chain rehearsal. Coordinator should run additive full-chain/retention integration and authenticated staging smoke tests before release. No source evidence-retention policy is silently changed here.

@@ -17,13 +17,14 @@ test('disposable PostgreSQL: versions, fair claims, retries, atomic dedup and ca
     execFileSync('pg_ctl', ['-D', data, '-l', join(root, 'postgres.log'), '-o', `-h '' -k ${root} -p 55487`, '-w', 'start'], { stdio: 'ignore' });
     const { Pool } = require('pg');
     pool = new Pool({ host: root, port: 55487, database: 'postgres', user: process.env.USER });
-    await pool.query(`CREATE TABLE projects(id uuid PRIMARY KEY);
+    await pool.query(`CREATE TABLE projects(id uuid PRIMARY KEY,user_id uuid NOT NULL DEFAULT '00000000-0000-4000-8000-000000000099');
+      CREATE TABLE usage_counters(user_id uuid NOT NULL,period_start date NOT NULL,signals_generated int NOT NULL DEFAULT 0,updated_at timestamptz DEFAULT now(),PRIMARY KEY(user_id,period_start));
       CREATE TABLE sources(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),project_id uuid NOT NULL REFERENCES projects(id),title text NOT NULL,url text NOT NULL,cleaned_text text,prior_cleaned_text text,content_hash text,last_changed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),competitor_id uuid,keyword_id uuid,domain text,source_type text,scraped_at timestamptz NOT NULL DEFAULT now(),content_snippet text,r2_raw_html_key text,UNIQUE(project_id,url));
       CREATE TABLE signals(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),project_id uuid NOT NULL,title text,category text,description text,importance text,confidence_score int,suggested_action text,created_at timestamptz DEFAULT now());
       CREATE TABLE signal_sources(signal_id uuid REFERENCES signals(id) ON DELETE CASCADE,source_id uuid REFERENCES sources(id),UNIQUE(signal_id,source_id));`);
     await pool.query(readFileSync(join(__dirname, '../../migrations/0022_source_analysis_versions.sql'), 'utf8'));
     const withTx = async (fn) => { const c = await pool.connect(); try { await c.query('BEGIN'); const result = await fn(c); await c.query('COMMIT'); return result; } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); } };
-    const helper = loadTs('lib/source-analysis.ts', { './db': { withTx } });
+    const helper = loadTs('lib/source-analysis.ts', { './db': { withTx }, './usage': loadTs('lib/usage.ts') });
     const project = '00000000-0000-4000-8000-000000000001';
     await pool.query('INSERT INTO projects VALUES($1)', [project]);
     const hash = (text) => createHash('sha256').update(text).digest('hex');
@@ -145,6 +146,28 @@ test('disposable PostgreSQL: versions, fair claims, retries, atomic dedup and ca
       await pool.query("UPDATE sources SET scraped_at='2026-09-16T12:00:00Z' WHERE id=$1",[legacy]);
       row=(await pool.query('SELECT captured_at FROM source_analysis_versions WHERE source_id=$1 ORDER BY content_revision DESC LIMIT 1',[legacy])).rows[0];
       assert.equal(row.captured_at.toISOString(),'2026-09-16T11:00:00.000Z');
+    });
+
+    await t.test('counter failure rolls back publication and completion; retry counts once', async () => {
+      const separate='00000000-0000-4000-8000-000000000002';
+      await pool.query('INSERT INTO projects(id) VALUES($1)',[separate]);
+      const text='Usage accounting fixture. '.repeat(12);
+      await pool.query("INSERT INTO sources(project_id,title,url,cleaned_text,content_hash) VALUES($1,'Usage','https://usage.example.org',$2,$3)",[separate,text,hash(text)]);
+      const claim=await helper.claimAnalysis(separate,8), version=claim.versions[0];
+      const payload=new Map([[version.id,[signal(version.id,'Usage atomicity')]]]);
+      const sum=async()=>Number((await pool.query('SELECT coalesce(sum(signals_generated),0) AS n FROM usage_counters')).rows[0].n);
+      const countBefore=await sum();
+      await pool.query('ALTER TABLE usage_counters ADD CONSTRAINT fail_usage_fixture CHECK(signals_generated<0) NOT VALID');
+      await assert.rejects(helper.finishAnalysis(separate,claim.token,payload,20));
+      assert.equal(Number((await pool.query('SELECT count(*) FROM signals WHERE project_id=$1',[separate])).rows[0].count),0);
+      assert.equal(Number((await pool.query('SELECT count(*) FROM source_signal_fingerprints WHERE project_id=$1',[separate])).rows[0].count),0);
+      assert.equal((await pool.query('SELECT completed_at FROM source_analysis_versions WHERE id=$1',[version.id])).rows[0].completed_at,null);
+      assert.equal(await sum(),countBefore);
+      await pool.query('ALTER TABLE usage_counters DROP CONSTRAINT fail_usage_fixture');
+      assert.equal((await helper.finishAnalysis(separate,claim.token,payload,20)).inserted,1);
+      assert.equal(await sum(),countBefore+1);
+      assert.equal((await helper.finishAnalysis(separate,claim.token,payload,20)).inserted,0);
+      assert.equal(await sum(),countBefore+1);
     });
 
   } finally {
