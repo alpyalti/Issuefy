@@ -1,20 +1,24 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { mkdtempSync, rmSync } = require('node:fs');
-const { tmpdir } = require('node:os');
-const { join } = require('node:path');
+const { join, isAbsolute } = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { loadTs } = require('../helpers/load-ts.cjs');
 
-test('source accounting is atomic in disposable PostgreSQL', { skip: process.env.RUN_LOCAL_SOURCE_DB !== '1' }, async (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'ify007-'));
+test('source accounting is atomic in disposable PostgreSQL', { timeout: 60000 }, async (t) => {
+  const pgBin = process.env.ISSUEFY_TEST_PG_BIN;
+  assert.ok(pgBin && isAbsolute(pgBin), 'Set ISSUEFY_TEST_PG_BIN to an absolute PostgreSQL 17 binary directory');
+  const run = (binary, args) => execFileSync(join(pgBin, binary), args, { stdio: 'ignore', timeout: 15000, env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
+  const root = mkdtempSync(join('/tmp', 'ify007-'));
   const data = join(root, 'data');
   let pool;
   try {
-    execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-locale', '-E', 'UTF8'], { stdio: 'ignore' });
-    execFileSync('pg_ctl', ['-D', data, '-l', join(root, 'postgres.log'), '-o', `-h '' -k ${root} -p 55488`, '-w', 'start'], { stdio: 'ignore' });
+    run('initdb', ['-D', data, '-A', 'trust', '-U', 'postgres', '--no-locale', '-E', 'UTF8']);
+    run('pg_ctl', ['-D', data, '-l', join(root, 'postgres.log'), '-o', `-h '' -k ${root} -p 55488`, '-w', 'start']);
     const { Pool } = require('pg');
-    pool = new Pool({ host: root, port: 55488, database: 'postgres', user: process.env.USER });
+    pool = new Pool({ host: root, port: 55488, database: 'postgres', user: 'postgres', password: 'disposable-fixture-only', ssl: false, options: '-c statement_timeout=8000', application_name: 'ify-source-test', connectionTimeoutMillis: 5000, statement_timeout: 8000 });
+    assert.equal(Math.floor(Number((await pool.query('SHOW server_version_num')).rows[0].server_version_num) / 10000), 17);
+    assert.equal((await pool.query('SHOW listen_addresses')).rows[0].listen_addresses, '');
     await pool.query(`CREATE TABLE projects(id uuid PRIMARY KEY,user_id uuid NOT NULL);
       CREATE TABLE usage_counters(user_id uuid NOT NULL,period_start date NOT NULL,sources_stored int NOT NULL DEFAULT 0,updated_at timestamptz DEFAULT now(),PRIMARY KEY(user_id,period_start));
       CREATE TABLE sources(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),project_id uuid NOT NULL REFERENCES projects(id),title text NOT NULL,url text NOT NULL,cleaned_text text,prior_cleaned_text text,content_hash text,last_changed_at timestamptz,competitor_id uuid,keyword_id uuid,domain text,source_type text,scraped_at timestamptz,content_snippet text,r2_raw_html_key text,UNIQUE(project_id,url));`);
@@ -60,7 +64,7 @@ test('source accounting is atomic in disposable PostgreSQL', { skip: process.env
     });
   } finally {
     if(pool) await pool.end();
-    try { execFileSync('pg_ctl',['-D',data,'-m','immediate','-w','stop'],{stdio:'ignore'}); } catch {}
+    try { run('pg_ctl',['-D',data,'-m','immediate','-w','stop']); } catch {}
     rmSync(root,{recursive:true,force:true});
   }
 });

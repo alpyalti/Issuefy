@@ -23,7 +23,7 @@ Analyzer version is explicitly `signals-v1` in both application and queue trigge
 ## Verification
 
 - `node --test tests/source-analysis/extraction.test.cjs tests/sources/*.test.cjs`: 10 passed.
-- `RUN_LOCAL_ANALYSIS_DB=1 node --test tests/source-analysis/postgres.test.cjs`: 12 passed including parent suite. Creates its own temporary **socket-only** PostgreSQL instance using local `initdb`/`pg_ctl`, then removes it; never reads DATABASE_URL or contacts an existing database.
+- `ISSUEFY_TEST_PG_BIN=/absolute/path/to/postgresql17/bin node scripts/test-integration.mjs`: 12 passed including parent suite. Creates its own temporary **socket-only** PostgreSQL instance using explicitly configured PostgreSQL 17 `initdb`/`pg_ctl` with user `postgres` and sanitized environment, then removes it; never reads DATABASE_URL or contacts an existing database.
 - PostgreSQL checks cover intermediate versions, concurrent disjoint claims and ninth/later progress, empty completion, retry backoff/reclaim, exact dedup across revisions, fingerprint survival, cap caching/resumption, expiry/rehydration, publication rollback, lease expiry while waiting on project lock, and actual source upsert preservation after metadata rediscovery.
 - `npm test`: 348 passed, two skipped (existing optional integration plus this explicitly gated disposable DB suite). `npm run typecheck` and `npm run build` pass; existing middleware/Edge deprecation warnings. `git diff --check` passes.
 - No real provider calls, remote DB writes, production changes, root-checkout edits, deployment, or experimental extraction changes.
