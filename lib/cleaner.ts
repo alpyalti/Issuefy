@@ -8,8 +8,18 @@
 
 const STRIP_BLOCKS = /<(script|style|svg|noscript|template|iframe)\b[\s\S]*?<\/\1\s*>/gi;
 const HTML_COMMENTS = /<!--[\s\S]*?-->/g;
-const TAGS = /<\/?[^>]+>/g;
+const TAGS = /<\/?[a-z][\w:-]*\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi;
 const WS = /\s+/g;
+
+function isNavigation(tag: string): boolean {
+  // Parse complete attribute values: text such as title='role="navigation"'
+  // is not a landmark and must not cause substantive content to disappear.
+  const attributes = /\s+([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+  for (const attr of tag.matchAll(attributes)) {
+    if (attr[1].toLowerCase() === "role" && (attr[2] ?? attr[3] ?? attr[4] ?? "").toLowerCase() === "navigation") return true;
+  }
+  return false;
+}
 
 /** Remove only balanced, explicit navigation landmarks. Keep unclosed markup
  * rather than risk deleting the article. Nested same-name elements are common
@@ -22,7 +32,7 @@ function stripNavigation(html: string): string {
     const tag = match[1].toLowerCase();
     const closing = match[0].startsWith("</");
     const selfClosing = /\/\s*>$/.test(match[0]) || voidTags.has(tag);
-    if (start < 0 && !closing && !selfClosing && (tag === "nav" || /\srole\s*=\s*(?:"navigation"|'navigation'|navigation(?=[\s>]))/i.test(match[0]))) {
+    if (start < 0 && !closing && !selfClosing && (tag === "nav" || isNavigation(match[0]))) {
       start = match.index!; name = tag; depth = 1;
     } else if (start >= 0 && tag === name) {
       if (closing) depth--;
@@ -60,6 +70,7 @@ export function cleanHtml(html: string): { title: string; text: string } {
 
   const stripped = stripNavigation(html
     .replace(STRIP_BLOCKS, " ")
+    .replace(/<!doctype\b[^>]*>/gi, " ")
     .replace(HTML_COMMENTS, " "))
     // Keep table relationships legible after whitespace normalization.
     .replace(/<\/(?:td|th)\s*>\s*(?=<(?:td|th)\b)/gi, " | ")
