@@ -206,8 +206,8 @@ export default function LandingPage() {
             <h2>Simple pricing that scales with you.</h2>
             <p>Start with Starter free for 14 days. Upgrade anytime as you grow.</p>
             <div className="bill-toggle">
-              <button type="button" id="billMonthly">Monthly</button>
-              <button type="button" id="billAnnual" className="on">Annual <span className="bill-save">Save ~2 months</span></button>
+              <button type="button" id="billMonthly" aria-pressed="false">Monthly</button>
+              <button type="button" id="billAnnual" className="on" aria-pressed="true">Annual <span className="bill-save">Save ~2 months</span></button>
             </div>
           </div>
 
@@ -222,7 +222,7 @@ export default function LandingPage() {
               </div>
               <div className="tier-bill pa">billed annually · $288/yr</div>
               <div className="tier-bill pm">billed monthly</div>
-              <div className="tier-cta"><Link href="/sign-up?plan=starter&billing=annual" className="btn btn-accent">Start free trial</Link></div>
+              <div className="tier-cta"><a data-pricing-plan="starter" href="/sign-up?plan=starter&billing=annual" className="btn btn-accent">Start free trial</a></div>
               <div className="tier-trial">14-day free trial · card required</div>
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">1</span></li>
@@ -252,7 +252,7 @@ export default function LandingPage() {
               </div>
               <div className="tier-bill pa">billed annually · $780/yr</div>
               <div className="tier-bill pm">billed monthly</div>
-              <div className="tier-cta"><Link href="/sign-up?plan=growth&billing=annual" className="btn btn-ghost">Get started</Link></div>
+              <div className="tier-cta"><a data-pricing-plan="growth" href="/sign-up?plan=growth&billing=annual" className="btn btn-ghost">Get started</a></div>
               <div className="tier-trial" />
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">3</span></li>
@@ -280,7 +280,7 @@ export default function LandingPage() {
               </div>
               <div className="tier-bill pa">billed annually · $1,980/yr</div>
               <div className="tier-bill pm">billed monthly</div>
-              <div className="tier-cta"><Link href="/sign-up?plan=agency&billing=annual" className="btn btn-ghost">Get started</Link></div>
+              <div className="tier-cta"><a data-pricing-plan="agency" href="/sign-up?plan=agency&billing=annual" className="btn btn-ghost">Get started</a></div>
               <div className="tier-trial" />
               <ul className="tier-specs">
                 <li><span className="lbl">Seats</span><span className="val">10</span></li>
