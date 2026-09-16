@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
@@ -57,6 +57,7 @@ const VIEW_TITLES: Record<string, { title: string; sub: string }> = {
   sources: { title: "Sources", sub: "Every source behind your signals — click any to verify" },
   settings: { title: "Settings", sub: "Project, watchlist and plan usage" },
   archive: { title: "Archive", sub: "Past daily briefs" },
+  support: { title: "Support", sub: "Tickets, help and frequently asked questions" },
   account: { title: "Account", sub: "Your identity, plan, billing and security" },
   competitorHub: { title: "Competitor profile", sub: "Social presence, stats and AI insights" },
   keywordHub: { title: "Keyword insights", sub: "Signals, trend and conversations" },
@@ -116,6 +117,8 @@ function DashChromeInner({
   const { view, setView } = useDashboardView();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [refreshErr, setRefreshErr] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
@@ -128,6 +131,7 @@ function DashChromeInner({
   const realRoute =
     pathname?.endsWith("/sources") ? "sources" :
     pathname?.endsWith("/settings") ? "settings" :
+    pathname?.endsWith("/support") ? "support" :
     pathname?.endsWith("/account") ? "account" :
     pathname?.includes("/archive") ? "archive" :
     pathname?.includes("/competitors/") ? "competitorHub" :
@@ -273,6 +277,7 @@ function DashChromeInner({
           setRefreshErr(ERROR_MESSAGES.SCRAPE_FAILED);
           return;
         }
+        window.dispatchEvent(new Event("scan-queued"));
         router.refresh();
       } catch {
         setRefreshErr(ERROR_MESSAGES.SCRAPE_FAILED);
@@ -411,7 +416,11 @@ function DashChromeInner({
       <main className="main">
         <header className="topbar">
           <button
+            ref={drawerTriggerRef}
             className="topbar-burger"
+            aria-controls="project-mobile-menu"
+            aria-expanded={drawerOpen}
+            aria-haspopup="dialog"
             onClick={() => setDrawerOpen(true)}
             aria-label="Open menu"
           >
@@ -465,7 +474,8 @@ function DashChromeInner({
 
       <MobileDrawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={closeDrawer}
+        triggerRef={drawerTriggerRef}
         projectId={project.id}
         projectName={project.name}
         userName={user.name || user.email}

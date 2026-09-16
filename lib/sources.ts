@@ -4,8 +4,8 @@
  * `upsertSource(...)` does an INSERT ... ON CONFLICT (project_id, url) DO
  * UPDATE on `sources`, normalizing the URL first so trailing slashes,
  * tracking params, and casing variants merge into one row. Returns a flag
- * telling the caller whether a NEW row was created — used to decide whether
- * to increment the `sources_stored` usage counter.
+ * telling the caller whether a NEW row was created. The same SQL statement
+ * accounts for new rows against the project owner’s UTC calendar month.
  *
  * Change detection (migration 0008): each upsert hashes the new cleaned_text
  * and, on UPDATE, compares it against the stored content_hash. When they
@@ -81,6 +81,7 @@ export async function upsertSource(input: UpsertSourceInput): Promise<UpsertSour
   //     new hash, but don't flag as changed. The next scrape after this can
   //     start detecting changes.
   const rows = (await sql`
+    WITH stored AS (
     INSERT INTO sources (
       project_id, competitor_id, keyword_id, title, url, domain, source_type,
       scraped_at, content_snippet, cleaned_text, r2_raw_html_key, content_hash
@@ -104,7 +105,8 @@ export async function upsertSource(input: UpsertSourceInput): Promise<UpsertSour
       source_type     = EXCLUDED.source_type,
       scraped_at      = CASE WHEN EXCLUDED.cleaned_text IS NOT NULL
                          THEN EXCLUDED.scraped_at ELSE sources.scraped_at END,
-      content_snippet = EXCLUDED.content_snippet,
+      content_snippet = CASE WHEN EXCLUDED.cleaned_text IS NOT NULL OR sources.cleaned_text IS NULL
+                         THEN EXCLUDED.content_snippet ELSE sources.content_snippet END,
       prior_cleaned_text = CASE
         WHEN EXCLUDED.cleaned_text IS NOT NULL
          AND EXCLUDED.content_hash IS DISTINCT FROM sources.content_hash
@@ -126,7 +128,20 @@ export async function upsertSource(input: UpsertSourceInput): Promise<UpsertSour
       r2_raw_html_key = COALESCE(EXCLUDED.r2_raw_html_key, sources.r2_raw_html_key),
       competitor_id   = COALESCE(EXCLUDED.competitor_id, sources.competitor_id),
       keyword_id      = COALESCE(EXCLUDED.keyword_id, sources.keyword_id)
-    RETURNING id, url, (xmax = 0) AS inserted
+    RETURNING id, url, project_id, (xmax = 0) AS inserted
+    ), accounted AS (
+      INSERT INTO usage_counters (user_id, period_start, sources_stored)
+      SELECT projects.user_id,
+             date_trunc('month', statement_timestamp() AT TIME ZONE 'UTC')::date,
+             1
+      FROM stored JOIN projects ON projects.id = stored.project_id
+      WHERE stored.inserted
+      ON CONFLICT (user_id, period_start) DO UPDATE
+        SET sources_stored = usage_counters.sources_stored + EXCLUDED.sources_stored,
+            updated_at = now()
+      RETURNING sources_stored
+    )
+    SELECT id, url, inserted FROM stored
   `) as { id: string; url: string; inserted: boolean }[];
 
   return rows[0];

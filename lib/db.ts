@@ -55,3 +55,12 @@ export function requireSql() {
   if (!sql) throw new Error("DATABASE_URL is not configured. Set it in .env.local.");
   return sql;
 }
+
+/** Dedicated connection for a worker lease; never return a live lease to a pool. */
+export async function withSession<T>(fn: (client: import("@neondatabase/serverless").PoolClient) => Promise<T>): Promise<T> {
+  if (!DATABASE_URL) throw new Error("DATABASE_URL is not configured");
+  const pool = new Pool({ connectionString: DATABASE_URL });
+  let client: import("@neondatabase/serverless").PoolClient | undefined;
+  try { client = await pool.connect(); return await fn(client); }
+  finally { client?.release(true); await pool.end(); }
+}

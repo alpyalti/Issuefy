@@ -74,9 +74,10 @@ test("discovery continues to refresh metadata and retain optional associations",
   assert.match(query, /ON CONFLICT \(project_id, url\)/);
   assert.equal(values[4], "https://example.com/page");
   assert.equal(values[8], "Discovery snippet");
-  for (const column of ["title", "domain", "source_type", "content_snippet"]) {
+  for (const column of ["title", "domain", "source_type"]) {
     assert.equal(assignment(column), `EXCLUDED.${column}`);
   }
+  assert.equal(assignment("content_snippet"), "CASE WHEN EXCLUDED.cleaned_text IS NOT NULL OR sources.cleaned_text IS NULL THEN EXCLUDED.content_snippet ELSE sources.content_snippet END");
   for (const column of ["r2_raw_html_key", "competitor_id", "keyword_id"]) {
     assert.equal(assignment(column), `COALESCE(EXCLUDED.${column}, sources.${column})`);
   }

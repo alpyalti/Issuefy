@@ -14,7 +14,7 @@ function load(file, mocks) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  vm.runInNewContext(code, { exports, Response, Date, Map, Set, console,
+  vm.runInNewContext(code, { exports, Response, URL, Error, Date, Map, Set, console,
     process: { env: { BETA_STARTER_LIMITS: 'false' } },
     require: name => { if (!(name in mocks)) throw new Error(`Unmocked dependency ${name}`); return mocks[name]; },
   });
@@ -46,6 +46,7 @@ test('atomic entitlement claims with concurrent PostgreSQL transactions', {
       await pool.query(ddl);
     }
     await pool.query(readFileSync(resolve(__dirname, '../../migrations/0009_team_seats.sql'), 'utf8'));
+    await pool.query(readFileSync(resolve(__dirname, '../../migrations/0021_durable_jobs.sql'), 'utf8'));
     await pool.query(`ALTER TABLE projects ADD COLUMN is_active boolean NOT NULL DEFAULT true;
       ALTER TABLE users ADD COLUMN email_brief_enabled boolean NOT NULL DEFAULT false;
       ALTER TABLE users ADD COLUMN email_brief_unsubscribe_token text`);
@@ -150,13 +151,18 @@ test('atomic entitlement claims with concurrent PostgreSQL transactions', {
       for (const [, name] of source.matchAll(/from ["']([^"']+)["']/g)) {
         workerMocks[name] = new Proxy({}, { get: () => () => { throw new Error('unexpected provider call'); } });
       }
+      const jobHelper = load('lib/scrape-jobs.ts', { './db': { requireSql: () => sql, withSession: async fn => { const c = await pool.connect(); try { return await fn(c); } finally { c.release(true); } } }, './sentry': { captureError() {} } });
       workerMocks['./db'] = { requireSql: () => sql, withTx };
+      workerMocks['./scrape-jobs'] = jobHelper;
       workerMocks['./usage'] = load('lib/usage.ts', {});
       workerMocks['./markets'] = { resolveMarket: () => ({ matched: true }) };
       workerMocks['./sentry'] = { captureError() {}, captureBreadcrumb() {} };
       workerMocks['@/lib/billing-gate'] = { ensureProjectWorkerSubscription: async () => {} };
       const worker = load('lib/process-project.ts', workerMocks);
+      const backgrounds = [];
       const routeMocks = {
+        'next/server': { after: fn => backgrounds.push(fn) },
+        '@/lib/scrape-jobs': jobHelper,
         '@/lib/clerk-user': { requireUser: async () => ({ id: f.owner }) },
         '@/lib/billing-gate': { ensureProjectSubscriptionApi: async () => ({ ownerId: f.owner, plan: 'starter' }) },
         '@/lib/admin': { isAdmin: async () => false }, '@/lib/db': { requireSql: () => sql },
@@ -166,7 +172,9 @@ test('atomic entitlement claims with concurrent PostgreSQL transactions', {
       const route = load('app/api/projects/[id]/refresh/route.ts', routeMocks);
       const response = await route.POST(new Request('https://test'), { params: Promise.resolve({ id: f.projects[0] }) });
       const body = await response.json();
-      assert.equal(body.status, 'failed');
+      assert.equal(response.status, 202);
+      assert.equal(body.status, 'pending');
+      await backgrounds.shift()();
       const jobs = await pool.query('SELECT id,status FROM scrape_jobs WHERE project_id=$1', [f.projects[0]]);
       assert.equal(jobs.rows.length, 1);
       assert.equal(jobs.rows[0].id, body.jobId);
@@ -178,10 +186,11 @@ test('atomic entitlement claims with concurrent PostgreSQL transactions', {
       // by the actual route too, without deleting its quota record.
       const another = await fixture('starter');
       routeMocks['@/lib/clerk-user'] = { requireUser: async () => ({ id: another.owner }) };
-      workerMocks['@/lib/billing-gate'] = { ensureProjectWorkerSubscription: async () => { throw new Error('owner lapsed'); } };
+      workerMocks['@/lib/billing-gate'] = { ensureProjectWorkerSubscription: async () => { throw new Error('Project owner subscription required'); } };
       routeMocks['@/lib/process-project'] = load('lib/process-project.ts', workerMocks);
       const failed = await load('app/api/projects/[id]/refresh/route.ts', routeMocks).POST(new Request('https://test'), { params: Promise.resolve({ id: another.projects[0] }) });
-      assert.equal(failed.status, 500);
+      assert.equal(failed.status, 202);
+      await backgrounds.shift()();
       assert.equal((await pool.query('SELECT status FROM scrape_jobs WHERE project_id=$1', [another.projects[0]])).rows[0].status, 'failed');
     });
 

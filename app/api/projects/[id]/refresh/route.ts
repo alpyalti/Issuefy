@@ -1,58 +1,55 @@
+import { after } from "next/server";
 import { requireUser } from "@/lib/clerk-user";
 import { ensureProjectSubscriptionApi } from "@/lib/billing-gate";
 import { isAdmin } from "@/lib/admin";
 import { requireSql } from "@/lib/db";
-import { json, manageableProject, notFound } from "@/lib/api";
+import { json, manageableProject, ownedProject, notFound } from "@/lib/api";
 import { claimManualRefresh } from "@/lib/entitlement-claims";
 import { processProject } from "@/lib/process-project";
-import { captureError } from "@/lib/sentry";
+import { runQueuedJob } from "@/lib/scrape-jobs";
 
 export const runtime = "nodejs";
-// Manual refresh re-runs the entire pipeline for one project — match the
-// worker's duration budget. 300 = Hobby plan max; raise to 800 on Pro.
 export const maxDuration = 300;
-
-/**
- * POST /api/projects/:id/refresh    (Clerk-authed via middleware)
- *
- * Runs the SAME per-project pipeline as the daily cron (PRD §13.9). Reuses
- * processProject() directly (not via the worker fetch) since the user is
- * already authenticated on this route — going through the worker would be
- * one extra hop with no isolation benefit (only one project at a time).
- *
- * Limits enforced:
- *   - Anti-abuse floor: max 1 refresh per HOUR per project (all plans)
- *   - Plan quota: total refreshes per DAY per the plan
- *
- * 429 with a clear message when blocked (PRD §24 error copy).
- */
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(_req: Request, { params }: Ctx) {
+/** New scans reserve the normal quota. ?jobId= retries only never-started delivery. */
+export async function POST(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
   const { id: projectId } = await params;
-  // Editors + owners can burn a refresh; viewers can't trigger billable scrapes.
-  const proj = await manageableProject<{ id: string; last_manual_refresh_at: string | null }>(user.id, projectId);
-  if (!proj) return notFound();
+  if (!await manageableProject(user.id, projectId)) return notFound();
   const billing = await ensureProjectSubscriptionApi(user.id, projectId);
   if (billing instanceof Response) return billing;
-
-  // Commit the cooldown and quota reservation before starting paid work.
-  const claim = await claimManualRefresh(user.id, projectId, await isAdmin(user.id));
-  if (claim instanceof Response) return claim;
-
-  try {
-    const result = await processProject(projectId, "manual", claim.jobId);
-    return json(result);
-  } catch (e) {
-    // Entry checks can reject before consuming the reservation. Keep failed
-    // attempts counted, matching the existing manual-job quota semantics.
+  const retryId = new URL(req.url).searchParams.get("jobId");
+  let jobId: string;
+  let jobType: "daily" | "manual" = "manual";
+  if (retryId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(retryId)) return json({ error: "Invalid job ID" }, { status: 400 });
     const sql = requireSql();
-    await sql`UPDATE scrape_jobs SET status = 'failed', finished_at = now(),
-      error_message = 'Manual refresh failed before worker start'
-      WHERE id = ${claim.jobId} AND status = 'pending'`;
-    captureError(e, { stage: "refresh.handler", projectId });
-    return json({ error: e instanceof Error ? e.message : "refresh failed" }, { status: 500 });
+    const rows = await sql`SELECT id,status,job_type FROM scrape_jobs WHERE id=${retryId} AND project_id=${projectId}` as Array<{ id: string; status: string; job_type: "daily" | "manual" }>;
+    if (!rows[0]) return notFound();
+    if (rows[0].status !== "pending") return json({ error: "Started scans cannot be replayed. Review the result before requesting a new scan." }, { status: 409 });
+    jobId = rows[0].id; jobType = rows[0].job_type;
+  } else {
+    const claim = await claimManualRefresh(user.id, projectId, await isAdmin(user.id));
+    if (claim instanceof Response) return claim;
+    jobId = claim.jobId;
   }
+  after(() => runQueuedJob(projectId, jobType, jobId, processProject));
+  return json({ jobId, status: "pending" }, { status: 202 });
+}
+
+/** Durable status, scoped to project membership; no provider error text leaks. */
+export async function GET(_req: Request, { params }: Ctx) {
+  const user = await requireUser();
+  if (user instanceof Response) return user;
+  const { id: projectId } = await params;
+  if (!await ownedProject(user.id, projectId)) return notFound();
+  const sql = requireSql();
+  const rows = await sql`SELECT id,status,stage,created_at,started_at,finished_at,
+    (status='running' AND started_at < now()-interval '10 minutes') AS stale,
+    (status='pending' AND created_at < now()-interval '2 minutes') AS delayed,
+    error_message IS NOT NULL AS has_errors, result->'failedStages' AS failed_stages
+    FROM scrape_jobs WHERE project_id=${projectId} ORDER BY created_at DESC,id DESC LIMIT 1`;
+  return json({ job: rows[0] ?? null }, { headers: { "cache-control": "no-store" } });
 }
