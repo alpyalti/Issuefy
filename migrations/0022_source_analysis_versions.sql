@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS source_analysis_versions (
   prior_cleaned_text text,
   last_changed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
+  captured_at timestamptz NOT NULL DEFAULT now(),
   available_at timestamptz NOT NULL DEFAULT now(),
   claim_token uuid,
   lease_until timestamptz,
@@ -51,8 +52,8 @@ CREATE TRIGGER issuefy_source_revision BEFORE INSERT OR UPDATE ON sources FOR EA
 CREATE OR REPLACE FUNCTION issuefy_queue_source_version() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.cleaned_text IS NOT NULL AND length(NEW.cleaned_text) >= 200 THEN
-    INSERT INTO source_analysis_versions(source_id, project_id, content_revision, title, url, cleaned_text, prior_cleaned_text, last_changed_at)
-    VALUES (NEW.id, NEW.project_id, NEW.content_revision, NEW.title, NEW.url, left(NEW.cleaned_text,6000), left(NEW.prior_cleaned_text,6000), NEW.last_changed_at)
+    INSERT INTO source_analysis_versions(source_id, project_id, content_revision, title, url, cleaned_text, prior_cleaned_text, last_changed_at, captured_at)
+    VALUES (NEW.id, NEW.project_id, NEW.content_revision, NEW.title, NEW.url, left(NEW.cleaned_text,6000), left(NEW.prior_cleaned_text,6000), NEW.last_changed_at, NEW.scraped_at)
     ON CONFLICT(source_id, content_revision, analyzer_version) DO NOTHING;
   END IF;
   RETURN NEW;
@@ -61,7 +62,7 @@ DROP TRIGGER IF EXISTS issuefy_queue_source_version ON sources;
 CREATE TRIGGER issuefy_queue_source_version AFTER INSERT OR UPDATE ON sources FOR EACH ROW EXECUTE FUNCTION issuefy_queue_source_version();
 -- Seed only the current snapshot of existing sources; earlier versions cannot be
 -- reconstructed. Existing signal rows are retained and checked during dedup.
-INSERT INTO source_analysis_versions(source_id, project_id, content_revision, title, url, cleaned_text, prior_cleaned_text, last_changed_at, created_at)
-SELECT id, project_id, content_revision, title, url, left(cleaned_text,6000), left(prior_cleaned_text,6000), last_changed_at, created_at
+INSERT INTO source_analysis_versions(source_id, project_id, content_revision, title, url, cleaned_text, prior_cleaned_text, last_changed_at, created_at, captured_at)
+SELECT id, project_id, content_revision, title, url, left(cleaned_text,6000), left(prior_cleaned_text,6000), last_changed_at, created_at, scraped_at
 FROM sources WHERE cleaned_text IS NOT NULL AND length(cleaned_text) >= 200
 ON CONFLICT(source_id, content_revision, analyzer_version) DO NOTHING;

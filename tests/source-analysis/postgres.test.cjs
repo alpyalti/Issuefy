@@ -18,7 +18,7 @@ test('disposable PostgreSQL: versions, fair claims, retries, atomic dedup and ca
     const { Pool } = require('pg');
     pool = new Pool({ host: root, port: 55487, database: 'postgres', user: process.env.USER });
     await pool.query(`CREATE TABLE projects(id uuid PRIMARY KEY);
-      CREATE TABLE sources(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),project_id uuid NOT NULL REFERENCES projects(id),title text NOT NULL,url text NOT NULL,cleaned_text text,prior_cleaned_text text,content_hash text,last_changed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),competitor_id uuid,keyword_id uuid,domain text,source_type text,scraped_at timestamptz,content_snippet text,r2_raw_html_key text,UNIQUE(project_id,url));
+      CREATE TABLE sources(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),project_id uuid NOT NULL REFERENCES projects(id),title text NOT NULL,url text NOT NULL,cleaned_text text,prior_cleaned_text text,content_hash text,last_changed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),competitor_id uuid,keyword_id uuid,domain text,source_type text,scraped_at timestamptz NOT NULL DEFAULT now(),content_snippet text,r2_raw_html_key text,UNIQUE(project_id,url));
       CREATE TABLE signals(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),project_id uuid NOT NULL,title text,category text,description text,importance text,confidence_score int,suggested_action text,created_at timestamptz DEFAULT now());
       CREATE TABLE signal_sources(signal_id uuid REFERENCES signals(id) ON DELETE CASCADE,source_id uuid REFERENCES sources(id),UNIQUE(signal_id,source_id));`);
     await pool.query(readFileSync(join(__dirname, '../../migrations/0022_source_analysis_versions.sql'), 'utf8'));
@@ -126,6 +126,25 @@ test('disposable PostgreSQL: versions, fair claims, retries, atomic dedup and ca
       const row=(await pool.query('SELECT * FROM sources WHERE id=$1',[saved.id])).rows[0];
       assert.equal(row.cleaned_text,original); assert.equal(row.content_snippet,'Evidence snippet');
       assert.equal(Number((await pool.query('SELECT count(*) FROM source_analysis_versions WHERE source_id=$1',[saved.id])).rows[0].count),1);
+    });
+
+    await t.test('snapshot capture time follows successful scrape independently of FIFO age', async () => {
+      const text='Recently captured legacy evidence. '.repeat(12);
+      // Simulate a pre-migration legacy row, without invoking the queue trigger.
+      await pool.query('ALTER TABLE sources DISABLE TRIGGER issuefy_queue_source_version');
+      const legacy=(await pool.query("INSERT INTO sources(project_id,title,url,cleaned_text,content_hash,created_at,scraped_at) VALUES($1,'Legacy','https://legacy.example.org',$2,$3,'2020-01-01T00:00:00Z','2026-09-16T10:00:00Z') RETURNING id",[project,text,hash(text)])).rows[0].id;
+      await pool.query('ALTER TABLE sources ENABLE TRIGGER issuefy_queue_source_version');
+      await pool.query(readFileSync(join(__dirname,'../../migrations/0022_source_analysis_versions.sql'),'utf8'));
+      let row=(await pool.query('SELECT created_at,captured_at FROM source_analysis_versions WHERE source_id=$1',[legacy])).rows[0];
+      assert.equal(row.created_at.toISOString(),'2020-01-01T00:00:00.000Z');
+      assert.equal(row.captured_at.toISOString(),'2026-09-16T10:00:00.000Z');
+      const next='Newly changed evidence. '.repeat(12);
+      await pool.query("UPDATE sources SET cleaned_text=$2,content_hash=$3,scraped_at='2026-09-16T11:00:00Z' WHERE id=$1",[legacy,next,hash(next)]);
+      row=(await pool.query('SELECT captured_at FROM source_analysis_versions WHERE source_id=$1 ORDER BY content_revision DESC LIMIT 1',[legacy])).rows[0];
+      assert.equal(row.captured_at.toISOString(),'2026-09-16T11:00:00.000Z');
+      await pool.query("UPDATE sources SET scraped_at='2026-09-16T12:00:00Z' WHERE id=$1",[legacy]);
+      row=(await pool.query('SELECT captured_at FROM source_analysis_versions WHERE source_id=$1 ORDER BY content_revision DESC LIMIT 1',[legacy])).rows[0];
+      assert.equal(row.captured_at.toISOString(),'2026-09-16T11:00:00.000Z');
     });
 
   } finally {
