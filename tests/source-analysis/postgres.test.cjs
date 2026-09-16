@@ -18,7 +18,7 @@ test('disposable PostgreSQL: versions, fair claims, retries, atomic dedup and ca
     const { Pool } = require('pg');
     pool = new Pool({ host: root, port: 55487, database: 'postgres', user: process.env.USER });
     await pool.query(`CREATE TABLE projects(id uuid PRIMARY KEY,user_id uuid NOT NULL DEFAULT '00000000-0000-4000-8000-000000000099');
-      CREATE TABLE usage_counters(user_id uuid NOT NULL,period_start date NOT NULL,signals_generated int NOT NULL DEFAULT 0,updated_at timestamptz DEFAULT now(),PRIMARY KEY(user_id,period_start));
+      CREATE TABLE usage_counters(user_id uuid NOT NULL,period_start date NOT NULL,signals_generated int NOT NULL DEFAULT 0,sources_stored int NOT NULL DEFAULT 0,updated_at timestamptz DEFAULT now(),PRIMARY KEY(user_id,period_start));
       CREATE TABLE sources(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),project_id uuid NOT NULL REFERENCES projects(id),title text NOT NULL,url text NOT NULL,cleaned_text text,prior_cleaned_text text,content_hash text,last_changed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),competitor_id uuid,keyword_id uuid,domain text,source_type text,scraped_at timestamptz NOT NULL DEFAULT now(),content_snippet text,r2_raw_html_key text,UNIQUE(project_id,url));
       CREATE TABLE signals(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),project_id uuid NOT NULL,title text,category text,description text,importance text,confidence_score int,suggested_action text,created_at timestamptz DEFAULT now());
       CREATE TABLE signal_sources(signal_id uuid REFERENCES signals(id) ON DELETE CASCADE,source_id uuid REFERENCES sources(id),UNIQUE(signal_id,source_id));`);
