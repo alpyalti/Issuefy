@@ -487,3 +487,8 @@ textarea.cf-input{ resize:vertical; min-height:96px; }
 .uc-ic svg{ width:30px; height:30px; display:block; }
 .usecase h3{ font-family:var(--serif); font-weight:500; font-size:19px; letter-spacing:-0.01em; margin-bottom:9px; }
 .usecase p{ color:var(--ink-2); font-size:14px; line-height:1.55; text-wrap:pretty; }
+
+/* Pricing terms remain readable at their small body-text sizes. */
+.tier-desc, .tier-bill, .tier-trial, .tier-price .per, .tier-specs .lbl {
+  color: var(--ink-2);
+}

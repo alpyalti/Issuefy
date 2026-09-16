@@ -296,6 +296,19 @@ test('atomic entitlement claims with concurrent PostgreSQL transactions', {
       assert.equal(results[0].projectId,f.projects[0]);
       assert.equal(results[1].status,409);
     });
+    for (const role of ['editor', 'viewer']) await t.test(`${role} invitation rejects wrong identity/expiry then accepts case-insensitive email`, async () => {
+      const f = await fixture(); const email = `${role}-journey@test.invalid`; const member = await user(email);
+      const { invite } = await claims.reserveInvitation(f.owner, f.projects[0], email, role);
+      assert.equal((await claims.acceptInvitation('nonexistent-token', member, email)).status, 404);
+      assert.equal((await claims.acceptInvitation(invite.token, member, 'wrong@test.invalid')).status, 409);
+      assert.equal((await pool.query('SELECT COUNT(*)::int n FROM project_members WHERE user_id=$1', [member])).rows[0].n, 0);
+      await pool.query("UPDATE project_invitations SET expires_at=now()-interval '1 minute' WHERE id=$1", [invite.id]);
+      assert.equal((await claims.acceptInvitation(invite.token, member, email)).status, 409);
+      await pool.query("UPDATE project_invitations SET expires_at=now()+interval '1 day' WHERE id=$1", [invite.id]);
+      assert.equal((await claims.acceptInvitation(invite.token, member, email.toUpperCase())).projectId, f.projects[0]);
+      assert.equal((await pool.query('SELECT role FROM project_members WHERE user_id=$1', [member])).rows[0].role, role);
+      assert.equal((await claims.acceptInvitation(invite.token, member, email)).status, 409);
+    });
     await t.test('cancellation holding token lock wins over acceptance', async () => {
       const f = await fixture(); const email='cancel@test.invalid'; const member=await user(email);
       const { invite } = await claims.reserveInvitation(f.owner,f.projects[0],email,'editor');
