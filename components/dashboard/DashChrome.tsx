@@ -273,6 +273,7 @@ function DashChromeInner({
           setRefreshErr(ERROR_MESSAGES.SCRAPE_FAILED);
           return;
         }
+        window.dispatchEvent(new Event("scan-queued"));
         router.refresh();
       } catch {
         setRefreshErr(ERROR_MESSAGES.SCRAPE_FAILED);

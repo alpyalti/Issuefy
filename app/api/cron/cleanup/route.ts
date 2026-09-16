@@ -2,6 +2,8 @@ import { checkCronSecret } from "@/lib/cron-auth";
 import { requireSql } from "@/lib/db";
 import { json } from "@/lib/api";
 import { captureError } from "@/lib/sentry";
+import { expireSourceContent } from "@/lib/source-retention";
+import { drainStorageCleanup } from "@/lib/storage";
 import { sendSubscriptionLapsedEmail } from "@/lib/mailer";
 
 export const runtime = "nodejs";
@@ -86,37 +88,23 @@ async function handle(req: Request) {
     errors.push(`lapsed: ${e instanceof Error ? e.message : "failed"}`);
   }
 
-  // ── Sources — plan-aware window. ──────────────────────────────────────
-  // Each user's plan determines their cutoff. We compute the cutoff per
-  // (user_id, plan) and delete sources scraped before that cutoff in one
-  // statement using a CTE for clarity.
+  // Expire bulky content while preserving citation rows for retained intelligence.
+  let sourcesCompacted = 0;
   try {
-    const result = (await sql`
-      WITH cutoffs AS (
-        SELECT u.id AS user_id,
-               CASE u.plan
-                 WHEN 'starter'    THEN now() - interval '30 days'
-                 WHEN 'growth'     THEN now() - interval '90 days'
-                 WHEN 'agency'     THEN now() - interval '180 days'
-                 WHEN 'enterprise' THEN now() - interval '365 days'
-                 ELSE now() - interval '30 days'
-               END AS cutoff
-        FROM users u
-      ),
-      doomed AS (
-        SELECT s.id
-        FROM sources s
-        JOIN projects p ON p.id = s.project_id
-        JOIN cutoffs  c ON c.user_id = p.user_id
-        WHERE s.scraped_at < c.cutoff
-      )
-      DELETE FROM sources WHERE id IN (SELECT id FROM doomed)
-      RETURNING id
-    `) as { id: string }[];
-    sourcesDeleted = result.length;
+    const result = await expireSourceContent();
+    sourcesDeleted = result.deleted;
+    sourcesCompacted = result.compacted;
   } catch (e) {
     captureError(e, { stage: "cleanup.sources" });
-    errors.push(`sources: ${e instanceof Error ? e.message : "failed"}`);
+    errors.push("sources: cleanup failed");
+  }
+  let storageCleanup = { deleted: 0, failed: 0, disabled: true };
+  try {
+    storageCleanup = await drainStorageCleanup();
+    if (storageCleanup.failed) errors.push("storage: some objects await retry");
+  } catch (e) {
+    captureError(e, { stage: "cleanup.storage" });
+    errors.push("storage: cleanup failed");
   }
 
   // ── Signals — 180 days everywhere. ────────────────────────────────────
@@ -160,7 +148,7 @@ async function handle(req: Request) {
   // signal_sources / daily_summary_sources / scrape_jobs on parent deletion,
   // so no separate cleanup is needed for them.
 
-  return json({ sourcesDeleted, signalsDeleted, lapsedUsers, projectsPaused, socialSnapshotsDeleted, socialPostsDeleted, errors });
+  return json({ sourcesDeleted, sourcesCompacted, storageCleanup, signalsDeleted, lapsedUsers, projectsPaused, socialSnapshotsDeleted, socialPostsDeleted, errors });
 }
 
 export { handle as GET, handle as POST };

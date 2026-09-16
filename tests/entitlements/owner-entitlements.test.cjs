@@ -13,7 +13,7 @@ function load(file, mocks) {
   vm.runInNewContext(js, { exports, require: name => {
     if (!(name in mocks)) throw new Error(`Unmocked dependency: ${name}`);
     return mocks[name];
-  }, Response, Date, Map, Set, console, process: { env: { BETA_STARTER_LIMITS: "false" } } }, { filename: file });
+  }, Response, URL, Date, Map, Set, console, process: { env: { BETA_STARTER_LIMITS: "false" } } }, { filename: file });
   return exports;
 }
 function setup({ status = 'active', ownerPlan = 'starter', callerPlan = 'agency', callerRole = 'editor', callerStatus = null, body = {}, ownerRole = 'user', admin = false, stripe = true, active = true, missing = false, count = 0 } = {}) {
@@ -42,6 +42,8 @@ function setup({ status = 'active', ownerPlan = 'starter', callerPlan = 'agency'
     './usage': load('lib/usage.ts', {}), './api': api,
   });
   const mocks = {
+    'next/server': { after: fn => { void fn(); } },
+    '@/lib/scrape-jobs': { runQueuedJob: async (id, type, job, worker) => worker(id, type, job) },
     '@/lib/entitlement-claims': claims,
     '@/lib/clerk-user': { requireUser: async () => caller }, '@/lib/billing-gate': billing,
     '@/lib/db': { requireSql: () => sql }, '@/lib/api': { ...api, parseJson: async () => ({ keyword: 'test', website_url: 'https://example.test', ...body }) },
@@ -87,7 +89,7 @@ for (const kind of ['keywords', 'competitors']) {
 test('manual refresh uses owner plan and owner usage account', async () => {
   const s = setup({ ownerPlan: 'agency', callerPlan: 'starter', count: 2 });
   const response = await s.route('refresh').POST(new Request('https://test'), { params: Promise.resolve({ id: 'project' }) });
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 202);
   assert.ok(s.ran());
   const quota = s.queries.find(q => q.query.includes('FROM scrape_jobs'));
   assert.equal(quota.values[0], 'target-owner');

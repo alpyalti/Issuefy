@@ -98,3 +98,23 @@ test("normal response preserves request options and native Response behavior", {
   assert.deepEqual(await clone.json(), expected);
   assert.equal(response.bodyUsed, true);
 });
+
+test('declared oversized response is rejected before body consumption', async t => {
+  const url = await serve(t, (_req,res) => { res.writeHead(200, {'Content-Length':'4096'}); res.flushHeaders(); });
+  await assert.rejects(fetchWithTimeout(url, {}, 2000, 64), {name:'ResponseTooLargeError'});
+});
+test('chunked body and its clone reject decoded bytes beyond the cap', async t => {
+  const url = await serve(t, (_req,res) => { res.writeHead(200); res.write('a'.repeat(40)); res.end('b'.repeat(40)); });
+  const response = await fetchWithTimeout(url, {}, 2000, 64), clone = response.clone();
+  const results = await Promise.allSettled([response.text(),clone.text()]);
+  for (const result of results) { assert.equal(result.status,'rejected'); assert.equal(result.reason.name,'ResponseTooLargeError'); }
+});
+test('gzip decompression obeys decoded cap and exact limit succeeds', async t => {
+  const {gzipSync} = require('node:zlib');
+  const compressed=gzipSync('a'.repeat(4096));
+  const url=await serve(t,(_req,res)=>{res.writeHead(200,{'Content-Encoding':'gzip','Content-Length':String(compressed.length)});res.end(compressed);});
+  const response=await fetchWithTimeout(url,{},2000,128);
+  await assert.rejects(response.text(),{name:'ResponseTooLargeError'});
+  const exact=await fetchWithTimeout(url,{},2000,4096);
+  assert.equal((await exact.text()).length,4096);
+});

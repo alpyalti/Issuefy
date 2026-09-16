@@ -28,23 +28,22 @@ checkout's environment files. No database migration was executed for this change
   investigate; do not paste connection strings or raw provider errors into
   public release logs. No automatic database rollback/down migration is provided.
 
-## Scope and outstanding verification
+## Verified scope and limits
 
-Reference: `codex/issuefy-stabilization` at `72e083c`; its migration script matched
-this worktree's baseline. Reviewed chain includes 0001–0016 and 0018; no 0017 file
-exists on that reference. The runner sorts filenames and does not require
-contiguous numbering. 0016 adds webhook completion/outbox state; 0018 adds the
-checkout journal. Neither those files nor any existing SQL was changed.
+The additive chain through 0020 was applied in a disposable PostgreSQL18
+restore of the production snapshot on 2026-09-16. All22 existing nonjournal
+tables retained original-column row fingerprints and counts; journal15→18.
+Old-main SQL compatibility probes passed before new lifecycle state existed.
+Production migration/deployment evidence is maintained in RELEASE-STATUS.md.
+The chain intentionally has gaps (0017/0019); filenames sort in order.
 
-Tests validate precedence, missing/unreadable files, safe target output,
-fail-closed configuration, pending-file ordering, completion recording, rollback
-and cleanup behavior with a fake client. They do not validate PostgreSQL SQL
-syntax, real transaction behavior, advisory lock concurrency, or migration-chain
-compatibility. A full smoke test requires a separately provisioned disposable
-PostgreSQL database; configured environments remain untouched.
+The public health endpoint returns200 on successful SELECT1 and generic503
+on failure, always no-store. Three regression cases cover healthy, missing
+configuration and query failure. It tests DB connectivity, not schema readiness
+or pipeline freshness. Do not interpret health200 as proof of current briefs.
 
-The public health route was inspected but not edited. It currently returns HTTP
-200 even when the database fails and includes the raw exception message in its
-JSON response. Its SELECT 1 probe also does not establish schema readiness. A
-separate increment should return a failure status (e.g. 503), keep public errors
-generic, and define whether schema readiness is required.
+Required rollout order:0016 webhook completion/outbox,0018 checkout journal,
+then0020 account deletion guards (depends on both). Retain journals/tombstones
+on rollback; after lifecycle operations begin, preserve new handlers or disable
+affected entry points while recovering. Local restore validation excludes Neon
+roles, ACLs and network configuration. Never use production mutations as QA.

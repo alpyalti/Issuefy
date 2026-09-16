@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect } from "react";
+import { trapDialogKey } from "@/lib/focus-scope";
 
 /* Ports the landing page's vanilla interactions (Landing Page.html <script> +
    borderglow.js). Returns null; attaches listeners to the server-rendered DOM. */
@@ -74,10 +75,13 @@ export default function LandingChrome() {
     const mmClose = document.getElementById("mmClose");
     if (navBurger && mobileMenu && mmClose) {
       const setMenu = (open: boolean) => {
+        const wasOpen = mobileMenu.classList.contains("open");
         mobileMenu.classList.toggle("open", open);
         document.body.classList.toggle("menu-open", open);
         mobileMenu.setAttribute("aria-hidden", open ? "false" : "true");
         navBurger.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open) mmClose.focus();
+        else if (wasOpen) navBurger.focus();
       };
       const openMenu = () => setMenu(true);
       const closeMenu = () => setMenu(false);
@@ -85,7 +89,9 @@ export default function LandingChrome() {
       mmClose.addEventListener("click", closeMenu);
       const linkEls = Array.from(mobileMenu.querySelectorAll("a"));
       linkEls.forEach((a) => a.addEventListener("click", closeMenu));
-      const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+      const onEsc = (e: KeyboardEvent) => {
+        if (mobileMenu.classList.contains("open")) trapDialogKey(e, mobileMenu, closeMenu);
+      };
       window.addEventListener("keydown", onEsc);
       const mqUp = window.matchMedia("(min-width: 881px)");
       const onMq = (e: MediaQueryListEvent) => { if (e.matches) setMenu(false); };
@@ -128,8 +134,10 @@ export default function LandingChrome() {
       if (!q || !a) return;
       const h = () => {
         const isOpen = item.classList.contains("open");
+        q.setAttribute("aria-expanded", String(!isOpen));
+        a.setAttribute("aria-hidden", String(isOpen));
         document.querySelectorAll<HTMLElement>(".faq-item.open").forEach((o) => {
-          if (o !== item) { o.classList.remove("open"); const oa = o.querySelector<HTMLElement>(".faq-a"); if (oa) oa.style.maxHeight = ""; }
+          if (o !== item) { o.classList.remove("open"); o.querySelector(".faq-q")?.setAttribute("aria-expanded", "false"); o.querySelector(".faq-a")?.setAttribute("aria-hidden", "true"); const oa = o.querySelector<HTMLElement>(".faq-a"); if (oa) oa.style.maxHeight = ""; }
         });
         if (isOpen) { item.classList.remove("open"); a.style.maxHeight = ""; }
         else { item.classList.add("open"); a.style.maxHeight = a.scrollHeight + "px"; }
@@ -139,7 +147,7 @@ export default function LandingChrome() {
     });
     cleanups.push(() => faqHandlers.forEach(({ q, h }) => q.removeEventListener("click", h)));
 
-    /* contact form (demo submit) */
+    /* Compose using the existing published contact address; never claim delivery. */
     const cForm = document.getElementById("contactForm") as HTMLFormElement | null;
     if (cForm) {
       const onSubmit = (e: Event) => {
@@ -153,6 +161,9 @@ export default function LandingChrome() {
           });
           return;
         }
+        if (!cForm.reportValidity()) return;
+        const body = `Name: ${name}\nEmail: ${email}\n\n${msg}`;
+        window.location.href = `mailto:hello@issuefy.app?subject=${encodeURIComponent("Issuefy enquiry")}&body=${encodeURIComponent(body)}`;
         cForm.classList.add("sent");
       };
       cForm.addEventListener("submit", onSubmit);

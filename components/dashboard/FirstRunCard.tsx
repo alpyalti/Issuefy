@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 
@@ -19,12 +19,13 @@ export default function FirstRunCard({
   projectId: string;
   firstCompetitorName?: string | null;
   /** True when the server reports a manual refresh is already in flight
-   *  (derived from last_manual_refresh_at vs last_scraped_at on the project
-   *  row). Survives navigation so the card stays in its "Running…" state
+   *  (derived from the latest durable running job). Survives navigation
+   *  so the card stays in its "Running…" state
    *  when the user comes back to the page mid-scrape. */
   isRefreshing?: boolean;
 }) {
   const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
   const [localPending, startRefresh] = useTransition();
   // OR the local POST being in-flight with the server-derived "refresh in
   // progress" flag — that's what keeps the button disabled / spinner showing
@@ -33,12 +34,15 @@ export default function FirstRunCard({
 
   function refreshNow() {
     if (running) return;
+    setError(null);
     startRefresh(async () => {
       try {
         const res = await fetch(`/api/projects/${projectId}/refresh`, { method: "POST" });
-        if (res.ok) router.refresh();
-      } catch {
-        /* errors surface via the global refresh banner in DashChrome */
+        if (!res.ok) throw new Error((await res.json()).error || "Could not queue scan");
+        window.dispatchEvent(new Event("scan-queued"));
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not queue scan");
       }
     });
   }
@@ -57,6 +61,7 @@ export default function FirstRunCard({
         boxShadow: "inset 0 2px 0 0 var(--accent)",
       }}
     >
+      {error && <p role="alert">{error}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
         <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--ink-3)" }}>
           {running ? "Working on it" : "Getting started"}
