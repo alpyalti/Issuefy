@@ -2,10 +2,11 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSignIn } from "@clerk/nextjs/legacy";
 interface ClerkAPIError { code?: string; message?: string; longMessage?: string; }
 import { Icon } from "@/components/icons/Icon";
+import { activationUrl } from "@/lib/activation";
 import SocialProviders from "./SocialProviders";
 
 function friendlyError(err: ClerkAPIError | undefined): string {
@@ -22,6 +23,7 @@ function friendlyError(err: ClerkAPIError | undefined): string {
 export default function SignInForm() {
   const { isLoaded, signIn, setActive } = useSignIn();
   const router = useRouter();
+  const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -36,10 +38,11 @@ export default function SignInForm() {
       const attempt = await signIn.create({ identifier: email.trim(), password });
       if (attempt.status === "complete") {
         await setActive({ session: attempt.createdSessionId });
-        router.push("/dashboard");
+        router.push(activationUrl(params.get("plan"), params.get("billing"), "/dashboard"));
       } else {
-        // Edge case (2FA etc.) — push them through Clerk's hosted flow.
-        router.push("/sign-in/continue");
+        // Clerk completes pending verification (including second factors) using
+        // the existing client attempt; no session is activated here.
+        router.push(activationUrl(params.get("plan"), params.get("billing"), "/sign-in/continue"));
       }
     } catch (err) {
       const e = err as { errors?: ClerkAPIError[] };
@@ -102,7 +105,7 @@ export default function SignInForm() {
       </form>
 
       <p className="auth-row-secondary">
-        New to Issuefy? <Link href="/sign-up" className="auth-link">Create an account</Link>
+        New to Issuefy? <Link href={activationUrl(params.get("plan"), params.get("billing"), "/sign-up")} className="auth-link">Create an account</Link>
       </p>
     </>
   );

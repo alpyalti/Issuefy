@@ -1,9 +1,8 @@
 import { requireUser } from "@/lib/clerk-user";
 import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
-import { getLimits } from "@/lib/usage";
-import { json, parseJson, conflict } from "@/lib/api";
-import { projectCreateSchema } from "@/lib/schemas/api";
+import { json, parseJson } from "@/lib/api";
+import { projectSetupSchema, createProjectSetup, SetupError } from "@/lib/project-setup";
 import { captureError } from "@/lib/sentry";
 
 export const runtime = "nodejs";
@@ -39,53 +38,15 @@ export async function POST(req: Request) {
   if (user instanceof Response) return user;
   const guard = await ensureActiveSubscriptionApi(user.id);
   if (guard) return guard;
-  const body = await parseJson(req, projectCreateSchema);
+  const body = await parseJson(req, projectSetupSchema);
   if (body instanceof Response) return body;
 
-  const sql = requireSql();
-  const limits = getLimits(user.plan);
-
-  // Plan project limit. Count first, then insert — race is acceptable here:
-  // a double-create at the boundary is non-destructive and the trial budgets
-  // (PRD §21.3) ultimately prevent real overuse.
-  const countRows = (await sql`SELECT COUNT(*)::int AS n FROM projects WHERE user_id = ${user.id}`) as { n: number }[];
-  if ((countRows[0]?.n ?? 0) >= limits.projects) {
-    return conflict(`Your plan allows ${limits.projects} project${limits.projects === 1 ? "" : "s"}. Upgrade for more.`);
-  }
-
-  const trackCompany = body.track_company ?? false;
   try {
-    const rows = await sql`
-      INSERT INTO projects (
-        user_id, name, company_name, company_website, company_description,
-        company_logo_url, company_socials, track_company,
-        industry, business_type, target_market, description
-      ) VALUES (
-        ${user.id}, ${body.name},
-        ${body.company_name ?? null},
-        ${body.company_website ?? null},
-        ${body.company_description ?? null},
-        ${body.company_logo_url ?? null},
-        ${body.company_socials ? JSON.stringify(body.company_socials) : null},
-        ${trackCompany},
-        ${body.industry}, ${body.business_type}, ${body.target_market},
-        ${body.description ?? null}
-      )
-      RETURNING *
-    `;
-    const project = rows[0] as { id: string };
-    // Mirror the owner into project_members so the new project_members-based
-    // auth path (manageableProject, accessibleProject) works immediately.
-    // ON CONFLICT keeps this a no-op if the migration backfill already created
-    // the row for an existing project being recreated by some odd path.
-    await sql`
-      INSERT INTO project_members (project_id, user_id, role)
-      VALUES (${project.id}, ${user.id}, 'owner')
-      ON CONFLICT (project_id, user_id) DO NOTHING
-    `;
+    const project = await createProjectSetup(user.id, projectSetupSchema.parse(body));
     return json({ project }, { status: 201 });
   } catch (e) {
+    if (e instanceof SetupError) return json({ error: e.message }, { status: e.status });
     captureError(e, { route: "POST /api/projects", userId: user.id });
-    throw e;
+    return json({ error: "We couldn’t confirm setup. Check your dashboard before retrying." }, { status: 500 });
   }
 }

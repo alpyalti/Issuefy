@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/clerk-user";
-import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { ensureProjectSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
 import { getLimits, HARD_CAPS } from "@/lib/usage";
 import { conflict, json, manageableProject, notFound, parseJson } from "@/lib/api";
@@ -14,18 +14,18 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function POST(req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
-  const guard = await ensureActiveSubscriptionApi(user.id);
-  if (guard) return guard;
   const { id: projectId } = await params;
   // Editors + owners can manage watchlist; viewers get 404.
   const proj = await manageableProject(user.id, projectId);
   if (!proj) return notFound();
+  const billing = await ensureProjectSubscriptionApi(user.id, projectId);
+  if (billing instanceof Response) return billing;
 
   const body = await parseJson(req, competitorCreateSchema);
   if (body instanceof Response) return body;
 
   const sql = requireSql();
-  const limit = Math.min(getLimits(user.plan).competitorsPerProject, HARD_CAPS.competitorsPerProject);
+  const limit = Math.min(getLimits(billing.plan).competitorsPerProject, HARD_CAPS.competitorsPerProject);
 
   const countRows = (await sql`SELECT COUNT(*)::int AS n FROM competitors WHERE project_id = ${projectId}`) as { n: number }[];
   if ((countRows[0]?.n ?? 0) >= limit) {

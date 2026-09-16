@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/clerk-user";
-import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { ensureProjectSubscriptionApi } from "@/lib/billing-gate";
 import { requireSql } from "@/lib/db";
 import { json, manageableProject, notFound, rateLimited } from "@/lib/api";
 import { draftLeadReply } from "@/lib/leads";
@@ -24,8 +24,6 @@ const DRAFT_COOLDOWN_MS = 10_000;
 export async function POST(_req: Request, { params }: Ctx) {
   const user = await requireUser();
   if (user instanceof Response) return user;
-  const guard = await ensureActiveSubscriptionApi(user.id);
-  if (guard) return guard;
 
   const last = lastDraft.get(user.id) ?? 0;
   if (Date.now() - last < DRAFT_COOLDOWN_MS) return rateLimited("Give that a moment.");
@@ -33,6 +31,8 @@ export async function POST(_req: Request, { params }: Ctx) {
   const { id: projectId, leadId } = await params;
   const proj = await manageableProject(user.id, projectId);
   if (!proj) return notFound();
+  const billing = await ensureProjectSubscriptionApi(user.id, projectId);
+  if (billing instanceof Response) return billing;
 
   const sql = requireSql();
   const rows = (await sql`

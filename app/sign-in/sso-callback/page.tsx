@@ -1,3 +1,4 @@
+import { activationUrl } from "@/lib/activation";
 import { AuthenticateWithRedirectCallback } from "@clerk/nextjs";
 import { Icon } from "@/components/icons/Icon";
 import "../../auth.css";
@@ -7,14 +8,15 @@ export const metadata = { title: "Signing you in… — Issuefy" };
 /**
  * OAuth (Google) redirect lands here. Clerk's <AuthenticateWithRedirectCallback>
  * completes the handshake and then forwards to the `redirectUrlComplete` that was
- * set when the flow started (/dashboard for sign-in, /onboarding for sign-up).
+ * set when the flow started (/dashboard for sign-in, /upgrade for sign-up), preserving pricing hints.
  *
  * This must be a concrete route — the /sign-in/[[...sign-in]] catch-all would
  * otherwise just re-render the sign-in form and the OAuth flow would never
  * finish (which is exactly the bug this fixes). A static segment takes
  * precedence over the optional catch-all sibling.
  */
-export default function SSOCallbackPage() {
+export default async function SSOCallbackPage({ searchParams }: { searchParams: Promise<{ plan?: string; billing?: string }> }) {
+  const sp = await searchParams;
   return (
     <div className="auth-shell" style={{ background: "var(--bg)" }}>
       <main className="auth-card" style={{ alignItems: "center", textAlign: "center", gap: 14 }}>
@@ -30,7 +32,7 @@ export default function SSOCallbackPage() {
             the transfer fails with a 400. */}
         <div id="clerk-captcha" />
       </main>
-      <AuthenticateWithRedirectCallback signUpForceRedirectUrl="/onboarding" signInForceRedirectUrl="/dashboard" />
+      <AuthenticateWithRedirectCallback signUpForceRedirectUrl={activationUrl(sp.plan, sp.billing)} signInForceRedirectUrl={activationUrl(sp.plan, sp.billing, "/dashboard")} />
     </div>
   );
 }

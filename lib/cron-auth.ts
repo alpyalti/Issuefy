@@ -1,3 +1,4 @@
+import { configuredEnv } from "./env";
 /**
  * Shared header-bearer guards for cron + internal worker routes.
  *
@@ -24,14 +25,14 @@ function bearer(req: Request): string {
 }
 
 export function checkCronSecret(req: Request): Response | null {
-  const secret = process.env.CRON_SECRET || "";
+  const secret = configuredEnv(process.env.CRON_SECRET) || "";
   if (!secret) return new Response("CRON_SECRET not configured", { status: 503 });
   if (!safeEq(bearer(req), secret)) return new Response("Unauthorized", { status: 401 });
   return null;
 }
 
 export function checkInternalSecret(req: Request): Response | null {
-  const secret = process.env.INTERNAL_WORKER_SECRET || "";
+  const secret = configuredEnv(process.env.INTERNAL_WORKER_SECRET) || "";
   if (!secret) return new Response("INTERNAL_WORKER_SECRET not configured", { status: 503 });
   if (!safeEq(bearer(req), secret)) return new Response("Unauthorized", { status: 401 });
   return null;

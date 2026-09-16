@@ -1,5 +1,7 @@
 "use client";
 
+import { activationUrl } from "@/lib/activation";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 
@@ -20,6 +22,8 @@ function GoogleGlyph() {
 export default function SocialProviders({ mode }: { mode: "sign-in" | "sign-up" }) {
   const { isLoaded: signInLoaded, signIn } = useSignIn();
   const { isLoaded: signUpLoaded, signUp } = useSignUp();
+  const params = useSearchParams();
+  const destination = activationUrl(params.get("plan"), params.get("billing"), mode === "sign-up" ? "/upgrade" : "/dashboard");
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -36,8 +40,8 @@ export default function SocialProviders({ mode }: { mode: "sign-in" | "sign-up" 
         strategy,
         // Concrete callback route that completes the handshake (see
         // app/sign-in/sso-callback/page.tsx), then forwards here:
-        redirectUrl: "/sign-in/sso-callback",
-        redirectUrlComplete: mode === "sign-in" ? "/dashboard" : "/onboarding",
+        redirectUrl: activationUrl(params.get("plan"), params.get("billing"), "/sign-in/sso-callback"),
+        redirectUrlComplete: destination,
       });
       // On success the browser is redirected to Google — code below won't run.
     } catch {

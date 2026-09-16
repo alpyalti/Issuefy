@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSignUp } from "@clerk/nextjs/legacy";
 interface ClerkAPIError { code?: string; message?: string; longMessage?: string; }
 import { Icon } from "@/components/icons/Icon";
+import { activationUrl } from "@/lib/activation";
 import SocialProviders from "./SocialProviders";
 
 function friendlyError(err: ClerkAPIError | undefined): string {
@@ -88,21 +89,12 @@ export default function SignUpForm({
               router.push(`/dashboard/${projectId}`);
               return;
             }
-          } catch { /* fall through to /dashboard so the user is at least signed in */ }
-          router.push("/dashboard");
+          } catch { /* show the invitation page so acceptance remains recoverable */ }
+          router.push(`/invite/${encodeURIComponent(inviteToken)}`);
           return;
         }
 
-        // Pricing-page flow: keep the pre-selected plan + billing on the URL
-        // so onboarding can hand off to Checkout afterward.
-        if (planParam) {
-          const u = new URL("/onboarding", window.location.origin);
-          u.searchParams.set("plan", planParam);
-          if (billingParam) u.searchParams.set("billing", billingParam);
-          router.push(u.pathname + u.search);
-        } else {
-          router.push("/onboarding");
-        }
+        router.push(activationUrl(planParam, billingParam));
       } else {
         setError("We couldn't complete sign-up. Please try again.");
       }
@@ -186,7 +178,7 @@ export default function SignUpForm({
       </form>
 
       <p className="auth-row-secondary">
-        Already have an account? <Link href="/sign-in" className="auth-link">Sign in</Link>
+        Already have an account? <Link href={activationUrl(planParam, billingParam, "/sign-in")} className="auth-link">Sign in</Link>
       </p>
     </>
   ) : (

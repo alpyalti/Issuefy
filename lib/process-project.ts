@@ -1,3 +1,4 @@
+import { ensureProjectWorkerSubscription } from "@/lib/billing-gate";
 /**
  * Per-project worker (PRD §13.10).
  *
@@ -93,7 +94,7 @@ export interface ProcessProjectResult {
  * for any per-hour-floor / daily-quota check on manual refresh (those checks
  * sit in the HTTP refresh route, not here).
  */
-export async function processProject(projectId: string, jobType: ProcessJobType): Promise<ProcessProjectResult> {
+export async function processProject(projectId: string, jobType: ProcessJobType, claimedJobId?: string): Promise<ProcessProjectResult> {
   const sql = requireSql();
   const errors: string[] = [];
   let sourcesNew = 0;
@@ -108,6 +109,7 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
   }
   // Paused project — short-circuit before any external API calls.
   if (!project.is_active) {
+    if (claimedJobId) throw new Error("Project is paused");
     return {
       jobId: "skipped-paused", status: "completed",
       sourcesNew: 0, sourcesRefreshed: 0, serpCallsUsed: 0, scrapeCallsUsed: 0,
@@ -116,6 +118,8 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
       errors: ["project is paused"],
     };
   }
+
+  await ensureProjectWorkerSubscription(projectId);
 
   const userRows = (await sql`
     SELECT id, email, plan, email_brief_enabled, email_brief_unsubscribe_token
@@ -141,12 +145,21 @@ export async function processProject(projectId: string, jobType: ProcessJobType)
     });
   }
 
-  // Open a scrape_jobs row up front so the run is traceable end-to-end (PRD §13.10).
-  const jobRows = (await sql`
-    INSERT INTO scrape_jobs (project_id, status, job_type, started_at)
-    VALUES (${projectId}, 'running', ${jobType}, now())
-    RETURNING id
-  `) as { id: string }[];
+  // Manual routes reserve quota first. Consume that row once; cron keeps its
+  // existing job creation path. A duplicate claim cannot start paid stages.
+  const jobRows = (claimedJobId
+    ? await sql`
+        UPDATE scrape_jobs SET status = 'running', started_at = now()
+        WHERE id = ${claimedJobId} AND project_id = ${projectId}
+          AND job_type = ${jobType} AND status = 'pending'
+        RETURNING id
+      `
+    : await sql`
+        INSERT INTO scrape_jobs (project_id, status, job_type, started_at)
+        VALUES (${projectId}, 'running', ${jobType}, now())
+        RETURNING id
+      `) as { id: string }[];
+  if (!jobRows[0]) throw new Error("Refresh claim already consumed or invalid");
   const jobId = jobRows[0].id;
 
   try {

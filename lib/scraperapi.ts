@@ -1,3 +1,4 @@
+import { configuredEnv } from "./env";
 /**
  * ScraperAPI — standard URL endpoint + Google Search Structured Data (SERP).
  *
@@ -15,9 +16,10 @@
  * logs to scrape_jobs + Sentry and continues with the next URL (PRD §13.2).
  */
 
+import { serpPublisherUrl } from "./serp-url";
 import { fetchWithTimeout as fetchWithTimeoutMs } from "./fetch";
 
-const KEY = process.env.SCRAPERAPI_KEY || "";
+const KEY = configuredEnv(process.env.SCRAPERAPI_KEY) || "";
 const TIMEOUT_MS = 25_000;
 
 function ensureKey(): string {
@@ -127,7 +129,7 @@ export async function serpDiscover(opts: SerpDiscoverOptions): Promise<SerpResul
     .map((r, i): SerpResult => ({
       position: r.position ?? i + 1,
       title: r.title ?? "",
-      url: r.link ?? r.url ?? "",
+      url: serpPublisherUrl(r.link ?? r.url ?? "") ?? "",
       snippet: r.snippet ?? "",
     }))
     .filter((r) => !!r.url)

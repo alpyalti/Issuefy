@@ -1,3 +1,4 @@
+import { configuredEnv } from "./env";
 /**
  * Sentry wrapper — uses the real @sentry/nextjs SDK when SENTRY_DSN is set,
  * otherwise no-ops. The SDK is initialized via sentry.server.config.ts,
@@ -8,7 +9,7 @@ import * as Sentry from "@sentry/nextjs";
 
 type Extra = Record<string, unknown>;
 
-const DSN_SET = !!process.env.SENTRY_DSN;
+const DSN_SET = !!configuredEnv(process.env.SENTRY_DSN);
 
 export function captureError(err: unknown, extra?: Extra) {
   if (!DSN_SET) return;

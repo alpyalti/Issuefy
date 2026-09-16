@@ -1,3 +1,4 @@
+import { configuredEnv } from "./env";
 /**
  * Optional Cloudflare R2 storage (PRD §10.6).
  *
@@ -19,10 +20,10 @@ interface R2Config {
 
 function loadConfig(): R2Config | null {
   if (!R2_ENABLED) return null;
-  const accountId = process.env.R2_ACCOUNT_ID || "";
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID || "";
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || "";
-  const bucket = process.env.R2_BUCKET || "";
+  const accountId = configuredEnv(process.env.R2_ACCOUNT_ID) || "";
+  const accessKeyId = configuredEnv(process.env.R2_ACCESS_KEY_ID) || "";
+  const secretAccessKey = configuredEnv(process.env.R2_SECRET_ACCESS_KEY) || "";
+  const bucket = configuredEnv(process.env.R2_BUCKET) || "";
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket) return null;
   return { accountId, accessKeyId, secretAccessKey, bucket };
 }

@@ -1,3 +1,4 @@
+import { configuredEnv } from "../../../../lib/env";
 import { after } from "next/server";
 import { checkCronSecret } from "@/lib/cron-auth";
 import { requireSql } from "@/lib/db";
@@ -91,7 +92,7 @@ async function handle(req: Request) {
     return json({ error: "Could not enumerate projects" }, { status: 500 });
   }
 
-  const internalSecret = process.env.INTERNAL_WORKER_SECRET || "";
+  const internalSecret = configuredEnv(process.env.INTERNAL_WORKER_SECRET) || "";
   if (!internalSecret) {
     return json({ error: "INTERNAL_WORKER_SECRET not configured" }, { status: 503 });
   }

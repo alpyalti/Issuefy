@@ -1,5 +1,6 @@
 "use client";
 
+import { activationUrl } from "@/lib/activation";
 import { useState } from "react";
 import { Icon } from "@/components/icons/Icon";
 
@@ -36,12 +37,13 @@ const TIERS: Tier[] = [
   },
 ];
 
-export default function UpgradePicker({ currentPlan }: { currentPlan: string }) {
-  const [billing, setBilling] = useState<Billing>("annual");
+export default function UpgradePicker({ currentPlan, initialPlan, initialBilling }: { currentPlan: string | null; initialPlan?: string; initialBilling?: string }) {
+  const [billing, setBilling] = useState<Billing>(initialBilling === "monthly" ? "monthly" : "annual");
   const [busy, setBusy] = useState<Plan | null>(null);
 
   async function pick(plan: Plan) {
     setBusy(plan);
+    window.history.replaceState(null, "", activationUrl(plan, billing));
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
@@ -53,6 +55,8 @@ export default function UpgradePicker({ currentPlan }: { currentPlan: string }) 
       if (!res.ok) { alert("Couldn't start checkout. Try again."); return; }
       const { url } = await res.json();
       if (url) window.location.href = url;
+    } catch {
+      alert("Couldn’t reach checkout. Your selection is saved; please try again.");
     } finally {
       setBusy(null);
     }
@@ -82,7 +86,7 @@ export default function UpgradePicker({ currentPlan }: { currentPlan: string }) 
           return (
             <div key={t.id} className={"tier " + (t.featured ? "featured" : "")}>
               {t.featured && <span className="tier-badge">Most popular</span>}
-              <div className="tier-name">{t.name}</div>
+              <div className="tier-name">{t.name}{initialPlan === t.id ? " · Selected" : ""}</div>
               <div className="tier-desc">{t.desc}</div>
               <div className="tier-price" style={{ marginTop: 12 }}>
                 <span className="cur">$</span>
@@ -99,7 +103,7 @@ export default function UpgradePicker({ currentPlan }: { currentPlan: string }) 
                   // the landing pricing block.
                   className={"btn " + (t.id === "starter" ? "btn-accent" : "btn-ghost")}
                   onClick={() => pick(t.id)}
-                  disabled={busy === t.id || isCurrent}
+                  disabled={busy !== null || isCurrent}
                   style={{ width: "100%", justifyContent: "center" }}
                 >
                   {busy === t.id ? <><Icon name="Loading03Icon" size={15} stroke={2} className="spin" />Opening…</>

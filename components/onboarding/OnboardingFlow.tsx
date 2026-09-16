@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
+import { competitorPayload, companyPayload, seedWebsite } from "./payload";
 import { CompanyCard } from "./CompanyCard";
 import { ChipInput } from "./ChipInput";
 import { MarketSelect } from "./MarketSelect";
@@ -71,24 +72,14 @@ function profileToCardData(profile: ServerProfile, fallbackUrl: string): Company
     tagline: profile.description.slice(0, 100),
     color: "#15171A",
     initials,
-    socials,
+    socials: seedWebsite(socials, fallbackUrl || profile.source_url),
   };
-}
-
-function cardToSocialsPayload(card: CompanyData): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const s of card.socials) {
-    if (!s.on || !s.value) continue;
-    const k = s.kind.toLowerCase();
-    out[k === "twitter" ? "x" : k] = s.value;
-  }
-  return out;
 }
 
 /**
  * mode="first-run"   → opening flow for a brand-new user. After project
- *                       creation, routes to Stripe Checkout (the new trial
- *                       starts there). The welcome step keeps its "Welcome
+ *                       creation, opens the dashboard. Checkout was verified
+ *                       before entering this flow. The welcome step keeps its "Welcome
  *                       to Issuefy" copy.
  * mode="new-project" → adding another project for an already-subscribed user.
  *                       Step 0 copy becomes "Create a new project." After
@@ -192,7 +183,7 @@ export default function OnboardingFlow({
       tagline: manualDesc.trim().slice(0, 100),
       color: "#15171A",
       initials,
-      socials: [],
+      socials: seedWebsite([], companyUrl),
     });
     if (!projectName) setProjectName(name);
     setEnrichErr(null);
@@ -264,8 +255,8 @@ export default function OnboardingFlow({
     if (step === 0) return true;
     if (step === 1) return skipCompany || !!companyData;
     if (step === 2) return projectName.trim().length > 0 && industry.trim().length > 0 && targetMarket.trim().length > 0;
-    if (step === 3) return competitors.length >= 1 || keywords.length >= 3; // PRD §13.1
-    if (step === 4) return true; // keywords step always allows continue
+    if (step === 3) return true; // Users may choose keyword-only monitoring.
+    if (step === 4) return competitors.length >= 1 || keywords.length >= 3;
     return true;
   }
 
@@ -273,15 +264,7 @@ export default function OnboardingFlow({
     setSubmitErr(null);
     setSubmitting(true);
     try {
-      const companyBody = !skipCompany && companyData ? {
-        company_name: companyData.name,
-        // Omit when blank — a hand-entered company may have no website, and the
-        // API's url validator rejects "" (min length 3).
-        ...(companyData.domain ? { company_website: companyData.domain } : {}),
-        company_description: companyData.tagline,
-        company_socials: cardToSocialsPayload(companyData),
-        track_company: true,
-      } : {};
+      const companyBody = !skipCompany && companyData ? companyPayload(companyData) : {};
 
       const projRes = await fetch("/api/projects", {
         method: "POST",
@@ -292,6 +275,10 @@ export default function OnboardingFlow({
           business_type: businessType,
           target_market: targetMarket.trim(),
           ...companyBody,
+          setup: {
+            competitors: competitors.map(competitorPayload),
+            keywords: keywords.map((keyword) => ({ keyword })),
+          },
         }),
       });
       if (!projRes.ok) {
@@ -300,68 +287,7 @@ export default function OnboardingFlow({
       }
       const { project } = (await projRes.json()) as { project: { id: string } };
 
-      // Fan out competitor + keyword creation in parallel — order doesn't matter.
-      const compCalls = competitors.map((c) => fetch(`/api/projects/${project.id}/competitors`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          website_url: c.domain,
-          name: c.name,
-          description: c.tagline,
-          socials: cardToSocialsPayload(c),
-        }),
-      }));
-      const kwCalls = keywords.map((k) => fetch(`/api/projects/${project.id}/keywords`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keyword: k }),
-      }));
-      await Promise.allSettled([...compCalls, ...kwCalls]);
-
-      // new-project mode: the user already has an active subscription —
-      // adding another project is on-plan. Skip the trial gate and route
-      // straight into the project they just created.
-      if (mode === "new-project") {
-        router.push(`/dashboard/${project.id}`);
-        return;
-      }
-
-      // first-run trial gate. Two paths:
-      //   - If they pre-selected a plan on the pricing page (?plan & ?billing
-      //     in the URL), respect that choice and jump straight to Stripe Checkout.
-      //   - Otherwise send them to /upgrade?required=1 so they consciously pick
-      //     a plan + monthly/annual before payment.
-      // If Checkout can't be created (Stripe not configured, e.g. dev) we fall
-      // through to the dashboard so local development isn't blocked.
-      const params = new URLSearchParams(window.location.search);
-      const plan = params.get("plan");
-      const billing = params.get("billing");
-
-      if (!plan || !billing) {
-        window.location.href = "/upgrade?required=1";
-        return;
-      }
-
-      try {
-        const res = await fetch("/api/billing/checkout", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ plan, billing }),
-        });
-        if (res.ok) {
-          const { url } = await res.json();
-          if (url) { window.location.href = url; return; }
-        }
-        if (res.status === 501) {
-          // Stripe not configured — let the user into the app (dev/beta).
-          router.push(`/dashboard/${project.id}`);
-          return;
-        }
-        // Other failures: bounce to the plan picker so they can retry.
-        window.location.href = "/upgrade?required=1";
-      } catch {
-        window.location.href = "/upgrade?required=1";
-      }
+      router.push(`/dashboard/${project.id}`);
     } catch (e) {
       setSubmitting(false);
       setSubmitErr(e instanceof Error ? e.message : "Something went wrong");
@@ -553,7 +479,7 @@ export default function OnboardingFlow({
                 {competitors.map((c, i) => (
                   <CompanyCard
                     key={c.domain}
-                    data={c}
+                    websiteRequired data={c}
                     onChange={(d) => setCompetitors((prev) => prev.map((x, j) => (j === i ? d : x)))}
                     onRemove={() => setCompetitors((prev) => prev.filter((_, j) => j !== i))}
                     compact

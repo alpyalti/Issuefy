@@ -29,6 +29,36 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: node --test scripts/demo-brief.test.mjs
       - run: npm run typecheck
       - run: npm run build
       - run: npm run audit:production
+
+  postgres-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Verify integration gate failure modes
+        run: node --test scripts/test-integration.test.mjs
+      - name: Install PostgreSQL 17 binaries
+        run: |
+          if [ ! -x /usr/lib/postgresql/17/bin/postgres ]; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-common
+            sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+            # Harnesses create Unix-socket-only clusters as the runner user.
+            echo "create_main_cluster = false" | sudo tee /etc/postgresql-common/createcluster.conf
+            sudo apt-get install --yes postgresql-17
+          fi
+      - name: Required PostgreSQL integration tests (no skips)
+        env:
+          ISSUEFY_TEST_PG_BIN: /usr/lib/postgresql/17/bin
+          LANG: C
+          LC_ALL: C
+        run: node scripts/test-integration.mjs

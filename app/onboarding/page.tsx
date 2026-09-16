@@ -1,3 +1,5 @@
+import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { activationUrl } from "@/lib/activation";
 import { redirect } from "next/navigation";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
@@ -21,8 +23,10 @@ export const dynamic = "force-dynamic";
  * If the user already has a project, jump straight to the dashboard so
  * accidental visits don't re-onboard.
  */
-export default async function OnboardingPage() {
+export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ plan?: string; billing?: string }> }) {
+  const sp = await searchParams;
   const user = await getOrCreateUser();
+  if (await ensureActiveSubscriptionApi(user.id)) redirect(activationUrl(sp.plan, sp.billing));
   const sql = requireSql();
 
   const existing = (await sql`

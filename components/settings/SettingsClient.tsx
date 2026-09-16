@@ -1,5 +1,7 @@
 "use client";
 
+import { competitorLinksDraft, saveCompetitorLinks } from "./competitor-links";
+
 import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -138,13 +140,14 @@ export default function SettingsClient({
     router.refresh();
   }
   async function saveCompetitorSocials(c: Competitor, socials: Record<string, string>) {
-    setCompetitors((prev) => prev.map((x) => (x.id === c.id ? { ...x, socials } : x)));
-    const res = await fetch(`/api/competitors/${c.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ socials }),
-    });
-    if (!res.ok) setErr("Couldn't save those social links.");
+    try {
+      const patch = await saveCompetitorLinks(c.id, socials);
+      setCompetitors((prev) => prev.map((x) => (x.id === c.id ? { ...x, ...patch } : x)));
+      return true;
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't save those links.");
+      return false;
+    }
   }
 
   // ── Keyword add / toggle / remove ─────────────────────────────────────
@@ -528,14 +531,14 @@ function CompetitorRow({
   profileHref: string;
   onToggle: () => void;
   onRemove: () => void;
-  onSaveSocials: (socials: Record<string, string>) => Promise<void> | void;
+  onSaveSocials: (socials: Record<string, string>) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<Record<string, string>>(() => ({ ...(competitor.socials || {}) }));
+  const [draft, setDraft] = useState<Record<string, string>>(() => competitorLinksDraft(competitor));
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   // Reset draft whenever the competitor's socials change from outside.
-  useEffect(() => { setDraft({ ...(competitor.socials || {}) }); }, [competitor.socials]);
+  useEffect(() => { setDraft(competitorLinksDraft(competitor)); }, [competitor.socials, competitor.website_url]);
 
   async function save() {
     setSaveStatus("saving");
@@ -545,7 +548,8 @@ function CompetitorRow({
       const trimmed = (v || "").trim();
       if (trimmed) clean[k] = trimmed;
     }
-    await onSaveSocials(clean);
+    const saved = await onSaveSocials(clean);
+    if (!saved) { setSaveStatus("idle"); return; }
     setSaveStatus("saved");
     setTimeout(() => setSaveStatus("idle"), 1_400);
   }
@@ -584,12 +588,12 @@ function CompetitorRow({
       {open && (
         <div style={{ padding: "12px 14px 14px", background: "var(--surface-2)", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 8 }}>
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 4 }}>
-            Instagram, YouTube, Reddit and LinkedIn links are tracked daily — stats, posts and trends land on the competitor&apos;s profile page. TikTok and Facebook are saved for reference only.
+            Website is the required monitoring URL; edit it here to change the tracked page. Pause the competitor to stop monitoring. Instagram, YouTube, Reddit and LinkedIn links are tracked daily — stats, posts and trends land on the competitor&apos;s profile page. TikTok and Facebook are saved for reference only.
           </p>
           <SocialsFields draft={draft} setDraft={setDraft} />
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>
             {saveStatus === "saved" && <span className="mono" style={{ fontSize: 12, color: "var(--pos)", alignSelf: "center" }}>✓ Saved</span>}
-            <button className="btn btn-quiet btn-sm" onClick={() => setDraft({ ...(competitor.socials || {}) })} disabled={saveStatus === "saving"}>Reset</button>
+            <button className="btn btn-quiet btn-sm" onClick={() => setDraft(competitorLinksDraft(competitor))} disabled={saveStatus === "saving"}>Reset</button>
             <button className="btn btn-accent btn-sm" onClick={save} disabled={saveStatus === "saving"}>{saveStatus === "saving" ? "Saving…" : "Save links"}</button>
           </div>
         </div>

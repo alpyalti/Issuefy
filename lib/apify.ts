@@ -1,3 +1,4 @@
+import { configuredEnv } from "./env";
 /**
  * Apify client — Instagram Profile Scraper (Competitor Hub).
  *
@@ -22,7 +23,7 @@
 
 import { fetchWithTimeout } from "./fetch";
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN || "";
+const APIFY_TOKEN = configuredEnv(process.env.APIFY_TOKEN) || "";
 // Tilde form is the actor path on Apify's API ("apify/instagram-profile-scraper").
 const ACTOR = process.env.APIFY_IG_ACTOR || "apify~instagram-profile-scraper";
 // Reddit Scraper Lite — used by Lead Discovery. Reddit blocks datacenter IPs

@@ -1,3 +1,4 @@
+import { ensureProjectWorkerSubscription } from "@/lib/billing-gate";
 /**
  * Competitor Hub orchestrator — refresh social profiles for one project.
  *
@@ -123,6 +124,8 @@ export async function refreshSocialProfiles(
     t.errors.push("project not found or paused");
     return t;
   }
+
+  await ensureProjectWorkerSubscription(projectId);
 
   const ownerRows = (await sql`SELECT plan, role FROM users WHERE id = ${project.user_id} LIMIT 1`) as { plan: string; role: string }[];
   const limits = getLimits(ownerRows[0]?.plan);

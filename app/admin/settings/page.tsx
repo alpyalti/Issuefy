@@ -1,3 +1,4 @@
+import { configuredEnv } from "../../../lib/env";
 import { requireAdmin } from "@/lib/admin";
 import CronTriggerButton from "@/components/admin/CronTriggerButton";
 
@@ -27,7 +28,7 @@ export default async function AdminSettings() {
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, marginBottom: 8 }}>System status</h2>
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 16px", fontSize: 13.5 }}>
           <StatusRow label="BETA_STARTER_LIMITS" value={process.env.BETA_STARTER_LIMITS !== "false" ? "on" : "off"} note="When on, every account is served Starter limits regardless of plan." />
-          <StatusRow label="SENTRY_DSN" value={process.env.SENTRY_DSN ? "set" : "missing"} note="Real Sentry integration lands in Sprint G." />
+          <StatusRow label="SENTRY_DSN" value={configuredEnv(process.env.SENTRY_DSN) ? "set" : "missing"} note="Real Sentry integration lands in Sprint G." />
           <StatusRow label="R2_ENABLED" value={process.env.R2_ENABLED === "true" ? "on" : "off"} note="Raw HTML archive." />
           <StatusRow label="STRIPE_SECRET_KEY" value={process.env.STRIPE_SECRET_KEY ? "set" : "missing"} note="Billing routes return 501 when missing." />
           <StatusRow label="APP_URL" value={process.env.APP_URL ?? "(not set)"} note="Used by cron dispatcher + webhook redirects." />

@@ -1,3 +1,5 @@
+import { ensureActiveSubscriptionApi } from "@/lib/billing-gate";
+import { activationUrl } from "@/lib/activation";
 import { redirect } from "next/navigation";
 import { requireSql } from "@/lib/db";
 import { getOrCreateUser } from "@/lib/clerk-user";
@@ -22,6 +24,7 @@ export const metadata = { title: "New project — Issuefy" };
  */
 export default async function NewProjectPage() {
   const user = await getOrCreateUser();
+  if (await ensureActiveSubscriptionApi(user.id)) redirect(activationUrl());
   const sql = requireSql();
   const limits = getLimits(user.plan);
 

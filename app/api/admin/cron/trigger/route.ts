@@ -1,3 +1,4 @@
+import { configuredEnv } from "../../../../../lib/env";
 import { requireAdminApi } from "@/lib/admin";
 import { json } from "@/lib/api";
 import { captureBreadcrumb } from "@/lib/sentry";
@@ -12,7 +13,7 @@ export const maxDuration = 60;
 export async function POST() {
   const admin = await requireAdminApi();
   if (admin instanceof Response) return admin;
-  const secret = process.env.CRON_SECRET;
+  const secret = configuredEnv(process.env.CRON_SECRET);
   if (!secret) return json({ error: "CRON_SECRET not configured" }, { status: 503 });
   const base = (process.env.APP_URL || "http://localhost:3000").replace(/\/+$/, "");
   const res = await fetch(`${base}/api/cron/daily-scrape`, {

@@ -1,3 +1,4 @@
+import { ensureProjectOwnerSubscription, ensureProjectWorkerSubscription } from "@/lib/billing-gate";
 /**
  * Lead Discovery engine.
  *
@@ -200,6 +201,8 @@ export async function discoverLeadsForProject(
   `) as Array<ProjectProfile & { owner_role: string }>;
   const project = projRows[0];
   if (!project) { t.errors.push("project not found or paused"); return t; }
+  await ensureProjectWorkerSubscription(projectId);
+
   const ownerIsAdmin = (project.owner_role ?? "user") === "admin";
   const limits = getLimits(project.plan);
 
@@ -337,6 +340,8 @@ export async function reclassifyExistingLeads(projectId: string): Promise<Reclas
   const project = projRows[0];
   if (!project) { res.errors.push("project not found"); return res; }
 
+  await ensureProjectOwnerSubscription(projectId);
+
   const rows = (await sql`
     SELECT kl.id, kl.keyword_id, k.keyword, kl.platform, kl.context,
            kl.post_title, kl.post_excerpt, kl.author
@@ -407,6 +412,7 @@ const replyZod = z.object({ reply_text: z.string().min(1) });
  * spam / overt shilling so it reads as a real human being helpful.
  */
 export async function draftLeadReply(leadId: string, projectId: string): Promise<{ reply: string }> {
+  await ensureProjectOwnerSubscription(projectId);
   const sql = requireSql();
   const rows = (await sql`
     SELECT kl.id, kl.platform, kl.context, kl.post_title, kl.post_excerpt, kl.intent,
