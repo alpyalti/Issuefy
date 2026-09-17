@@ -91,31 +91,45 @@ export default function TeamCard({
       setInviteEmail("");
       setSeatsUsed((n) => n + 1);
       await refresh();
+    } catch {
+      setErr("Couldn't send invitation. Check your connection and try again.");
     } finally {
       setInviting(false);
     }
   }
 
+  async function mutateTeam(url: string, init: RequestInit, message: string) {
+    setErr(null);
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) { setErr(message); return false; }
+      return true;
+    } catch {
+      setErr(message);
+      return false;
+    }
+  }
+
   async function cancelInvite(inviteId: string) {
-    await fetch(`/api/projects/${projectId}/invitations/${inviteId}`, { method: "DELETE" });
+    if (!await mutateTeam(`/api/projects/${projectId}/invitations/${inviteId}`, { method: "DELETE" }, "Couldn't cancel invitation. Try again.")) return;
     setSeatsUsed((n) => Math.max(0, n - 1));
-    refresh();
+    await refresh();
   }
 
   async function changeRole(userId: string, role: "editor" | "viewer") {
-    await fetch(`/api/projects/${projectId}/members/${userId}`, {
+    if (!await mutateTeam(`/api/projects/${projectId}/members/${userId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ role }),
-    });
-    refresh();
+    }, "Couldn't change role. Try again.")) return;
+    await refresh();
   }
 
   async function removeMember(userId: string) {
     if (!confirm("Remove this member from the project? They'll lose access immediately.")) return;
-    await fetch(`/api/projects/${projectId}/members/${userId}`, { method: "DELETE" });
+    if (!await mutateTeam(`/api/projects/${projectId}/members/${userId}`, { method: "DELETE" }, "Couldn't remove member. Try again.")) return;
     setSeatsUsed((n) => Math.max(0, n - 1));
-    refresh();
+    await refresh();
     router.refresh();
   }
 
@@ -132,7 +146,7 @@ export default function TeamCard({
       </p>
 
       {err && (
-        <div className="auth-error" style={{ marginBottom: 12 }}>
+        <div role="alert" className="auth-error" style={{ marginBottom: 12 }}>
           <Icon name="Alert02Icon" size={14} stroke={1.7} color="var(--neg)" />
           <span>{err}</span>
         </div>
@@ -184,6 +198,8 @@ export default function TeamCard({
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <input
               className="modal-input"
+              type="email"
+              aria-label="Teammate email"
               placeholder="teammate@example.com"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
@@ -192,6 +208,7 @@ export default function TeamCard({
             />
             <select
               className="modal-input"
+              aria-label="Invitation role"
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as "editor" | "viewer")}
               style={{ width: 130, paddingRight: 18 }}
@@ -236,6 +253,7 @@ function MemberRow({
       ) : (
         <select
           className="modal-input"
+          aria-label={`Role for ${m.name || m.email}`}
           value={m.role}
           onChange={(e) => onChangeRole(e.target.value as "editor" | "viewer")}
           style={{ width: 110, height: 32, fontSize: 12.5, padding: "0 8px", paddingRight: 16 }}
@@ -245,7 +263,7 @@ function MemberRow({
         </select>
       )}
       {m.role !== "owner" && (
-        <button className="watch-del" style={{ opacity: 1 }} onClick={onRemove} title="Remove member">
+        <button className="watch-del" style={{ opacity: 1 }} onClick={onRemove} title="Remove member" aria-label={`Remove ${m.name || m.email}`}>
           <Icon name="Delete02Icon" size={14} stroke={1.8} />
         </button>
       )}
